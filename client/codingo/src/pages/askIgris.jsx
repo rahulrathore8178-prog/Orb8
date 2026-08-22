@@ -17,6 +17,34 @@ import gsap from "gsap";
 import axios from "axios";
 import { getStoredUser } from "../utilites/communityHelper";
 
+// ---------------------------------------------------------------------
+// Rotating headline. Add/remove lines freely — one is picked at random
+// each time the component mounts (i.e. every reload/new load).
+// ---------------------------------------------------------------------
+const GREETINGS = [
+    "What's on your mind?",
+    "What can I help with?",
+    "Where should we start?",
+    "What are we figuring out today?",
+    "Lawde na bhojyam",
+    "Ready when you are.",
+    "What's the plan?",
+    "What are we working on?",
+    "How can I help today?",
+    "What's up?",
+    "Let's get into it.",
+    "What do you need?",
+    "Something on your mind?",
+    "What are we building today?",
+    "How can I be useful?",
+    "What's the task?",
+    "Where do we begin?",
+];
+
+function getRandomGreeting() {
+    return GREETINGS[Math.floor(Math.random() * GREETINGS.length)];
+}
+
 const MAX_TEXTAREA_HEIGHT = 200;
 const API_URL = `${import.meta.env.VITE_API_URL || "http://localhost:5000"}/api/askigris`;
 
@@ -73,10 +101,10 @@ function Sidebar({ sidebarRef, backdropRef, onClose, chats, onSelectChat, newCon
                             className="w-full bg-transparent text-sm text-zinc-200 placeholder-zinc-500 outline-none"
                         />
                     </div>
-                    <button className="w-full flex items-center justify-center mt-3 bg-white/6 rounded-2xl gap-2 px-3 py-2.5 text-sm text-zinc-200 hover:bg-white/8 transition-colors" 
-                onClick={newConversation}>
-                    Start New Conversation
-                </button>
+                    <button className="w-full flex items-center justify-center mt-3 bg-white/6 rounded-2xl gap-2 px-3 py-2.5 text-sm text-zinc-200 hover:bg-white/8 transition-colors"
+                        onClick={newConversation}>
+                        Start New Conversation
+                    </button>
                 </div>
 
                 {/* chat list */}
@@ -111,6 +139,7 @@ export default function AskIgris({ onSend } = {}) {
     const [attachment, setAttachment] = useState(null); // { name, size, kind: 'image' | 'pdf', preview? }
     const [menuOpen, setMenuOpen] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
+    const [greeting] = useState(getRandomGreeting);
 
     const hasStarted = messages.length > 0;
 
@@ -149,7 +178,7 @@ export default function AskIgris({ onSend } = {}) {
         if (!chat?._id) return;
 
         console.log("IgrisHistory id:", chat._id);
-        try{
+        try {
             const response = await axios.get(`${API_URL}/history/${currentUserId}/${chat._id}`, {
                 headers: getAuthHeaders(),
             });
@@ -463,7 +492,7 @@ export default function AskIgris({ onSend } = {}) {
                 >
                     {!hasStarted && (
                         <h1 className="text-center text-zinc-200 text-2xl sm:text-3xl font-medium tracking-tight mb-1 select-none">
-                            What's on your mind?
+                            {greeting}
                         </h1>
                     )}
 
