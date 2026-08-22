@@ -8,7 +8,7 @@ import {
 import { Paperclip, Image as ImageIcon, FileText, X, ArrowUp, Copy, Check } from "lucide-react";
 
 const MAX_TEXTAREA_HEIGHT = 200;
-const API_URL = "http://localhost:5000/api/askigris";
+const API_URL = `${import.meta.env.VITE_API_URL || "http://localhost:5000"}/api/askigris`;
 
 const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
@@ -154,9 +154,11 @@ export default function AskIgris({ onSend } = {}) {
                 requestBody.append("file", outgoingAttachment.file, outgoingAttachment.name);
             }
 
+            const token = localStorage.getItem("token");
             const res = await fetch(API_URL, {
                 method: "POST",
                 credentials: "include",
+                headers: token ? { Authorization: `Bearer ${token}` } : {},
                 body: requestBody,
             });
             if (!res.ok) throw new Error(`Request failed with status ${res.status}`);
