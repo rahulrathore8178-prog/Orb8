@@ -1,0 +1,9 @@
+pymupdf
+pytesseract
+Pillow
+chromadb
+fastapi
+uvicorn
+groq
+python-dotenv
+python-multipart

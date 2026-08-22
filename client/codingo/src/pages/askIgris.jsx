@@ -18,7 +18,7 @@ import axios from "axios";
 import { getStoredUser } from "../utilites/communityHelper";
 
 const MAX_TEXTAREA_HEIGHT = 200;
-const API_URL = `${apiUrl}/api/askigris`;
+const API_URL = `${import.meta.env.VITE_API_URL || "http://localhost:5000"}/api/askigris`;
 
 const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
@@ -299,6 +299,7 @@ export default function AskIgris({ onSend } = {}) {
                 requestBody.append("file", outgoingAttachment.file, outgoingAttachment.name);
             }
 
+            const token = localStorage.getItem("token");
             const res = await fetch(API_URL, {
                 method: "POST",
                 credentials: "include",

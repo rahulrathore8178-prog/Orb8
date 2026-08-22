@@ -4,7 +4,7 @@ from chunking import extract_text, chunk_text
 import chromadb
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-import ollama
+# import ollama
 from groq import Groq
 import json
 import sys
