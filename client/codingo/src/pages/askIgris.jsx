@@ -5,12 +5,104 @@ import {
     useLayoutEffect,
     useCallback,
 } from "react";
-import { Paperclip, Image as ImageIcon, FileText, X, ArrowUp, Copy, Check } from "lucide-react";
+import {
+    Paperclip, Image as ImageIcon, FileText, X, ArrowUp, Copy, Check,
+    Image,
+    Menu,
+    Search,
+    MessageSquare,
+} from "lucide-react";
+import { apiUrl, getAuthHeaders } from "../utilites/DashboardHelper";
+import gsap from "gsap";
+import axios from "axios";
+import { getStoredUser } from "../utilites/communityHelper";
 
 const MAX_TEXTAREA_HEIGHT = 200;
 const API_URL = `${import.meta.env.VITE_API_URL || "http://localhost:5000"}/api/askigris`;
 
 const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+
+const SAMPLE_CHATS = [];
+
+// ---------------------------------------------------------------------
+// Sidebar — search box + chat list. Purely presentational; animation
+// (open/close) is driven by the parent via the refs it's given.
+// ---------------------------------------------------------------------
+function Sidebar({ sidebarRef, backdropRef, onClose, chats, onSelectChat, newConversation }) {
+    const [query, setQuery] = useState("");
+    const filtered = chats.filter((c) =>
+        c.title.toLowerCase().includes(query.toLowerCase())
+    );
+
+    return (
+        <>
+            {/* backdrop — click to close, also dims the page behind the drawer */}
+            <div
+                ref={backdropRef}
+                onClick={onClose}
+                className="fixed inset-0 bg-black/60 z-40"
+                style={{ opacity: 0, pointerEvents: "none" }}
+            />
+
+            {/* panel */}
+            <div
+                ref={sidebarRef}
+                className="fixed top-0 right-0 h-full w-[280px] max-w-[80vw] bg-[#141416] border-l border-white/10 z-50 flex flex-col will-change-transform"
+            >
+                {/* header */}
+                <div className="flex items-center justify-between px-4 h-14 border-b border-white/10 shrink-0">
+                    <span className="text-zinc-200 text-sm font-medium">Chats</span>
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        aria-label="Close sidebar"
+                        className="w-8 h-8 rounded-full flex items-center justify-center text-zinc-400 hover:text-zinc-200 hover:bg-white/5 transition-colors"
+                    >
+                        <X className="w-[18px] h-[18px]" />
+                    </button>
+                </div>
+
+                {/* search history */}
+                <div className="px-3 pt-3 shrink-0">
+                    <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-xl px-3 py-2 focus-within:border-white/20 transition-colors">
+                        <Search className="w-4 h-4 text-zinc-500 shrink-0" />
+                        <input
+                            value={query}
+                            onChange={(e) => setQuery(e.target.value)}
+                            placeholder="Search history..."
+                            className="w-full bg-transparent text-sm text-zinc-200 placeholder-zinc-500 outline-none"
+                        />
+                    </div>
+                    <button className="w-full flex items-center justify-center mt-3 bg-white/6 rounded-2xl gap-2 px-3 py-2.5 text-sm text-zinc-200 hover:bg-white/8 transition-colors" 
+                onClick={newConversation}>
+                    Start New Conversation
+                </button>
+                </div>
+
+                {/* chat list */}
+                <div className="flex-1 overflow-y-auto px-2 py-3 flex flex-col gap-0.5">
+                    {chats.length > 0 ? (
+                        chats.map((chat) => (
+                            <button
+                                key={chat._id}
+                                type="button"
+                                onClick={() => onSelectChat?.(chat)}
+                                className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left text-sm text-zinc-300 hover:bg-white/5 hover:text-zinc-100 transition-colors"
+                            >
+                                <MessageSquare className="w-4 h-4 text-zinc-500 shrink-0" />
+                                <span className="truncate">{chat.title}</span>
+                            </button>
+                        ))
+                    ) : (
+                        <p className="px-3 py-4 text-sm text-zinc-500 text-center">
+                            Start a chat by asking a question!
+                        </p>
+                    )}
+                </div>
+            </div>
+        </>
+    );
+}
 
 export default function AskIgris({ onSend } = {}) {
     // conversation state
@@ -30,6 +122,55 @@ export default function AskIgris({ onSend } = {}) {
     const composerWrapRef = useRef(null);
     const prevRectRef = useRef(null);
     const bottomRef = useRef(null);
+    const [IgrisHistory, setIgrisHistory] = useState([]);
+    const [activeConversationId, setActiveConversationId] = useState(null);
+    const currentUser = getStoredUser();
+    const currentUserId = currentUser?.id || currentUser?._id || '';
+
+    const getIgrisHistory = async () => {
+        try {
+            const response = await axios.get(`${API_URL}/history/${currentUserId}`, {
+                headers: getAuthHeaders(),
+            });
+            const data = response.data;
+            console.log("Igris history data:", data);
+            setIgrisHistory(data);
+            // Handle the retrieved history data
+        } catch (error) {
+            console.error("Error fetching Igris history:", error);
+        }
+    };
+
+    useEffect(() => {
+        getIgrisHistory();
+    }, []);
+
+    const openIgrisChat = async (chat) => {
+        if (!chat?._id) return;
+
+        console.log("IgrisHistory id:", chat._id);
+        try{
+            const response = await axios.get(`${API_URL}/history/${currentUserId}/${chat._id}`, {
+                headers: getAuthHeaders(),
+            });
+            const history = response.data?.chatHistory || [];
+            const loadedMessages = history.flatMap((entry) => {
+                if (entry.role && entry.content) {
+                    return [{ id: uid(), role: entry.role, text: entry.content }];
+                }
+                return [
+                    entry.question && { id: uid(), role: "user", text: entry.question },
+                    entry.answer && { id: uid(), role: "assistant", text: entry.answer },
+                ].filter(Boolean);
+            });
+
+            setActiveConversationId(chat._id);
+            setMessages(loadedMessages);
+            setSidebarOpen(false);
+        } catch (error) {
+            console.error("Error opening Igris chat:", error);
+        }
+    }
 
     // force a dark background on the page itself, so the theme holds even if
     // this component sits inside a host page/container with a light background
@@ -150,6 +291,10 @@ export default function AskIgris({ onSend } = {}) {
         try {
             const requestBody = new FormData();
             requestBody.append("question", question);
+            requestBody.append("title", question.slice(0, 60) || "New Conversation");
+            if (activeConversationId) {
+                requestBody.append("conversationId", activeConversationId);
+            }
             if (outgoingAttachment?.file) {
                 requestBody.append("file", outgoingAttachment.file, outgoingAttachment.name);
             }
@@ -158,11 +303,15 @@ export default function AskIgris({ onSend } = {}) {
             const res = await fetch(API_URL, {
                 method: "POST",
                 credentials: "include",
-                headers: token ? { Authorization: `Bearer ${token}` } : {},
+                headers: getAuthHeaders(),
                 body: requestBody,
             });
             if (!res.ok) throw new Error(`Request failed with status ${res.status}`);
             const data = await res.json();
+            if (data.conversation?._id) {
+                setActiveConversationId(data.conversation._id);
+            }
+            await getIgrisHistory();
             console.log("Received response:", data);
             console.log("response:", res);
             const replyText = data?.answer ?? data?.prompt ?? data?.text ?? "Hmm, no reply came back.";
@@ -182,7 +331,7 @@ export default function AskIgris({ onSend } = {}) {
             setIsLoading(false);
             textareaRef.current?.focus();
         }
-    }, [text, attachment, onSend, hasStarted, isLoading, removeAttachment]);
+    }, [text, attachment, onSend, hasStarted, isLoading, removeAttachment, activeConversationId]);
 
     const handleKeyDown = (e) => {
         if (e.key === "Enter" && !e.shiftKey) {
@@ -191,8 +340,56 @@ export default function AskIgris({ onSend } = {}) {
         }
     };
 
+    // ---- NEW: sidebar state + GSAP open/close animation ----
+    const [sidebarOpen, setSidebarOpen] = useState(false);
+    const sidebarRef = useRef(null);
+    const backdropRef = useRef(null);
+
+    // GSAP owns the drawer transform so it opens and closes from the right edge.
+    useLayoutEffect(() => {
+        const sidebar = sidebarRef.current;
+        const backdrop = backdropRef.current;
+        if (!sidebar || !backdrop) return;
+
+        gsap.killTweensOf([sidebar, backdrop]);
+
+        if (sidebarOpen) {
+            gsap.to(sidebar, {
+                xPercent: 0,
+                duration: 0.45,
+                ease: "power3.out",
+            });
+            gsap.to(backdrop, {
+                opacity: 1,
+                duration: 0.35,
+                ease: "power2.out",
+                pointerEvents: "auto",
+            });
+        } else {
+            gsap.to(sidebar, {
+                xPercent: 100,
+                duration: 0.4,
+                ease: "power3.in",
+            });
+            gsap.to(backdrop, {
+                opacity: 0,
+                duration: 0.3,
+                ease: "power2.in",
+                pointerEvents: "none",
+            });
+        }
+
+        return () => gsap.killTweensOf([sidebar, backdrop]);
+    }, [sidebarOpen]);
+
+    // close on Escape
+    useEffect(() => {
+        const onKey = (e) => e.key === "Escape" && setSidebarOpen(false);
+        window.addEventListener("keydown", onKey);
+        return () => window.removeEventListener("keydown", onKey);
+    }, []);
     return (
-        <div className="fixed inset-0 w-full h-full bg-[#0b0b0d] flex flex-col overflow-hidden">
+        <div className="relative w-full h-screen min-h-screen bg-[#0b0b0d] flex flex-col overflow-hidden">
             <style>{`
                 @keyframes bubbleIn {
                     from { opacity: 0; transform: translateY(8px); }
@@ -216,12 +413,41 @@ export default function AskIgris({ onSend } = {}) {
                 }
             `}</style>
 
+            {/* NEW: sidebar open/close button, always reachable top-right */}
+            <button
+                type="button"
+                onClick={() => setSidebarOpen((o) => !o)}
+                aria-label="Toggle sidebar"
+                className="fixed top-4 right-4 z-50 w-9 h-9 rounded-full bg-[#17171a] border border-white/10 flex items-center justify-center text-zinc-300 hover:bg-white/5 hover:text-zinc-100 transition-colors"
+            >
+                <Menu className="w-[18px] h-[18px]" />
+            </button>
+
+            {/* NEW: sidebar */}
+            <Sidebar
+                sidebarRef={sidebarRef}
+                backdropRef={backdropRef}
+                onClose={() => setSidebarOpen(false)}
+                chats={IgrisHistory}
+                newConversation={() => {
+                    setActiveConversationId(null);
+                    setMessages([]);
+                    setSidebarOpen(false);
+                }}
+                onSelectChat={(chat) => {
+                    openIgrisChat(chat);
+                    setSidebarOpen(false);
+                }}
+            />
+
+            {/* =================== YOUR ORIGINAL CODE (unchanged) =================== */}
+
             {/* message list */}
             {hasStarted && (
                 <div className="flex-1 overflow-y-auto scroll-smooth">
                     <div className="max-w-2xl mt-25 mx-auto w-full px-4 sm:px-6 pt-8 pb-4 flex flex-col gap-5">
-                        {messages.map((m, i) => (
-                            <MessageBubble key={m.id} message={m} delay={i === messages.length - 1 ? 0 : 0} formatSize={formatSize} />
+                        {messages.map((m) => (
+                            <MessageBubble key={m.id} message={m} formatSize={formatSize} />
                         ))}
                         <div ref={bottomRef} />
                     </div>

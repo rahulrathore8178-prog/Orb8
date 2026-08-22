@@ -153,8 +153,8 @@ export default function AppSidebar() {
         </div>
       </aside>
 
-      <aside className="lg:hidden w-10 shrink-0 bg-[#2B2B2B] border-r border-[#414141]">
-        <div className="sticky top-10 h-[calc(100vh-3.5rem)] py-3 px-1 flex flex-col gap-2 items-center">
+      <aside className="fixed inset-y-0 left-0 z-30 w-10 lg:hidden bg-[#2B2B2B] border-r border-[#414141]">
+        <div className="h-full py-3 px-1 flex flex-col gap-2 items-center">
           <button
             type="button"
             onClick={() => dispatch(setMobileMenuOpen(true))}

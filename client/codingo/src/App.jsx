@@ -110,9 +110,9 @@ function AppShell() {
   return (
     <>
       {/* <LandingHeader /> */}
-      <div className="flex min-h-[calc(100vh-3.5rem)]">
+      <div className="flex min-h-screen">
         {showSidebar ? <AppSidebar /> : null}
-        <div className="flex-1 min-w-0">
+        <div className={`flex-1 min-w-0 min-h-screen ${showSidebar ? 'pl-10 lg:pl-0' : ''}`}>
           <Routes>
             <Route path="/" element={<LandingPage />} />
             <Route path="/language/:langId" element={<LanguagePageWrapper />} />

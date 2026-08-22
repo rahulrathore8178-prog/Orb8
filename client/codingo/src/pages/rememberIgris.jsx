@@ -1,8 +1,10 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Paperclip, Image as ImageIcon, FileText, X } from "lucide-react";
 import axios from "axios";
+import { apiUrl, getAuthHeaders } from "../utilites/DashboardHelper";
 
 const MAX_TEXTAREA_HEIGHT = 200;
+const API_URL = `${apiUrl}/api/askigris`;
 
 export default function RememberIgris({ onSend } = {}) {
     const [text, setText] = useState("");
@@ -14,8 +16,6 @@ export default function RememberIgris({ onSend } = {}) {
     const pdfInputRef = useRef(null);
     const menuRef = useRef(null);
     const clipRef = useRef(null);
-    const API_URL = "http://localhost:5000/api/askigris";
-
     // force a dark background on the page itself, so the theme holds even if
     // this component sits inside a host page/container with a light background
     useEffect(() => {
@@ -98,6 +98,7 @@ export default function RememberIgris({ onSend } = {}) {
             try {
                 const res = await axios.post(API_URL, formData, {
                     withCredentials: true,
+                    headers: getAuthHeaders(),
                 });
                 console.log("File uploaded:", res.data);
             } catch (error) {
@@ -120,7 +121,7 @@ export default function RememberIgris({ onSend } = {}) {
     };
 
     return (
-        <div className="fixed inset-0 w-full h-full bg-[#0b0b0d] flex items-center justify-center px-4 overflow-y-auto">
+        <div className="relative w-full h-screen min-h-screen bg-[#0b0b0d] flex items-center justify-center px-4 overflow-y-auto">
             <div className="w-full max-w-xl flex flex-col items-start gap-3">
                 <div className="w-full flex items-center justify-center">
                     <h2 className="text-center text-zinc-200 text-2xl sm:text-3xl font-medium tracking-tight mb-1 select-none">
