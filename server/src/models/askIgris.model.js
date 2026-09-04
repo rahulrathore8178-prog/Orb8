@@ -9,6 +9,7 @@ const chatSchema = new mongoose.Schema({
 
 const askIgrisSchema = new mongoose.Schema({
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    username: { type: String, required: true },
     question: { type: String, required: true },
     title: { type: String, default: 'New Conversation' },
     response: { type: String },

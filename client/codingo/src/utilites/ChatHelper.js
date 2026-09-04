@@ -18,20 +18,23 @@ export function daysAgo(n, h, m) {
 }
 
 export function timeLabel(d) {
-  return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const date = d instanceof Date ? d : new Date(d);
+  return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 export function dateKey(d) {
-  return d.toDateString();
+  const date = d instanceof Date ? d : new Date(d);
+  return date.toDateString();
 }
 export function dateDividerLabel(d) {
+  const date = d instanceof Date ? d : new Date(d);
   const today = new Date();
-  if (dateKey(d) === dateKey(today)) return "Today";
+  if (dateKey(date) === dateKey(today)) return "Today";
   const y = new Date();
   y.setDate(y.getDate() - 1);
-  if (dateKey(d) === dateKey(y)) return "Yesterday";
+  if (dateKey(date) === dateKey(y)) return "Yesterday";
   const opts = { weekday: "long", month: "long", day: "numeric" };
-  if (d.getFullYear() !== today.getFullYear()) opts.year = "numeric";
-  return d.toLocaleDateString(undefined, opts);
+  if (date.getFullYear() !== today.getFullYear()) opts.year = "numeric";
+  return date.toLocaleDateString(undefined, opts);
 }
 export function contactTimeLabel(d) {
   const today = new Date();

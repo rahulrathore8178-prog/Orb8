@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { buildContacts, mid, useGsap, useIsMobile } from "../utilites/ChatHelper";
+import { mid, useGsap, useIsMobile } from "../utilites/ChatHelper";
 import { ChatHeader } from "../components/Messages/ChatHeader";
 import { ChatArea } from "../components/Messages/ChatArea";
 import { InputBar } from "../components/Messages/ChatInput";
 import { Sidebar } from "../components/Messages/ContactList";
 import { useDispatch, useSelector } from "react-redux";
-import { addMessage, fetchContacts, setInputText } from "../redux/slices/chatSlice";
+import { addMessage, fetchContacts, setActiveContact } from "../redux/slices/chatSlice";
 
 export default function MessagesApp() {
   const isMobile = useIsMobile();
@@ -16,9 +16,7 @@ export default function MessagesApp() {
     dispatch(fetchContacts());
   }, [dispatch]);
 
-  const { activeContactId } = useSelector((s) => s.chat ?? null);
-
-  const [contacts, setContacts] = useState([]);
+  const { activeContactId, contacts } = useSelector((s) => s.chat ?? null);
   // const [activeContactId, setActiveContactId] = useState(() =>
   //   typeof window !== "undefined" && window.innerWidth < 768 ? null : "c1"
   // );
@@ -49,18 +47,54 @@ export default function MessagesApp() {
 
   const activeContact = contacts.find((c) => c.id === activeContactId) || null;
   const currentUser = useSelector((s) => s.dashboard.currentUser);
-  const inputText = useSelector((s) => s.dashboard.inputText ?? '');
   const wsRef = useRef(null);
 
+  useEffect(() => {
+    if (!currentUser?.id) return;
+
+    const socketUrl = import.meta.env.VITE_SOCKET_URL || "ws://localhost:5000";
+    const socket = new WebSocket(socketUrl);
+    wsRef.current = socket;
+
+    socket.onopen = () => {
+      socket.send(JSON.stringify({ type: "register", userId: currentUser.id }));
+    };
+    socket.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type !== "chat-message") return;
+
+        const { senderId, text, time, timestamp, id } = data.message || {};
+        if (!senderId || !text) return;
+        dispatch(addMessage({
+          contactId: senderId,
+          message: { id, senderId, text, time: new Date(timestamp || time), from: "them" },
+        }));
+      } catch (error) {
+        console.error("Chat WebSocket message error", error);
+      }
+    };
+    socket.onerror = (error) => console.error("Chat WebSocket error", error);
+    socket.onclose = () => {
+      if (wsRef.current === socket) wsRef.current = null;
+    };
+
+    return () => {
+      socket.close();
+      if (wsRef.current === socket) wsRef.current = null;
+    };
+  }, [currentUser?.id, dispatch]);
+
   const sendMessage = () => {
-    if (!inputText?.trim() || !activeContactId || !currentUser?.id) return;
+    const inputText = (drafts[activeContactId] || "").trim();
+    if (!inputText || !activeContactId || !currentUser?.id) return;
 
     const message = {
       id: Date.now(),
       senderId: currentUser.id,
       recipientId: activeContactId,
       text: inputText.trim(),
-      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      time: new Date(),
     };
     console.log('inputText:', inputText);
 
@@ -68,7 +102,7 @@ export default function MessagesApp() {
     wsRef.current.send(JSON.stringify({ type: "chat-message", message }));
 
     dispatch(addMessage({ contactId: activeContactId, message: { ...message, from: "me" } }));
-    dispatch(setInputText(""));
+    setDrafts((currentDrafts) => ({ ...currentDrafts, [activeContactId]: "" }));
   };
 
   /* ---------- toasts ---------- */
@@ -179,13 +213,13 @@ export default function MessagesApp() {
         { opacity: 1, y: 0, scale: 1, duration: 0.28, ease: "back.out(1.6)" }
       );
     }
-  }, [typingContactId, activeContactId, gsapReady]);
+  }, [typingContactId, activeContactId, gsapReady, gsapRef]);
 
   /* ============================================================
      ACTIONS
      ============================================================ */
   function selectContact(id) {
-    // setActiveContactId(id);
+    dispatch(setActiveContact(id));
     // setContacts((prev) => prev.map((c) => (c.id === id ? { ...c, unreadCount: 0 } : c)));
     setChatSearchOpen(false);
     setChatSearchQuery("");
@@ -196,43 +230,6 @@ export default function MessagesApp() {
     setTypingContactId(null);
     if (isMobile) setSidebarOpen(false);
   }
-
-  // function sendMessage() {
-  //   const targetId = activeContactId;
-  //   if (!targetId) return;
-  //   const text = (drafts[targetId] || "").trim();
-  //   if (!text && pendingAttachments.length === 0) return;
-
-  //   const newMsg = {
-  //     id: mid(),
-  //     sender: "me",
-  //     time: new Date(),
-  //     text: text || null,
-  //     attachments: pendingAttachments.length ? pendingAttachments.slice() : null,
-  //     status: "sent",
-  //   };
-
-  //   // setContacts((prev) =>
-  //   //   prev.map((c) =>
-  //   //     c.id === targetId
-  //   //       ? {
-  //   //         ...c,
-  //   //         messages: [...c.messages, newMsg],
-  //   //         lastMessage: text || (newMsg.attachments ? `📎 ${newMsg.attachments[0].name}` : ""),
-  //   //         lastTime: newMsg.time,
-  //   //       }
-  //   //       : c
-  //   //   )
-  //   // );
-
-  //   setDrafts((d) => ({ ...d, [targetId]: "" }));
-  //   setPendingAttachments([]);
-  //   requestScrollBottom.current = true;
-
-  //   // No local reply/typing/seen simulation here — wire your WSS client to
-  //   // call setContacts (for incoming messages / "seen" receipts) and
-  //   // setTypingContactId (for typing events) as real events arrive.
-  // }
 
   function insertEmoji(emoji) {
     if (!activeContactId) return;
@@ -265,14 +262,6 @@ export default function MessagesApp() {
   function stopRecordingSend() {
     const targetId = activeContactId;
     if (targetId && recordSeconds > 0) {
-      const msg = { id: mid(), sender: "me", time: new Date(), type: "voice", duration: recordSeconds, status: "sent" };
-      // setContacts((prev) =>
-      //   prev.map((c) =>
-      //     c.id === targetId
-      //       ? { ...c, messages: [...c.messages, msg], lastMessage: "🎤 Voice message", lastTime: msg.time }
-      //       : c
-      //   )
-      // );
       requestScrollBottom.current = true;
     }
     setRecording(false);
@@ -351,7 +340,7 @@ export default function MessagesApp() {
           moreWrapRef={moreWrapRef}
           setEmojiOpen={setEmojiOpen}
           showToast={showToast}
-          setContacts={setContacts}
+          setContacts={() => {}}
         />
 
         <ChatArea
@@ -365,6 +354,7 @@ export default function MessagesApp() {
           typingRef={typingRef}
         />
 
+        {activeContactId && (
         <InputBar
           activeContact={activeContact}
           activeContactId={activeContactId}
@@ -389,10 +379,11 @@ export default function MessagesApp() {
           hasComposerContent={hasComposerContent}
           handleFileChange={handleFileChange}
         />
+        )}
       </main>
 
       {/* ---- Toasts ---- */}
-      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] flex flex-col items-center gap-2 pointer-events-none">
+      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-100 flex flex-col items-center gap-2 pointer-events-none">
         {toasts.map((t) => (
           <div
             key={t.id}

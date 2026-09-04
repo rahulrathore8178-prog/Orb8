@@ -87,10 +87,14 @@ const userSchema = new mongoose.Schema(
       },
       locationUpdatedAt: { type: Date },
       isDiscoverable: { type: Boolean, default: false },
+      deviceTokens: {
+        type: [String],
+        default: [],
+      },
   },
   {
     timestamps: true,
-    }
+  },
 );
 
   // Ensure 2dsphere index for geo queries

@@ -48,9 +48,11 @@ const chatSlice = createSlice({
     addMessage: (state, action) => {
       const { contactId, message } = action.payload;
       if (!state.messages[contactId]) state.messages[contactId] = [];
-      state.messages[contactId].push(message);
+      if (!state.messages[contactId].some((existingMessage) => existingMessage.id === message.id)) {
+        state.messages[contactId].push(message);
+      }
     },
-    setContacts: (state, action) => { state.contacts = action.payload; if (!state.activeContactId && action.payload.length) state.activeContactId = action.payload[0].id; },
+    setContacts: (state, action) => { state.contacts = action.payload; },
     clearMessages: (state, action) => {
       const { contactId } = action.payload;
       state.messages[contactId] = [];
@@ -59,7 +61,6 @@ const chatSlice = createSlice({
   extraReducers: (builder) => {
     builder.addCase(fetchContacts.fulfilled, (state, action) => {
       state.contacts = action.payload;
-      if (!state.activeContactId && action.payload.length) state.activeContactId = action.payload[0].id;
     });
   }
 });

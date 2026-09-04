@@ -127,7 +127,7 @@ SEARCH_TOOL = {
     },
 }
 
-SYSTEM_PROMPT = """You are a personal assistant for user "Vivek".
+SYSTEM_PROMPT = """You are a personal assistant for user.
 
 You have access to a `search_platform_knowledge` tool that searches internal
 documentation about how this specific platform works (features, settings,

@@ -31,6 +31,8 @@ import GlassFeed from './pages/LandinPageExperimental.jsx';
 import DiscoverPage from './pages/discoverPage.jsx';
 import AskIgris from './pages/askIgris.jsx';
 import RememberIgris from './pages/rememberIgris.jsx';
+import { onMessage } from './firebase';
+import { registerPushNotifications } from './notifications/registerPushNotifications';
 
 function ProtectedRoute({ children }) {
   const [isChecking, setIsChecking] = useState(true);
@@ -106,6 +108,25 @@ function AppShell() {
   const location = useLocation();
   const sidebarHiddenRoutes = ['/', '/login', '/Login', '/signup', '/next-step', '/forgot-password', '/reset-password', '/oauth/callback'];
   const showSidebar = !sidebarHiddenRoutes.includes(location.pathname);
+
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token || !('Notification' in window) || Notification.permission !== 'granted') return;
+
+    registerPushNotifications().catch((error) => {
+      console.error('Failed to register push notifications:', error);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!('Notification' in window)) return undefined;
+
+    return onMessage((payload) => {
+      const title = payload.notification?.title || 'Orbit';
+      const body = payload.notification?.body || '';
+      new Notification(title, { body });
+    });
+  }, []);
 
   return (
     <>

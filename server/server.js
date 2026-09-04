@@ -6,6 +6,7 @@ const { startMonthlyRewardJob, startWeeklyChallengeReminder } = require('./src/j
 const { reconcileUserLeagues } = require('./src/jobs/reconciliation');
 const { ensureDefaultBadges } = require('./src/controllers/badge.controller');
 const Message = require('./src/models/messages.model');
+const { notifyUser } = require("./src/controllers/pushnotification.controller");
 const http = require('http');
 const WebSocket = require('ws');
 
@@ -60,9 +61,17 @@ const clients = new Map();
               delivered: false
             });
 
+            await notifyUser(recipientId, "New message", text, {
+                  type: "chat-message",
+                  senderId: String(senderId),
+                  recipientId: String(recipientId),
+                  messageId: String(saved._id),
+                  timestamp: saved.timestamp.toISOString()
+            });
+
             const payload = JSON.stringify({
               type: 'chat-message',
-              message: { id, senderId, recipientId, text, time }
+              message: { id, senderId, recipientId, text, time, timestamp: saved.timestamp }
             });
 
             const recipientSocket = clients.get(recipientId);

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
   FaBars,
+  FaBell,
   FaBook,
   FaBrain,
   FaChartLine,
@@ -26,6 +27,7 @@ import { setDesktopCollapsed, setMobileMenuOpen } from '../../redux/slices/sideB
 import axios from 'axios';
 import { apiUrl, getAuthHeaders } from '../../utilites/DashboardHelper';
 import { setCurrentUser } from '../../redux/slices/dashboardSlice';
+import { registerPushNotifications } from '../../notifications/registerPushNotifications';
 
 const communityNavItems = [
   { key: 'home', label: 'Home', icon: FaHome, to: '/community', match: ['/community'] },
@@ -95,6 +97,16 @@ export default function AppSidebar() {
     navigate(to);
   };
 
+  const handleEnableNotifications = async () => {
+    try {
+      await registerPushNotifications();
+      window.alert('Notifications enabled');
+    } catch (error) {
+      console.error('Failed to enable notifications:', error);
+      window.alert(error.message || 'Unable to enable notifications');
+    }
+  };
+
   const isActiveItem = (item) => item.match.some((routePrefix) => location.pathname.startsWith(routePrefix));
 
   const [dashboardMode, setDashboardMode] = useState(
@@ -142,6 +154,14 @@ export default function AppSidebar() {
               {!isDesktopCollapsed && (
                 <span>New Post</span>)}
             </button> */}
+
+            <button
+              onClick={handleEnableNotifications}
+              className='text-white gap-3 flex justify-center w-full items-center bg-cyan-700 text-center p-2 rounded-3xl cursor-pointer mb-2'
+            >
+              <span className='py-2'><FaBell /></span>
+              {!isDesktopCollapsed && <span>Notifications</span>}
+            </button>
 
             {/* Log Out */}
             <button onClick={handleLogout} className='text-white gap-3 flex justify-center w-full items-center bg-red-700 text-center p-2 rounded-3xl cursor-pointer'>
@@ -239,6 +259,14 @@ export default function AppSidebar() {
                   <span className='py-2'><FaPlus /></span>
                   <span>New Post</span>
                 </button> */}
+
+                <button
+                  onClick={handleEnableNotifications}
+                  className='text-white flex gap-3 justify-center w-full items-center bg-cyan-700 text-center p-2 rounded-3xl cursor-pointer mb-2'
+                >
+                  <span className='py-2'><FaBell /></span>
+                  <span>Notifications</span>
+                </button>
 
                 {/* Log Out */}
                 <button onClick={handleLogout} className='text-white flex gap-3 justify-center w-full items-center bg-red-700 text-center p-2 rounded-3xl cursor-pointer'>

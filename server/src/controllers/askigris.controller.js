@@ -1,5 +1,7 @@
 const { spawn } = require('child_process');
 const path = require('path');
+const AskIgris = require('../models/askIgris.model');
+const User = require('../models/user.model');
 
 // PYTHON SCRIPT EXECUTION
 
@@ -30,7 +32,10 @@ const runPython = (data) => {
 
         pythonProcess.on('close', (code) => {
             if (code !== 0) {
-                return reject(new Error(`Python script exited with code ${code}: ${errorOutput}`));
+                const error = new Error(`Python script exited with code ${code}: ${errorOutput}`);
+                const statusMatch = errorOutput.match(/HTTPException:\s+(\d+):/);
+                error.statusCode = statusMatch ? Number(statusMatch[1]) : 500;
+                return reject(error);
             }
             try {
                 resolve(JSON.parse(output));
@@ -57,7 +62,11 @@ const rememberIgris = ({ prompt, file }) => runPython({
 });
 
 const saveIgrisConversation = async ({ userId, prompt, result, title, conversationId }) => {
-    const AskIgris = require('../models/askIgris.model');
+    const user = await User.findById(userId).select('username').lean();
+    if (!user) {
+        throw new Error('Authenticated user not found');
+    }
+
     const answer = result?.answer || result?.message || '';
     const historyEntries = [
         { role: 'user', content: prompt || 'Uploaded file' },
@@ -71,12 +80,14 @@ const saveIgrisConversation = async ({ userId, prompt, result, title, conversati
         : null;
 
     if (conversation) {
+        conversation.username = user.username;
         conversation.chatHistory.push(...historyEntries);
         conversation.response = answer || conversation.response;
         await conversation.save();
     } else {
         conversation = await AskIgris.create({
             userId,
+            username: user.username,
             question: prompt || 'Uploaded file',
             title: title || prompt.slice(0, 60) || 'New Conversation',
             response: answer,
@@ -112,7 +123,11 @@ const processIgrisConversation = async (req, res) => {
         });
     } catch (error) {
         console.error('Error processing Igris conversation:', error);
-        return res.status(500).json({ error: 'Failed to process Igris conversation' });
+        return res.status(error.statusCode || 500).json({
+            error: error.statusCode === 503
+                ? 'Image OCR is unavailable. Install Tesseract OCR and add it to PATH.'
+                : 'Failed to process Igris conversation'
+        });
     }
 };
 

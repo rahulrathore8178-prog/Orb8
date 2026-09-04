@@ -50,17 +50,12 @@ const API_URL = `${import.meta.env.VITE_API_URL || "http://localhost:5000"}/api/
 
 const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
-const SAMPLE_CHATS = [];
-
 // ---------------------------------------------------------------------
 // Sidebar — search box + chat list. Purely presentational; animation
 // (open/close) is driven by the parent via the refs it's given.
 // ---------------------------------------------------------------------
 function Sidebar({ sidebarRef, backdropRef, onClose, chats, onSelectChat, newConversation }) {
     const [query, setQuery] = useState("");
-    const filtered = chats.filter((c) =>
-        c.title.toLowerCase().includes(query.toLowerCase())
-    );
 
     return (
         <>
@@ -155,17 +150,28 @@ export default function AskIgris({ onSend } = {}) {
     const [activeConversationId, setActiveConversationId] = useState(null);
     const currentUser = getStoredUser();
     const currentUserId = currentUser?.id || currentUser?._id || '';
+    console.log('Current user ID:', currentUserId);
 
     const getIgrisHistory = async () => {
+        const token = localStorage.getItem("token");
+        if (!token || !currentUserId) return;
+        console.log('Fetching token:', token);
         try {
             const response = await axios.get(`${API_URL}/history/${currentUserId}`, {
+                withCredentials: true,
                 headers: getAuthHeaders(),
             });
+            console.log('Fetching Igris history for user:', currentUserId);
             const data = response.data;
             console.log("Igris history data:", data);
             setIgrisHistory(data);
-            // Handle the retrieved history data
         } catch (error) {
+            if (error.response?.status === 401) {
+                localStorage.removeItem("token");
+                localStorage.removeItem("user");
+                window.dispatchEvent(new Event("auth:user-updated"));
+                return;
+            }
             console.error("Error fetching Igris history:", error);
         }
     };
@@ -468,9 +474,10 @@ export default function AskIgris({ onSend } = {}) {
                     setSidebarOpen(false);
                 }}
             />
-
-            {/* =================== YOUR ORIGINAL CODE (unchanged) =================== */}
-
+            <div className="text-2xl font-bold text-zinc-200 mt-3 mb-6">
+            <h1 className="ml-6 text-left">Ask Igris</h1>
+            <h1 className="text-center">Title</h1>
+            </div>
             {/* message list */}
             {hasStarted && (
                 <div className="flex-1 overflow-y-auto scroll-smooth">

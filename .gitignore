@@ -8,6 +8,7 @@ node_modules/
 !.env.example
 **/.env
 **/.env.*
+server/*firebase-adminsdk*.json
 
 # Build outputs
 dist/

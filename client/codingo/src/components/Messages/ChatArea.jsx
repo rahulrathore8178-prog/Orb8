@@ -261,10 +261,10 @@
 
 
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo } from "react";
 import { User, Mic, FileText, Check, CheckCheck } from "lucide-react";
 import { dateDividerLabel, dateKey, timeLabel } from "../../utilites/ChatHelper";
-import { addMessage, setInputText } from "../../redux/slices/chatSlice";
+import { addMessage } from "../../redux/slices/chatSlice";
 import { useDispatch, useSelector } from "react-redux";
 import { getAuthHeaders } from "../../utilites/communityHelper";
 import axios from "axios";
@@ -303,7 +303,7 @@ function VoiceBubble({ msg, mine }) {
   const mm = Math.floor(msg.duration / 60);
   const ss = String(msg.duration % 60).padStart(2, "0");
   return (
-    <div className="flex items-center gap-2 min-w-[160px]">
+    <div className="flex items-center gap-2 min-w-40">
       <Mic className="w-4 h-4 shrink-0" />
       <div className="flex items-center gap-0.5 h-5 flex-1">
         {bars.map((h, i) => (
@@ -322,9 +322,6 @@ function VoiceBubble({ msg, mine }) {
 }
 
 function MessageBubble({ msg, mine, gsapReady }) {
-  const ref = useRef(null);
-  const isMe = msg.from === "me";
-
   return (
     <div
       data-bubble-id={msg.id}
@@ -333,7 +330,7 @@ function MessageBubble({ msg, mine, gsapReady }) {
     >
       <div
         className={`max-w-[75%] md:max-w-[65%] px-3.5 py-2.5 text-[14.5px] leading-snug flex flex-col gap-1 ${mine
-          ? "bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-2xl rounded-br-md"
+          ? "bg-linear-to-br from-blue-500 to-blue-600 text-white rounded-2xl rounded-br-md"
           : "bg-slate-800 border border-slate-700 text-slate-100 rounded-2xl rounded-bl-md"
           }`}
       >
@@ -351,7 +348,7 @@ function MessageBubble({ msg, mine, gsapReady }) {
         {msg.type === "voice" ? (
           <VoiceBubble msg={msg} mine={mine} />
         ) : (
-          msg.text && <span className="whitespace-pre-wrap break-words">{msg.text}</span>
+          msg.text && <span className="whitespace-pre-wrap wrap-break-word">{msg.text}</span>
         )}
         <span className="self-end text-[10.5px] opacity-65">{timeLabel(msg.time)}</span>
       </div>
@@ -372,8 +369,6 @@ function TypingIndicator({ innerRef }) {
 }
 
 export function ChatArea({
-  // activeContact,
-  // visibleMessages,
   searchingWithNoText,
   typingContactId,
   gsapReady,
@@ -381,30 +376,20 @@ export function ChatArea({
   typingRef,
 }) {
 
-  const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || "ws://localhost:5000";
   const apiUrl = import.meta.env.VITE_API_URL || "";
 
   const dispatch = useDispatch();
-  const wsRef = useRef(null);
 
   const currentUser = useSelector((s) => s.dashboard.currentUser);
-  const { activeContactId, messages, contacts } = useSelector((s) => s.chat ?? null);
+  const { activeContactId, messages } = useSelector((s) => s.chat ?? null);
+  console.log("activeContactId", activeContactId, "messages", messages);
 
-  const msgs = (messages && messages[activeContactId]) || [];
-  console.log('msgs:', msgs)
-
-  const contact =
-    (contacts || []).find((c) => c.id === activeContactId) || {
-      name: "No one",
-      initials: "?",
-      color: "#6C63FF",
-      online: false,
-    };
-
-  const prevLen = useRef(msgs.length);
-  const [newMsgIds, setNewMsgIds] = useState(() => new Set());
+  const msgs = useMemo(() => (messages && messages[activeContactId]) || [], [messages, activeContactId]);
   
-      const fetchHistory = async () => {
+  useEffect(() => {
+    if (!activeContactId || !currentUser?.id) return;
+
+    const fetchHistory = async () => {
         try {
           const res = await axios.get(`${apiUrl}/api/chat/${activeContactId}`, {
             withCredentials: true,
@@ -413,78 +398,32 @@ export function ChatArea({
   
           if (res.data.success && res.data.messages) {
             res.data.messages.forEach((msg) => {
+              const senderId = String(msg.senderId);
+              const recipientId = String(msg.recipientId);
+              const isMine = senderId === String(currentUser.id);
               dispatch(
                 addMessage({
-                  contactId: msg.senderId === currentUser.id ? msg.recipientId : msg.senderId,
+                  contactId: isMine ? recipientId : senderId,
                   message: {
                     id: msg._id,
-                    senderId: msg.senderId,
+                    senderId,
+                    recipientId,
                     text: msg.content,
-                    time: new Date(msg.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-                    from: msg.senderId === currentUser.id ? "me" : "them",
+                    time: new Date(msg.timestamp),
+                    from: isMine ? "me" : "them",
                   },
                 })
               );
             });
           }
-          console.log('res:', res)
         } catch (error) {
           console.log("failed to fetch msg", error);
         }
       };
 
-  useEffect(() => {
-    if (!activeContactId || !currentUser?.id) return;
     fetchHistory();
   }, [activeContactId, currentUser?.id, dispatch, apiUrl]);
 
-  useEffect(() => {
-    fetchHistory();
-  }, [])
-
-  useEffect(() => {
-    if (!currentUser?.id) return;
-
-    wsRef.current = new WebSocket(SOCKET_URL);
-
-    wsRef.current.onopen = () => {
-      if (wsRef.current.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({ type: "register", userId: currentUser.id }));
-      }
-    };
-
-    wsRef.current.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type === "chat-message") {
-          const { senderId, text, time, id } = data.message;
-          dispatch(addMessage({ contactId: senderId, message: { id, senderId, text, time, from: "them" } }));
-        }
-      } catch (e) {
-        console.error("WS parse error", e);
-      }
-    };
-
-    return () => wsRef.current?.close();
-  }, [SOCKET_URL, currentUser?.id, dispatch]);
-
-  useEffect(() => {
-    if (msgs.length > prevLen.current) {
-      const lastId = msgs[msgs.length - 1].id;
-      setNewMsgIds((prev) => new Set(prev).add(lastId));
-
-      setTimeout(() => {
-        setNewMsgIds((prev) => {
-          const next = new Set(prev);
-          next.delete(lastId);
-          return next;
-        });
-      }, 600);
-    }
-    prevLen.current = msgs.length;
-  }, [msgs]);
-
-  console.log('activeContactId:', activeContactId)
     return (
       <div ref={messagesRef} className="flex-1 min-h-0 overflow-y-auto overscroll-contain msgs-scroll px-4 md:px-6 py-5">
         {!activeContactId ? (
@@ -495,10 +434,6 @@ export function ChatArea({
             <h3 className="font-extrabold text-slate-300 text-base">Select a conversation</h3>
             <p className="text-sm text-slate-500 max-w-xs">Choose a contact from the list to start chatting.</p>
           </div>
-        ) : searchingWithNoText && msgs.length === 0 ? (
-          <div className="h-full flex items-center justify-center text-sm text-slate-500">
-            Type something to start a chat...
-          </div>
         ) : (
           <>
             {msgs.map((m, idx) => {
@@ -507,8 +442,8 @@ export function ChatArea({
               return (
                 <React.Fragment key={m.id}>
                   {showDivider && <DateDivider label={dateDividerLabel(m.time)} />}
-                  <MessageBubble msg={m} mine={m.sender === "me"} gsapReady={gsapReady} />
-                  {isLast && m.sender === "me" && !searchingWithNoText && <StatusFooter msg={m} />}
+                  <MessageBubble msg={m} mine={m.from === "me"} gsapReady={gsapReady} />
+                  {isLast && m.from === "me" && !searchingWithNoText && <StatusFooter msg={m} />}
                 </React.Fragment>
               );
             })}

@@ -1,7 +1,19 @@
 import pymupdf as fitz 
 from io import BytesIO
+from importlib import import_module
 import pytesseract
+from pytesseract import TesseractNotFoundError
+import sys
 from PIL import Image
+from fastapi import HTTPException
+
+try:
+    register_heif_opener = import_module("pillow_heif").register_heif_opener
+except ImportError:
+    register_heif_opener = None
+
+if register_heif_opener:
+    register_heif_opener()
 
 # --- Step 1: extract plain text out of whatever file type came in -------
 def extract_text(filename: str, file_bytes: bytes) -> str:
@@ -15,9 +27,29 @@ def extract_text(filename: str, file_bytes: bytes) -> str:
         doc.close()
         return text
 
-    elif ext in ("jpg", "jpeg", "png"):
-        image = Image.open(BytesIO(file_bytes))
-        return pytesseract.image_to_string(image)  # OCR
+    elif ext in ("jpg", "jpeg", "png", "webp", "gif", "bmp", "tif", "tiff", "heic", "heif"):
+        try:
+            with Image.open(BytesIO(file_bytes)) as image:
+                # RGB avoids OCR issues with palette, grayscale, and alpha images.
+                extracted_text = pytesseract.image_to_string(image.convert("RGB"))
+        except TesseractNotFoundError as error:
+            raise HTTPException(
+                status_code=503,
+                detail="Image OCR is unavailable because Tesseract is not installed or not on PATH",
+            ) from error
+        except (OSError, ValueError) as error:
+            if ext in ("heic", "heif") and register_heif_opener is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail="HEIC/HEIF images require the pillow-heif package",
+                ) from error
+            raise HTTPException(
+                status_code=400,
+                detail=f"Could not read image file: {error}",
+            ) from error
+
+        print(f"Extracted text from image: {extracted_text}", file=sys.stderr)
+        return extracted_text
 
     elif ext == "txt":
         return file_bytes.decode("utf-8", errors="ignore")

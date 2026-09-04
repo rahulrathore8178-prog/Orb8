@@ -13,6 +13,7 @@ const chatRoutes = require('./routes/chat.routes');
 const otpRoutes = require('./routes/otp.routes');
 const capsuleRoutes = require('./routes/capsule.routes')
 const askIgrisRoutes = require('./routes/askigris.routes');
+const firebaseRoutes = require('./routes/firebase.routes');
 
 const app = express();
 
@@ -45,6 +46,7 @@ app.use('/api/chat', chatRoutes);
 app.use('/api/otp', otpRoutes);
 app.use('/api/capsule', capsuleRoutes)
 app.use('/api/askigris', askIgrisRoutes);
+app.use('/api/firebase', firebaseRoutes);
 
 // // add this log
 // console.log('Loading community routes...');

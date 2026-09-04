@@ -102,7 +102,8 @@ export default function RememberIgris({ onSend } = {}) {
                 });
                 console.log("File uploaded:", res.data);
             } catch (error) {
-                console.error("Upload failed:", error);
+                const message = error.response?.data?.error || error.message || "Upload failed";
+                console.error("Upload failed:", message);
                 return;
             }
         }
