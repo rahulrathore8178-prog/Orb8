@@ -1,3 +1,3 @@
-MY_NAME = "vivek mandal"
+MY_NAME = "User"
 LANGUAGE = "en"
 STT_MODEL = "small"

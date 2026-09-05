@@ -10,7 +10,6 @@ const upload = multer({
 });
 
 router.post('/', protect, upload.single('file'), processIgrisConversation);
-
 router.get('/history/:userId', protect, getIgrisHistory);
 router.get('/history/:userId/:id', protect, getIgrisHistoryById);
 router.post('/newConversation', protect, upload.single('file'), newIgrisConversation);

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import {
   FaHeart,
@@ -316,7 +316,7 @@ export function PostComposer({
   );
 }
 
-function FilmPostCard({ post, cardRef, textGradient, isOwn, onLike, onDelete }) {
+function FilmPostCard({ post, cardRef, textGradient, isOwn, isActive, onLike, onDelete }) {
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const apiUrl = import.meta.env.VITE_API_URL || '';
@@ -412,7 +412,7 @@ function FilmPostCard({ post, cardRef, textGradient, isOwn, onLike, onDelete }) 
   return (
     <div
       ref={cardRef}
-      className="relative h-165 w-full max-w-[420px] z-10 mx-auto rounded-[2.5rem] overflow-hidden"
+      className={`relative h-165 w-full max-w-[420px] z-10 mx-auto rounded-[2.5rem] overflow-hidden transform-gpu transition-[transform,opacity] duration-200 ease-out ${isActive ? 'scale-100 opacity-100' : 'scale-[0.82] opacity-[0.35]'}`}
       style={{ transformOrigin: 'center center' }}
     >
       <div
@@ -623,6 +623,7 @@ export default function CommunityPage() {
   const loadingRef = useRef(null);
   const scrollRef = useRef(null);
   const cardRefs = useRef([]);
+  const activeIndexRef = useRef(0);
   const [activeIndex, setActiveIndex] = useState(0);
   const apiUrl = import.meta.env.VITE_API_URL || '';
   const currentUser = getStoredUser();
@@ -638,6 +639,8 @@ export default function CommunityPage() {
   const [bgA, setBgA] = useState('');
   const [bgB, setBgB] = useState('');
   const [frontIsA, setFrontIsA] = useState(true);
+
+  activeIndexRef.current = activeIndex;
 
   const dispatch = useDispatch();
   useEffect(() => { dispatch(fetchPosts(1)); }, [dispatch]);
@@ -659,68 +662,55 @@ export default function CommunityPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeIndex]);
 
-  // GSAP scroll-linked scale/opacity focus effect
-  const updateFocus = useCallback(() => {
-    const scrollEl = scrollRef.current;
-    if (!scrollEl) return;
-    const elRect = scrollEl.getBoundingClientRect();
-    const containerCenter = elRect.top + elRect.height / 2;
-    let closestIndex = 0;
-    let closestDistance = Infinity;
-
-    cardRefs.current.forEach((el, i) => {
-      if (!el) return;
-      const rect = el.getBoundingClientRect();
-      const cardCenter = rect.top + rect.height / 2;
-      const distance = Math.abs(cardCenter - containerCenter);
-      const proximity = 1 - Math.min(distance / elRect.height, 1);
-      gsap.set(el, { scale: 0.82 + proximity * 0.18, opacity: 0.35 + proximity * 0.65 });
-      if (distance < closestDistance) { closestDistance = distance; closestIndex = i; }
-    });
-
-    setActiveIndex((prev) => (prev === closestIndex ? prev : closestIndex));
-  }, []);
-
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    let ticking = false;
+    const visibilityRatios = new Map();
     const SCROLL_THRESHOLD = 200; // px of movement needed before we react
 
     const onScroll = () => {
-      if (ticking) return;
-      ticking = true;
-      requestAnimationFrame(() => {
-        const maxScroll = el.scrollHeight - el.clientHeight;
-        // clamp to guard against elastic/rubber-band overscroll on mobile
-        const currentPos = Math.max(0, Math.min(el.scrollTop, maxScroll));
-        const delta = currentPos - lastScrollPos.current;
+      const currentPos = el.scrollTop;
+      const delta = currentPos - lastScrollPos.current;
 
-        if (currentPos <= 0) {
-          // always show at the very top
-          setShowCapsules(true);
-          lastScrollPos.current = 0;
-        } else if (Math.abs(delta) > SCROLL_THRESHOLD) {
-          setShowCapsules(delta < 0); // scrolling up -> show, down -> hide
-          lastScrollPos.current = currentPos;
-        }
-
-        updateFocus();
-        ticking = false;
-      });
+      if (currentPos <= 0) {
+        setShowCapsules(true);
+        lastScrollPos.current = 0;
+      } else if (Math.abs(delta) > SCROLL_THRESHOLD) {
+        setShowCapsules(delta < 0);
+        lastScrollPos.current = currentPos;
+      }
     };
 
-    el.addEventListener('scroll', onScroll, { passive: true });
-    updateFocus();
-    return () => el.removeEventListener('scroll', onScroll);
-  }, [updateFocus, posts]);
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        const index = cardRefs.current.indexOf(entry.target);
+        if (index !== -1) {
+          visibilityRatios.set(index, entry.isIntersecting ? entry.intersectionRatio : 0);
+        }
+      });
 
-  // Entrance animation for first card
-  useEffect(() => {
-    const first = cardRefs.current[0];
-    if (!first || posts.length === 0) return;
-    gsap.fromTo(first, { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.7, ease: 'expo.out' });
-  }, [posts.length]);
+      let nextIndex = activeIndexRef.current;
+      let highestRatio = visibilityRatios.get(nextIndex) || 0;
+      visibilityRatios.forEach((ratio, index) => {
+        if (ratio > highestRatio) {
+          highestRatio = ratio;
+          nextIndex = index;
+        }
+      });
+      setActiveIndex((previous) => {
+        if (previous === nextIndex) return previous;
+        activeIndexRef.current = nextIndex;
+        return nextIndex;
+      });
+    }, { root: el, threshold: [0, 0.6, 0.8, 1] });
+
+    cardRefs.current.forEach((card) => card && observer.observe(card));
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      observer.disconnect();
+      el.removeEventListener('scroll', onScroll);
+    };
+  }, [posts]);
 
   // Arrow-key navigation
   useEffect(() => {
@@ -838,7 +828,7 @@ export default function CommunityPage() {
               posts.map((post, i) => (
                 <div
                   key={post.id}
-                  className={`${post.image ? 'h-[73vh]' : 'h-[73vh]'} z-10 snap-center flex items-center justify-center px-3`}
+                  className="h-[73vh] z-10 snap-center flex items-center justify-center px-3 [content-visibility:auto] [contain-intrinsic-size:0_73vh]"
                 >
                   <FilmPostCard
                     post={post}
@@ -846,6 +836,7 @@ export default function CommunityPage() {
                     glow={GLOWS[i % GLOWS.length]}
                     textGradient={TEXT_GRADIENTS[i % TEXT_GRADIENTS.length]}
                     isOwn={post.author.id === currentUserId}
+                    isActive={i === activeIndex}
                     onLike={handleLike}
                     onDelete={handleDelete}
                   />
