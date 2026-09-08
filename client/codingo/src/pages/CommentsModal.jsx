@@ -1,8 +1,7 @@
 import { useState, useRef, useEffect } from "react";
-import { gsap } from "gsap";
-import { ReplyCard } from "../components/Comments/ReplyCard";
+import { createPortal } from "react-dom";
 import { CommentCard } from "../components/Comments/CommentCard";
-import { setCommentLiked, setCommentLikedCount, setCommentText, setHeartAnim, setIsCommenting, setCommentReplying, setLikeCount, setLiked, setShowModal, setPosts } from "../redux/slices/feedSlice";
+import { setCommentText, setIsCommenting, setShowModal, setPosts } from "../redux/slices/feedSlice";
 import { useDispatch, useSelector } from "react-redux";
 import { FaWindowClose } from "react-icons/fa";
 import axios from "axios";
@@ -189,24 +188,54 @@ export function VoiceNote({ duration }) {
 export default function Comments({ post, onComment }) {
   const apiUrl = import.meta.env.VITE_API_URL || '';
   const [pendingFiles, setPendingFiles] = useState([]);
-  const [localComments, setLocalComments] = useState(post?.comments);
+  const [localComments, setLocalComments] = useState(() => post?.comments || []);
+  const [commentsError, setCommentsError] = useState('');
   const [hasVoice, setHasVoice] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [recSeconds, setRecSeconds] = useState(0);
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [voiceDuration, setVoiceDuration] = useState(0);
   const commentText = useSelector(state => state.feed.commentText[post?.id] ?? '');
+  const isCommenting = useSelector(state => state.feed.isCommenting[post?.id] ?? false);
 
   const dispatch = useDispatch();
   const mainInputRef = useRef(null);
   const recIntervalRef = useRef(null);
-  const headerRef = useRef(null);
   const inputAreaRef = useRef(null);
   const threadRef = useRef(null);
   const emojiPanelRef = useRef(null);
 
+  useEffect(() => {
+    let isActive = true;
+
+    async function loadComments() {
+      if (!post?.id) return;
+      setCommentsError('');
+      try {
+        const res = await axios.get(`${apiUrl}/api/community/posts/${post.id}`, {
+          withCredentials: true,
+          headers: getAuthHeaders(),
+        });
+        if (isActive) setLocalComments(Array.isArray(res.data?.post?.comments) ? res.data.post.comments : []);
+      } catch (error) {
+        if (isActive) {
+          setCommentsError(error?.response?.data?.message || 'Unable to load comments');
+          setLocalComments(Array.isArray(post.comments) ? post.comments : []);
+        }
+      }
+    }
+
+    setLocalComments(Array.isArray(post?.comments) ? post.comments : []);
+    loadComments();
+
+    return () => {
+      isActive = false;
+    };
+  }, [apiUrl, post?.id]);
+
   const handleComment = async () => {
     if (!commentText.trim()) return;
+    setCommentsError('');
     dispatch(setIsCommenting({ postId: post.id, value: true }));
     try {
       const res = await axios.post(
@@ -214,15 +243,25 @@ export default function Comments({ post, onComment }) {
         { content: commentText.trim() },
         { withCredentials: true, headers: getAuthHeaders() }
       );
-      console.log('res:', res.data.comment.content)
+      const newComment = res.data?.comment;
+      if (!newComment) throw new Error('The server did not return the new comment');
 
-      setLocalComments(prev => [...prev, res.data.comment]);
-      // dispatch(setPosts(prev => prev.map(p => p.id === post.id ? res.data.post : p)));
+      setLocalComments(prev => [...(Array.isArray(prev) ? prev : []), newComment]);
+      dispatch(setPosts(posts => posts.map(currentPost => (
+        currentPost.id === post.id
+          ? {
+            ...currentPost,
+            comments: [...(currentPost.comments || []), newComment],
+            commentsCount: res.data.commentsCount ?? (currentPost.commentsCount || 0) + 1,
+          }
+          : currentPost
+      ))));
 
       dispatch(setCommentText({ postId: post.id, value: '' }));
       if (onComment) onComment(post.id);
       console.log('new comment:', res);
     } catch (err) {
+      setCommentsError(err?.response?.data?.message || 'Unable to post comment');
       console.error('Comment error:', err);
     } finally {
       dispatch(setIsCommenting({ postId: post.id, value: false }));
@@ -290,7 +329,7 @@ export default function Comments({ post, onComment }) {
     const inp = mainInputRef.current;
     const pos = inp.selectionStart;
     const next = commentText.slice(0, pos) + em + commentText.slice(pos);
-    dispatch(setCommentText(next));
+    dispatch(setCommentText({ postId: post.id, value: next }));
     setEmojiOpen(false);
     setTimeout(() => {
       inp.focus();
@@ -300,26 +339,29 @@ export default function Comments({ post, onComment }) {
 
   const showPreviewBar = pendingFiles.length > 0 || hasVoice;
 
-  return (
- <div
-    className="fixed inset-0 z-50 flex items-center justify-center px-4 py-6"
-    style={{
-      background: "rgba(0, 0, 0, 0.18)",
-      // no blur
-    }}
-    onClick={() => dispatch(setShowModal(false))}
-  >
+  return createPortal((
     <div
-      className="font-mono-coder w-full max-w-[900px] max-h-[90vh] overflow-hidden rounded-[24px] border border-white/10 coder-text relative shadow-[0_25px_80px_rgba(0,0,0,0.28)]"
+      className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4"
       style={{
-        background: "rgba(10, 12, 18, 0.94)",
+        background: "rgba(0, 0, 0, 0.18)",
+        // no blur
       }}
-      onClick={e => e.stopPropagation()}
+      onClick={() => dispatch(setShowModal({ postId: post.id, value: false }))}
     >
-      <div className="sticky top-0 z-10 flex justify-end p-3">
-        <FaWindowClose className="text-xl cursor-pointer hover:opacity-80" />
-      </div>
-      <div className="max-w-3xl mx-auto px-5 py-4 pb-20">
+      <div
+        className="font-mono-coder relative flex h-[90vh] w-full overflow-hidden rounded-[20px] border border-white/10 coder-text shadow-[0_25px_80px_rgba(0,0,0,0.28)] sm:h-[70vh] sm:w-[80vw] sm:max-w-[1200px] sm:rounded-[24px]"
+        style={{
+          background: "rgba(10, 12, 18, 0.94)",
+        }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="absolute right-0 top-0 z-20 flex justify-end p-3">
+          <FaWindowClose
+            className="text-xl cursor-pointer hover:opacity-80"
+            onClick={() => dispatch(setShowModal({ postId: post.id, value: false }))}
+          />
+        </div>
+        <div className="w-full overflow-y-auto px-3 py-14 pb-8 sm:px-8 sm:py-5 sm:pb-10">
           {/* ─── INPUT AREA ─── */}
           <div
             ref={inputAreaRef}
@@ -449,7 +491,8 @@ export default function Comments({ post, onComment }) {
 
               <button
                 onClick={handleComment}
-                className="ml-auto text-white font-mono-coder font-semibold rounded-lg px-4 py-1.5 transition-all hover:opacity-90 hover:-translate-y-px active:translate-y-0"
+                disabled={isCommenting || !commentText.trim()}
+                className="ml-auto text-white font-mono-coder font-semibold rounded-lg px-4 py-1.5 transition-all hover:opacity-90 hover:-translate-y-px active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50"
                 style={{
                   fontSize: 12,
                   letterSpacing: 0.3,
@@ -458,7 +501,7 @@ export default function Comments({ post, onComment }) {
                   cursor: "pointer",
                 }}
               >
-                Post →
+                {isCommenting ? 'Posting...' : 'Post →'}
               </button>
             </div>
           </div>
@@ -470,8 +513,14 @@ export default function Comments({ post, onComment }) {
             — Comments
           </div>
 
+          {commentsError && (
+            <div className="mb-4 rounded-xl border border-red-400/30 bg-red-400/10 px-3 py-2 text-xs text-red-300">
+              {commentsError}
+            </div>
+          )}
+
           <div ref={threadRef} className="flex flex-col gap-3.5">
-            {[...localComments].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).map(c => (
+            {[...(Array.isArray(localComments) ? localComments : [])].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).map(c => (
               <CommentCard
                 key={c.id}
                 comment={c}
@@ -483,5 +532,5 @@ export default function Comments({ post, onComment }) {
         </div>
       </div>
     </div>
-  );
+  ), document.body);
 }

@@ -17,7 +17,7 @@ const feedSlice = createSlice({
     liked: {},
     likeCounts: {},
     heartAnim: {},
-    showModal: false,
+    showModal: {},
     posts: [],
     page: 1,
     hasMore: true,
@@ -93,7 +93,8 @@ const feedSlice = createSlice({
       state.heartAnim[postId] = value;
     },
     setShowModal: (state, action) => {
-      state.showModal = action.payload;
+      const { postId, value } = action.payload;
+      state.showModal[postId] = value;
     },
     initPost: (state, action) => {
       const postId = action.payload;

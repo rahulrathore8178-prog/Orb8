@@ -74,6 +74,11 @@ const postSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  hashtags: [{
+    type: String,
+    trim: true,
+    lowercase: true
+  }],
   likes: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'

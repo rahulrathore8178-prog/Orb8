@@ -7,6 +7,7 @@ import { getAuthHeaders } from "../utilites/communityHelper";
 import { useParams } from "react-router-dom";
 import axios from "axios";
 import { FaCamera, FaEdit, FaHeart, FaSave, FaTimes } from "react-icons/fa";
+import PostPreview from "../components/SocialProfile/postPreview";
 
 const TABS = ["Your Posts"];
 
@@ -128,6 +129,8 @@ export default function SocialProfileSection() {
     const fileInputRef = useRef(null);
     const [userPosts, setUserPosts] = useState([]);
     const [postsLoading, setPostsLoading] = useState(true);
+    const [showPostPreview, setShowPostPreview] = useState(false);
+    const [selectedPostIndex, setSelectedPostIndex] = useState(0);
 
     const rootRef = useRef(null);
     const headerRef = useRef(null);
@@ -386,6 +389,11 @@ export default function SocialProfileSection() {
     const items = DATA_BY_TAB[activeTab];
     const isLinks = activeTab === "Links";
 
+    const showPostModal = (postIndex) => {
+        setSelectedPostIndex(postIndex);
+        setShowPostPreview(true);
+    };
+
 
     return (
         <div
@@ -486,7 +494,7 @@ export default function SocialProfileSection() {
                             )}
 
                             {/* <p className="mt-2 text-xl text-neutral-300">{currentUser?.username}</p> */}
-                            <p className="mt-1 text-xs sm:text-sm text-neutral-500">{PROFILE.handle}</p>
+                            {/* <p className="mt-1 text-xs sm:text-sm text-neutral-500">{PROFILE.handle}</p> */}
 
                             {isOwnProfile && isEditingBio ? (
                                 <div>
@@ -580,12 +588,19 @@ export default function SocialProfileSection() {
                         <div className="text-center text-gray-400 text-sm sm:text-base">No posts yet.</div>
                     ) : (
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 md:gap-6 max-w-6xl mx-auto">
-                            {userPosts.map((post) => {
+                            {userPosts.map((post, postIndex) => {
                                 const imageUrl = getDisplayImageUrl(post.image);
+                                const videoUrl = post.video?.startsWith('/') ? `${apiUrl}${post.video}` : post.video;
 
                                 return (
                                     <div
                                         key={post.id}
+                                        onClick={() => showPostModal(postIndex)}
+                                        role="button"
+                                        tabIndex={0}
+                                        onKeyDown={(event) => {
+                                            if (event.key === 'Enter' || event.key === ' ') showPostModal(postIndex);
+                                        }}
                                         className="rounded-lg sm:rounded-2xl border border-white/10 bg-[#2B2B2B] p-3 sm:p-4 transition-transform duration-300 hover:scale-105 hover:shadow-lg"
                                     >
                                         <div className="mb-3 text-xs sm:text-sm text-gray-400">
@@ -595,6 +610,11 @@ export default function SocialProfileSection() {
                                         {post.image && (
                                             <div className="overflow-hidden rounded-lg sm:rounded-xl aspect-square mb-3">
                                                 <img src={imageUrl} alt="" className="w-full h-full object-cover" />
+                                            </div>
+                                        )}
+                                        {post.video && (
+                                            <div className="overflow-hidden rounded-lg sm:rounded-xl aspect-square mb-3">
+                                                <video src={videoUrl} muted playsInline preload="metadata" className="w-full h-full object-cover" />
                                             </div>
                                         )}
                                         <div className="flex items-center justify-between text-xs sm:text-sm text-gray-400 flex-wrap gap-2">
@@ -608,7 +628,10 @@ export default function SocialProfileSection() {
                                 );
                             })}
                         </div>
-                    )}
+                        )}
+                        {showPostPreview && (
+                            <PostPreview posts={userPosts} initialIndex={selectedPostIndex} isOpen={showPostPreview} onClose={() => setShowPostPreview(false)} />
+                        )}
                 </div>
             </div>
         </div>

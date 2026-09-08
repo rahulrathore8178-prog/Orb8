@@ -100,6 +100,307 @@ const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime', 'vide
 const MAX_IMAGE_SIZE = 8 * 1024 * 1024;   // 8MB
 const MAX_VIDEO_SIZE = 50 * 1024 * 1024;  // 50MB — match your multer limit
 
+function ComposerCard({
+  onPostCreated,
+  onClose,
+  composerFile,
+  setComposerFile,
+  composerPreview,
+  setComposerPreview,
+}) {
+  const imageInputRef = useRef(null);
+  const videoInputRef = useRef(null);
+  const imageInputId = useRef(`composer-image-${Math.random().toString(36).slice(2)}`);
+  const videoInputId = useRef(`composer-video-${Math.random().toString(36).slice(2)}`);
+  const apiUrl = import.meta.env.VITE_API_URL || '';
+  const currentUser = getStoredUser();
+  const dispatch = useDispatch();
+  const cardRef = useRef(null);
+
+  const content = useSelector((state) => state.post.content);
+  const isPosting = useSelector((state) => state.post.isPosting);
+  const error = useSelector((state) => state.post.error);
+
+  const isVideoFile = composerFile?.type?.startsWith('video/');
+
+  const handleMediaSelect = (e) => {
+    const file = e.target?.files?.[0] || null;
+    if (!file) return;
+
+    const isImage = ALLOWED_IMAGE_TYPES.includes(file.type);
+    const isVideo = ALLOWED_VIDEO_TYPES.includes(file.type);
+
+    if (!isImage && !isVideo) {
+      dispatch(setError(`Unsupported type: ${file.type || 'unknown'}`));
+      e.target.value = '';
+      return;
+    }
+
+    const maxSize = isVideo ? MAX_VIDEO_SIZE : MAX_IMAGE_SIZE;
+    if (file.size > maxSize) {
+      dispatch(setError(isVideo ? 'Video must be < 50MB' : 'Image must be < 8MB'));
+      e.target.value = '';
+      return;
+    }
+
+    if (composerPreview) URL.revokeObjectURL(composerPreview);
+
+    const objectUrl = URL.createObjectURL(file);
+    setComposerFile(file);
+    setComposerPreview(objectUrl);
+    dispatch(setImagePreview(objectUrl));
+    dispatch(setError(''));
+
+    e.target.value = '';
+  };
+
+  const removeMedia = () => {
+    setComposerFile(null);
+    if (composerPreview) URL.revokeObjectURL(composerPreview);
+    setComposerPreview(null);
+    dispatch(setImagePreview(null));
+    if (imageInputRef.current) imageInputRef.current.value = '';
+    if (videoInputRef.current) videoInputRef.current.value = '';
+  };
+
+  const handlePost = async () => {
+    const trimmedContent = content.trim();
+    const fileToSend =
+      composerFile ||
+      imageInputRef.current?.files?.[0] ||
+      videoInputRef.current?.files?.[0] ||
+      null;
+
+    if (!trimmedContent && !fileToSend) {
+      return dispatch(setError('Write something or attach an image/video'));
+    }
+    if (content.length > 2000) return dispatch(setError('Exceeds 2000 chars'));
+
+    dispatch(setIsPosting(true));
+    dispatch(setError(''));
+
+    try {
+      const formData = new FormData();
+      if (trimmedContent) formData.append('content', trimmedContent);
+
+      if (fileToSend) {
+        formData.append('media', fileToSend, fileToSend.name || 'upload');
+      }
+
+      const res = await axios.post(`${apiUrl}/api/community/posts`, formData, {
+        withCredentials: true,
+        headers: { ...getAuthHeaders() },
+      });
+
+      dispatch(setContent(''));
+      if (composerPreview) URL.revokeObjectURL(composerPreview);
+      setComposerFile(null);
+      setComposerPreview(null);
+      dispatch(setImagePreview(null));
+      if (imageInputRef.current) imageInputRef.current.value = '';
+      if (videoInputRef.current) videoInputRef.current.value = '';
+
+      if (onPostCreated) onPostCreated(res.data.post);
+      if (onClose) onClose();
+    } catch (err) {
+      dispatch(setError(err?.response?.data?.message || 'Post failed'));
+    } finally {
+      dispatch(setIsPosting(false));
+    }
+  };
+
+  const canPost = (content.trim().length > 0 || !!composerFile) && !isPosting;
+  const hasMedia = !!composerPreview;
+
+  const textGradient = 'linear-gradient(135deg, #0f0c29, #302b63, #24243e)';
+
+  return (
+    <div
+      ref={cardRef}
+      className="relative h-auto w-full max-w-[420px] z-10 mx-auto rounded-[2.5rem] overflow-hidden"
+    >
+      <div
+        className="relative w-full rounded-[2.5rem] overflow-hidden flex flex-col"
+        style={{
+          background: hasMedia
+            ? 'linear-gradient(160deg, rgba(255,255,255,0.22) 0%, rgba(255,255,255,0.05) 100%)'
+            : textGradient,
+          backdropFilter: 'blur(24px) saturate(160%)',
+          WebkitBackdropFilter: 'blur(24px) saturate(160%)',
+          border: '1px solid rgba(255,255,255,0.35)',
+          boxShadow:
+            '0 25px 70px rgba(0,0,0,0.45), inset 0 1px 1px rgba(255,255,255,0.5), inset 0 0 0 1px rgba(255,255,255,0.12)',
+        }}
+      >
+        {/* Header with avatar, username, and action buttons */}
+        <div className="relative z-10 flex items-center gap-3 px-5 pt-5 pb-4 flex-shrink-0">
+          <div className="flex-shrink-0">
+            {currentUser?.profilePic ? (
+              <img
+                src={currentUser.profilePic}
+                alt=""
+                className="h-9 w-9 rounded-full object-cover ring-2 ring-white/50"
+              />
+            ) : (
+              <AvatarInitial name={currentUser?.username} size={36} />
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <span
+              className="text-[14px] font-semibold text-white block truncate [text-shadow:0_1px_3px_rgba(0,0,0,0.35)]"
+              style={{ fontFamily: "'Syne'" }}
+            >
+              {currentUser?.username || 'You'}
+            </span>
+            <span className="text-[11px] text-white/70" style={{ fontFamily: "'DM Mono'" }}>
+              just now
+            </span>
+          </div>
+
+          {/* Action buttons: close, add/change, remove */}
+          <div className="flex gap-1 flex-shrink-0">
+            {composerPreview && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => imageInputRef.current?.click() || videoInputRef.current?.click()}
+                  className="w-8 h-8 rounded-full bg-white/15 text-white hover:bg-white/25 transition-colors flex items-center justify-center"
+                  title="Change media"
+                  aria-label="Change media"
+                >
+                  ⟲
+                </button>
+                <button
+                  type="button"
+                  onClick={removeMedia}
+                  className="w-8 h-8 rounded-full bg-white/15 text-white hover:bg-white/25 transition-colors flex items-center justify-center"
+                  title="Remove media"
+                  aria-label="Remove media"
+                >
+                  ✕
+                </button>
+              </>
+            )}
+            {!composerPreview && (
+              <button
+                type="button"
+                onClick={() => imageInputRef.current?.click()}
+                className="w-8 h-8 rounded-full bg-white/15 text-white hover:bg-white/25 transition-colors flex items-center justify-center"
+                title="Add image"
+                aria-label="Add image"
+              >
+                🖼
+              </button>
+            )}
+            {!composerPreview && (
+              <button
+                type="button"
+                onClick={() => videoInputRef.current?.click()}
+                className="w-8 h-8 rounded-full bg-white/15 text-white hover:bg-white/25 transition-colors flex items-center justify-center"
+                title="Add video"
+                aria-label="Add video"
+              >
+                🎥
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-8 h-8 rounded-full bg-white/15 text-white hover:bg-[#f87171] transition-colors flex items-center justify-center"
+              title="Close"
+              aria-label="Close composer"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+
+        {/* Media preview or placeholder */}
+        {hasMedia ? (
+          <div
+            className="relative mx-4 flex flex-none items-center justify-center rounded-[1.75rem] overflow-hidden"
+            style={{ boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.4), 0 8px 24px rgba(0,0,0,0.25)' }}
+          >
+            {isVideoFile ? (
+              <video
+                src={composerPreview}
+                className="relative block h-auto max-h-[50vh] w-auto max-w-full rounded-[1.75rem] object-contain"
+                muted
+                controls
+              />
+            ) : (
+              <img
+                src={composerPreview}
+                alt="Preview"
+                className="relative block h-auto max-h-[50vh] w-auto max-w-full rounded-[1.75rem] object-contain"
+              />
+            )}
+          </div>
+        ) : null}
+
+        {/* Caption input */}
+        <div className="relative z-10 px-5 pt-4 pb-3">
+          <input
+            type="text"
+            value={content}
+            onChange={(e) => dispatch(setContent(e.target.value))}
+            placeholder="type here to add caption and hashtags"
+            maxLength={2000}
+            className="w-full bg-transparent border-none outline-none text-[15px] text-white/95 placeholder-white/40 caret-[#00e5ff] font-['Plus_Jakarta_Sans'] leading-[1.6]"
+            style={{ fontSize: '15px' }}
+          />
+          <div className="text-[11px] text-white/50 font-['DM_Mono'] mt-1">
+            {content.length}/2000
+          </div>
+        </div>
+
+        {/* Error message */}
+        {error && (
+          <div className="relative z-10 px-5 pb-3">
+            <div className="bg-[#f8717118] border border-[#f8717144] rounded-[8px] px-3 py-2 text-[#f87171] text-[12px]">
+              {error}
+            </div>
+          </div>
+        )}
+
+        {/* Post button */}
+        <div className="relative z-10 px-5 pb-5 w-full">
+          <button
+            type="button"
+            onClick={handlePost}
+            disabled={!canPost}
+            className={`w-full py-3 rounded-[10px] font-['Syne'] font-extrabold text-[14px] tracking-[0.3px] transition-all duration-200 ${
+              canPost
+                ? 'bg-[#404040] text-white hover:bg-[#505050] cursor-pointer'
+                : 'bg-[#303030] text-[#aaaaaa] cursor-not-allowed'
+            }`}
+          >
+            {isPosting ? 'Posting...' : 'Post'}
+          </button>
+        </div>
+      </div>
+
+      {/* Hidden file inputs */}
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/*"
+        onChange={handleMediaSelect}
+        className="hidden"
+        id={imageInputId.current}
+      />
+      <input
+        ref={videoInputRef}
+        type="file"
+        accept="video/*"
+        onChange={handleMediaSelect}
+        className="hidden"
+        id={videoInputId.current}
+      />
+    </div>
+  );
+}
+
 export function PostComposer({
   onPostCreated,
   composerFile,
@@ -561,7 +862,7 @@ function FilmPostCard({ post, cardRef, textGradient, isOwn, isActive, onLike, on
 
             <button
               type="button"
-              onClick={() => { setShowModal(true) }}
+              onClick={() => dispatch(setShowModal({ postId: post.id, value: true }))}
               className="flex items-center gap-1.5 text-white/90 hover:text-white transition-colors focus-visible:outline-none rounded-full"
               aria-label="Comment"
             >
@@ -570,7 +871,7 @@ function FilmPostCard({ post, cardRef, textGradient, isOwn, isActive, onLike, on
             </button>
 
             {showModal && (
-              <Comments />
+              <Comments post={post} />
             )}
 
             {!hasMedia && (
@@ -817,7 +1118,20 @@ export default function CommunityPage() {
             ref={scrollRef}
             className="flex-1 overflow-y-scroll snap-y snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           >
-            {posts.length === 0 && !isLoading ? (
+            {showComposer && (
+              <div className="h-[73vh] z-10 snap-center flex items-center justify-center px-3 [content-visibility:auto] [contain-intrinsic-size:0_73vh]">
+                <ComposerCard
+                  onPostCreated={handlePostCreated}
+                  onClose={() => setShowComposer(false)}
+                  composerFile={composerFile}
+                  setComposerFile={setComposerFile}
+                  composerPreview={composerPreview}
+                  setComposerPreview={setComposerPreview}
+                />
+              </div>
+            )}
+
+            {posts.length === 0 && !isLoading && !showComposer ? (
               <div className="h-full flex items-center justify-center">
                 <div className="text-center">
                   <div className="text-[60px] mb-4">👩‍💻</div>
@@ -896,26 +1210,6 @@ export default function CommunityPage() {
       >
         +
       </button>
-
-      {/* Composer modal */}
-      {showComposer && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[60] flex items-end sm:items-center justify-center">
-          <div className="w-full sm:max-w-md bg-[#111] rounded-t-[20px] sm:rounded-[20px] p-4 relative border border-white/[0.08]">
-            <button
-              onClick={() => setShowComposer(false)}
-              className="absolute top-3 right-4 text-[#aaaaaa] text-[20px]"
-              aria-label="Close"
-            >✕</button>
-            <PostComposer
-              onPostCreated={handlePostCreated}
-              composerFile={composerFile}
-              setComposerFile={setComposerFile}
-              composerPreview={composerPreview}
-              setComposerPreview={setComposerPreview}
-            />
-          </div>
-        </div>
-      )}
 
       {/* Capsule modals */}
       {showAddCapsule && (

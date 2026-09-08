@@ -140,7 +140,6 @@ function AppShell() {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/Login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterationPage />} />
-            <Route path="/Register" element={<RegisterationPage />} />
             <Route path="/signup" element={<SignupPage />} />
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
             <Route path="/reset-password" element={<ResetPasswordPage />} />
