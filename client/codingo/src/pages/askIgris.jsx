@@ -46,7 +46,7 @@ function getRandomGreeting() {
 }
 
 const MAX_TEXTAREA_HEIGHT = 200;
-const API_URL = `${import.meta.env.VITE_API_URL || "http://localhost:5000"}/api/askigris`;
+const API_URL = `${import.meta.env.VITE_PYTHON_API_URL || "http://localhost:8000"}/askPrompt`;
 
 const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
@@ -152,33 +152,33 @@ export default function AskIgris({ onSend } = {}) {
     const currentUserId = currentUser?.id || currentUser?._id || '';
     console.log('Current user ID:', currentUserId);
 
-    const getIgrisHistory = async () => {
-        const token = localStorage.getItem("token");
-        if (!token || !currentUserId) return;
-        console.log('Fetching token:', token);
-        try {
-            const response = await axios.get(`${API_URL}/history/${currentUserId}`, {
-                withCredentials: true,
-                headers: getAuthHeaders(),
-            });
-            console.log('Fetching Igris history for user:', currentUserId);
-            const data = response.data;
-            console.log("Igris history data:", data);
-            setIgrisHistory(data);
-        } catch (error) {
-            if (error.response?.status === 401) {
-                localStorage.removeItem("token");
-                localStorage.removeItem("user");
-                window.dispatchEvent(new Event("auth:user-updated"));
-                return;
-            }
-            console.error("Error fetching Igris history:", error);
-        }
-    };
+    // const getIgrisHistory = async () => {
+    //     const token = localStorage.getItem("token");
+    //     if (!token || !currentUserId) return;
+    //     console.log('Fetching token:', token);
+    //     try {
+    //         const response = await axios.get(`${API_URL}/history/${currentUserId}`, {
+    //             withCredentials: true,
+    //             headers: getAuthHeaders(),
+    //         });
+    //         console.log('Fetching Igris history for user:', currentUserId);
+    //         const data = response.data;
+    //         console.log("Igris history data:", data);
+    //         setIgrisHistory(data);
+    //     } catch (error) {
+    //         if (error.response?.status === 401) {
+    //             localStorage.removeItem("token");
+    //             localStorage.removeItem("user");
+    //             window.dispatchEvent(new Event("auth:user-updated"));
+    //             return;
+    //         }
+    //         console.error("Error fetching Igris history:", error);
+    //     }
+    // };
 
-    useEffect(() => {
-        getIgrisHistory();
-    }, []);
+    // useEffect(() => {
+    //     getIgrisHistory();
+    // }, []);
 
     const openIgrisChat = async (chat) => {
         if (!chat?._id) return;
@@ -316,7 +316,6 @@ export default function AskIgris({ onSend } = {}) {
         const userMsg = { id: uid(), role: "user", text: question, attachment: outgoingAttachment };
 
         setMessages((prev) => [...prev, userMsg]);
-        setText("");
         removeAttachment();
         setMenuOpen(false);
         setIsLoading(true);
@@ -327,6 +326,7 @@ export default function AskIgris({ onSend } = {}) {
             const requestBody = new FormData();
             requestBody.append("question", question);
             requestBody.append("title", question.slice(0, 60) || "New Conversation");
+            console.log("Sending request to API:", { question, outgoingAttachment, activeConversationId, requestBody })
             if (activeConversationId) {
                 requestBody.append("conversationId", activeConversationId);
             }
@@ -338,15 +338,23 @@ export default function AskIgris({ onSend } = {}) {
             const res = await fetch(API_URL, {
                 method: "POST",
                 credentials: "include",
-                headers: getAuthHeaders(),
-                body: requestBody,
+                headers: {
+                    "Content-Type": "application/json",
+                    ...getAuthHeaders()
+                },
+                body: JSON.stringify({
+                    question: text,
+                    source: null
+                }),
             });
+            setText("");
+            console.log("Request sent to API:", { requestBody })
             if (!res.ok) throw new Error(`Request failed with status ${res.status}`);
             const data = await res.json();
             if (data.conversation?._id) {
                 setActiveConversationId(data.conversation._id);
             }
-            await getIgrisHistory();
+            // await getIgrisHistory();
             console.log("Received response:", data);
             console.log("response:", res);
             const replyText = data?.answer ?? data?.prompt ?? data?.text ?? "Hmm, no reply came back.";
@@ -475,8 +483,8 @@ export default function AskIgris({ onSend } = {}) {
                 }}
             />
             <div className="text-2xl font-bold text-zinc-200 mt-3 mb-6">
-            <h1 className="ml-6 text-left">Ask Igris</h1>
-            <h1 className="text-center">Title</h1>
+                <h1 className="ml-6 text-left">Ask Igris</h1>
+                <h1 className="text-center">Title</h1>
             </div>
             {/* message list */}
             {hasStarted && (

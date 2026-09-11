@@ -46,6 +46,7 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
             googleId: profile.id,
             authProvider: 'google',
             profilePic: profile.photos?.[0]?.value || '',
+            needsProfileCompletion: true,
           });
 
           return done(null, user);
