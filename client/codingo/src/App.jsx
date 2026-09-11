@@ -6,7 +6,6 @@ import RegisterationPage from './pages/RegisterationPage.jsx';
 import SignupPage from './pages/SignupPage.jsx';
 import SignupNextPage from './pages/SignupNextPage.jsx';
 import DashboardPage from './pages/DashboardPage.jsx';
-import WelcomePage from './pages/WelcomePage.jsx';
 import LevelsPage from './pages/LevelsPage';
 import LanguagePage from './pages/LanguagePage.jsx';
 import LearnPage from './pages/LearnPage.jsx';
@@ -138,7 +137,6 @@ function AppShell() {
             <Route path="/" element={<LandingPage />} />
             <Route path="/language/:langId" element={<LanguagePageWrapper />} />
             <Route path="/login" element={<LoginPage />} />
-            <Route path="/Login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterationPage />} />
             <Route path="/signup" element={<SignupPage />} />
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
@@ -161,8 +159,6 @@ function AppShell() {
                 </ProtectedRoute>
               )}
             />
-            <Route path="/welcome" element={<ProtectedRoute><WelcomePage /></ProtectedRoute>} />
-            <Route path="/Welcome" element={<ProtectedRoute><WelcomePage /></ProtectedRoute>} />
             <Route
               path="/levels"
               element={(
