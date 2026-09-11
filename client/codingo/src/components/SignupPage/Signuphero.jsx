@@ -1,6 +1,81 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
+import gsap from "gsap";
+
+function CloseIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <path d="M4 4L12 12M12 4L4 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function AlertIcon() {
+  return (
+    <svg className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" viewBox="0 0 16 16" fill="none">
+      <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.4" />
+      <path d="M8 4.8v3.6M8 11.2h.01" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function EyeIcon() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 20 20" fill="none">
+      <path
+        d="M1.5 10S4.5 4 10 4s8.5 6 8.5 6-3 6-8.5 6S1.5 10 1.5 10Z"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinejoin="round"
+      />
+      <circle cx="10" cy="10" r="2.5" stroke="currentColor" strokeWidth="1.4" />
+    </svg>
+  );
+}
+
+function EyeOffIcon() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 20 20" fill="none">
+      <path
+        d="M2.5 2.5l15 15M8.3 8.4a2.5 2.5 0 0 0 3.4 3.4M5.6 5.7C3.3 7 1.5 10 1.5 10s3 6 8.5 6c1.6 0 2.9-.5 4-1.2M13.9 6.2C12.8 5.4 11.5 5 10 5c-.3 0-.6.02-.9.06M14.3 14.2c2.1-1.3 3.7-4.2 3.7-4.2s-1.2-2.4-3.4-4.1"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function SpinnerIcon() {
+  return (
+    <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+      <path className="opacity-90" d="M22 12a10 10 0 0 0-10-10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function GoogleIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24">
+      <path fill="#4285F4" d="M23.5 12.3c0-.85-.08-1.66-.22-2.44H12v4.62h6.46c-.28 1.5-1.13 2.77-2.4 3.62v3h3.89c2.28-2.1 3.55-5.2 3.55-8.8Z" />
+      <path fill="#34A853" d="M12 24c3.24 0 5.96-1.07 7.95-2.9l-3.89-3c-1.08.73-2.46 1.16-4.06 1.16-3.12 0-5.77-2.11-6.72-4.94H1.27v3.1A12 12 0 0 0 12 24Z" />
+      <path fill="#FBBC05" d="M5.28 14.32a7.2 7.2 0 0 1 0-4.64v-3.1H1.27a12 12 0 0 0 0 10.84l4.01-3.1Z" />
+      <path fill="#EA4335" d="M12 4.75c1.76 0 3.34.6 4.58 1.79l3.44-3.44C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.69 1.27 6.58l4.01 3.1c.95-2.83 3.6-4.93 6.72-4.93Z" />
+    </svg>
+  );
+}
+
+function OrbitMark() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <ellipse cx="12" cy="12" rx="10" ry="4.2" stroke="#5B7FFF" strokeWidth="1.4" />
+      <circle cx="12" cy="12" r="2.4" fill="#5B7FFF" />
+    </svg>
+  );
+}
 
 export default function SignupHero() {
   const [username, setUsername] = useState("");
@@ -11,12 +86,22 @@ export default function SignupHero() {
   const [loading, setLoading] = useState(false);
   const [googleEnabled, setGoogleEnabled] = useState(false);
   const navigate = useNavigate();
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [focusedField, setFocusedField] = useState(null);
   const apiUrl = import.meta.env.VITE_API_URL || "";
+
+  const usernameShrink = focusedField === "username" || username.length > 0;
+  const emailShrink = focusedField === "email" || email.length > 0;
+  const passwordShrink = focusedField === "password" || password.length > 0;
+  const confirmShrink = focusedField === "confirm" || confirmPassword.length > 0;
+
+  const passwordsMismatch = confirmPassword.length > 0 && password !== confirmPassword;
 
   useEffect(() => {
     axios.get(`${apiUrl}/api/auth/oauth/status`).then(r => {
       if (r.data?.google) setGoogleEnabled(true);
-    }).catch(() => {});
+    }).catch(() => { });
   }, [apiUrl]);
 
   const isValid =
@@ -39,7 +124,7 @@ export default function SignupHero() {
       if (res.data?.token) localStorage.setItem("token", res.data.token);
       if (res.data?.user) localStorage.setItem("user", JSON.stringify(res.data.user));
       window.dispatchEvent(new Event("auth:user-updated"));
-      navigate("/welcome");
+      navigate("/register");
     } catch (err) {
       setErrorMsg(err.response?.data?.message || "Registration failed. Please try again.");
     } finally {
@@ -47,113 +132,274 @@ export default function SignupHero() {
     }
   };
 
+  // ----- GSAP: one orchestrated opening sequence, nothing per-element after that -----
+  const cardRef = useRef(null);
+  const glowARef = useRef(null);
+  const glowBRef = useRef(null);
+  const errorRef = useRef(null);
+  const fieldsRef = useRef([]);
+
+  const collectField = useCallback((el) => {
+    if (el && !fieldsRef.current.includes(el)) fieldsRef.current.push(el);
+  }, []);
+
+  useEffect(() => {
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    const ctx = gsap.context(() => {
+      if (reduceMotion) {
+        gsap.set([cardRef.current, ...fieldsRef.current], { opacity: 1, y: 0 });
+        return;
+      }
+
+      gsap
+        .timeline({ defaults: { ease: "power3.out" } })
+        .from(cardRef.current, { opacity: 0, y: 16, duration: 0.55 })
+        .from(fieldsRef.current, { opacity: 0, y: 10, duration: 0.4, stagger: 0.06 }, "-=0.25");
+
+      gsap.to([glowARef.current, glowBRef.current], {
+        opacity: 0.55,
+        scale: 1.06,
+        duration: 3.6,
+        ease: "sine.inOut",
+        repeat: -1,
+        yoyo: true,
+        stagger: 0.6,
+      });
+    });
+
+    return () => ctx.revert();
+  }, []);
+
+  useEffect(() => {
+    if (!errorMsg || !errorRef.current) return;
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduceMotion) return;
+
+    gsap
+      .timeline()
+      .to(errorRef.current, { x: -3, duration: 0.05 })
+      .to(errorRef.current, { x: 3, duration: 0.05 })
+      .to(errorRef.current, { x: -2, duration: 0.05 })
+      .to(errorRef.current, { x: 2, duration: 0.05 })
+      .to(errorRef.current, { x: 0, duration: 0.05 });
+  }, [errorMsg]);
+
   return (
-    <div className="min-h-[calc(100vh-3.5rem)] bg-[#0f1419] font-sans px-4 sm:px-6 py-8 sm:py-10 flex items-center justify-center">
-      <div className="w-full max-w-md bg-[#1a2332] border border-[#2a3a4a] rounded-2xl shadow-lg p-5 sm:p-6">
-        <div className="flex items-center justify-between mb-6">
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#0A0D12] px-4 py-10 font-sans sm:px-6 sm:py-12">
+      {/* Ambient background glow */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div
+          ref={glowARef}
+          className="absolute -left-24 -top-32 h-80 w-80 rounded-full bg-[radial-gradient(circle,rgba(91,127,255,0.35),transparent_70%)] opacity-[0.35] blur-3xl"
+        />
+        <div
+          ref={glowBRef}
+          className="absolute -bottom-40 -right-24 h-96 w-96 rounded-full bg-[radial-gradient(circle,rgba(91,127,255,0.25),transparent_70%)] opacity-[0.3] blur-3xl"
+        />
+      </div>
+
+      <div
+        ref={cardRef}
+        className="relative w-full max-w-[420px] rounded-2xl border border-white/[0.06] bg-[#12161D]/90 p-6 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.65)] backdrop-blur-xl sm:p-8"
+      >
+        {/* Top row: close + login */}
+        <div className="mb-7 flex items-center justify-between">
           <button
             onClick={() => navigate("/")}
-            className="text-cyan-300 hover:text-white text-2xl font-bold transition"
             aria-label="Close"
+            className="flex h-8 w-8 items-center justify-center rounded-full text-[#8891A0] transition-colors hover:bg-white/5 hover:text-[#E7EAEF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5B7FFF]/50"
           >
-            ×
+            <CloseIcon />
           </button>
           <button
-            onClick={() => navigate("/login")}
-            className="bg-transparent border border-cyan-400/50 hover:border-cyan-300 px-3 sm:px-4 py-1.5 rounded-full text-xs sm:text-sm font-bold text-cyan-200 hover:text-white transition"
             type="button"
+            onClick={() => navigate("/login")}
+            className="rounded-full border border-white/10 px-3.5 py-1.5 text-[11px] font-semibold tracking-wide text-[#8891A0] transition-colors hover:border-white/20 hover:text-[#E7EAEF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5B7FFF]/50"
           >
-            LOGIN
+            LOG IN
           </button>
         </div>
 
-        <h1 className="text-3xl md:text-4xl font-extrabold text-center mb-2 bg-clip-text text-transparent bg-linear-to-r from-emerald-400 via-cyan-400 to-violet-400">
-          Create Account
-        </h1>
-        <p className="text-center text-sm text-gray-400 mb-6">Start your learning journey today</p>
+        {/* Wordmark */}
+        <div ref={collectField} className="mb-7 flex items-center gap-2.5">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#151B24] ring-1 ring-white/5">
+            <OrbitMark />
+          </div>
+          <div>
+            <h1 className="text-[15px] font-semibold tracking-tight text-[#E7EAEF]">Create your account</h1>
+            <p className="text-[12.5px] font-medium text-[#5B6472]">Start your learning journey today</p>
+          </div>
+        </div>
 
+        {/* Error */}
         {errorMsg && (
-          <div className="mb-4 w-full text-center text-sm font-bold text-red-300 bg-red-900/30 border border-red-800/40 py-2 rounded-lg">
-            {errorMsg}
+          <div
+            ref={errorRef}
+            role="alert"
+            className="mb-5 flex items-start gap-2.5 rounded-xl border border-red-500/20 bg-red-500/[0.08] px-3.5 py-2.5 text-[13px] font-medium leading-snug text-[#F2939A]"
+          >
+            <AlertIcon />
+            <span>{errorMsg}</span>
           </div>
         )}
 
-        <form className="w-full flex flex-col gap-3" onSubmit={handleSubmit}>
-          <input
-            className="w-full bg-[#141b24] border border-[#1f2a38] text-white text-base p-3.5 rounded-lg font-semibold placeholder-gray-500 outline-none focus:border-cyan-500 transition"
-            type="text"
-            placeholder="Username (min 3 characters)"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            required
-            minLength={3}
-          />
-          <input
-            className="w-full bg-[#141b24] border border-[#1f2a38] text-white text-base p-3.5 rounded-lg font-semibold placeholder-gray-500 outline-none focus:border-cyan-500 transition"
-            type="email"
-            placeholder="Email address"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
-          <input
-            className="w-full bg-[#141b24] border border-[#1f2a38] text-white text-base p-3.5 rounded-lg font-semibold placeholder-gray-500 outline-none focus:border-cyan-500 transition"
-            type="password"
-            placeholder="Password (min 6 characters)"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            minLength={6}
-          />
-          <input
-            className="w-full bg-[#141b24] border border-[#1f2a38] text-white text-base p-3.5 rounded-lg font-semibold placeholder-gray-500 outline-none focus:border-cyan-500 transition"
-            type="password"
-            placeholder="Confirm password"
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            required
-          />
-          {confirmPassword && password !== confirmPassword && (
-            <p className="text-xs text-red-400 font-semibold px-1">Passwords do not match.</p>
+        {/* Form */}
+        <form className="flex w-full flex-col gap-4" onSubmit={handleSubmit}>
+          {/* Username */}
+          <div ref={collectField} className="relative">
+            <input
+              id="username"
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              onFocus={() => setFocusedField("username")}
+              onBlur={() => setFocusedField(null)}
+              required
+              minLength={3}
+              className="peer w-full rounded-xl border border-white/10 bg-[#0D1117] px-4 pb-2 pt-5 text-[15px] font-medium text-[#E7EAEF] outline-none transition-colors focus:border-[#5B7FFF]/60 focus:ring-2 focus:ring-[#5B7FFF]/15"
+            />
+            <label
+              htmlFor="username"
+              className={`pointer-events-none absolute left-4 font-medium transition-all duration-150 ${focusedField === "username" ? "text-[#7C97FF]" : "text-[#5B6472]"
+                } ${usernameShrink ? "top-3.5 text-[11px]" : "top-1/2 -translate-y-1/2 text-[15px]"}`}
+            >
+              Username
+            </label>
+          </div>
+
+          {/* Email */}
+          <div ref={collectField} className="relative">
+            <input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              onFocus={() => setFocusedField("email")}
+              onBlur={() => setFocusedField(null)}
+              required
+              className="peer w-full rounded-xl border border-white/10 bg-[#0D1117] px-4 pb-2 pt-5 text-[15px] font-medium text-[#E7EAEF] outline-none transition-colors focus:border-[#5B7FFF]/60 focus:ring-2 focus:ring-[#5B7FFF]/15"
+            />
+            <label
+              htmlFor="email"
+              className={`pointer-events-none absolute left-4 font-medium transition-all duration-150 ${focusedField === "email" ? "text-[#7C97FF]" : "text-[#5B6472]"
+                } ${emailShrink ? "top-3.5 text-[11px]" : "top-1/2 -translate-y-1/2 text-[15px]"}`}
+            >
+              Email address
+            </label>
+          </div>
+
+          {/* Password */}
+          <div ref={collectField} className="relative">
+            <input
+              id="password"
+              type={showPassword ? "text" : "password"}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              onFocus={() => setFocusedField("password")}
+              onBlur={() => setFocusedField(null)}
+              required
+              minLength={6}
+              className="peer w-full rounded-xl border border-white/10 bg-[#0D1117] px-4 pb-2 pt-5 pr-11 text-[15px] font-medium text-[#E7EAEF] outline-none transition-colors focus:border-[#5B7FFF]/60 focus:ring-2 focus:ring-[#5B7FFF]/15"
+            />
+            <label
+              htmlFor="password"
+              className={`pointer-events-none absolute left-4 font-medium transition-all duration-150 ${focusedField === "password" ? "text-[#7C97FF]" : "text-[#5B6472]"
+                } ${passwordShrink ? "top-3.5 text-[11px]" : "top-1/2 -translate-y-1/2 text-[15px]"}`}
+            >
+              Password
+            </label>
+            <button
+              type="button"
+              tabIndex={-1}
+              onClick={() => setShowPassword((s) => !s)}
+              aria-label={showPassword ? "Hide password" : "Show password"}
+              className="absolute right-3 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-[#5B6472] transition-colors hover:text-[#8891A0] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5B7FFF]/50"
+            >
+              {showPassword ? <EyeOffIcon /> : <EyeIcon />}
+            </button>
+          </div>
+
+          {/* Confirm password */}
+          <div ref={collectField} className="relative">
+            <input
+              id="confirmPassword"
+              type={showConfirmPassword ? "text" : "password"}
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              onFocus={() => setFocusedField("confirm")}
+              onBlur={() => setFocusedField(null)}
+              required
+              className="peer w-full rounded-xl border border-white/10 bg-[#0D1117] px-4 pb-2 pt-5 pr-11 text-[15px] font-medium text-[#E7EAEF] outline-none transition-colors focus:border-[#5B7FFF]/60 focus:ring-2 focus:ring-[#5B7FFF]/15"
+            />
+            <label
+              htmlFor="confirmPassword"
+              className={`pointer-events-none absolute left-4 font-medium transition-all duration-150 ${focusedField === "confirm" ? "text-[#7C97FF]" : "text-[#5B6472]"
+                } ${confirmShrink ? "top-3.5 text-[11px]" : "top-1/2 -translate-y-1/2 text-[15px]"}`}
+            >
+              Confirm password
+            </label>
+            <button
+              type="button"
+              tabIndex={-1}
+              onClick={() => setShowConfirmPassword((s) => !s)}
+              aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+              className="absolute right-3 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-[#5B6472] transition-colors hover:text-[#8891A0] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5B7FFF]/50"
+            >
+              {showConfirmPassword ? <EyeOffIcon /> : <EyeIcon />}
+            </button>
+          </div>
+
+          {passwordsMismatch && (
+            <p className="-mt-1.5 px-1 text-[12.5px] font-medium text-[#F2939A]">Passwords do not match.</p>
           )}
+
           <button
+            ref={collectField}
+            className="group relative mt-1 flex h-[46px] w-full items-center justify-center gap-2 rounded-xl bg-[#5B7FFF] text-[14.5px] font-semibold text-white transition-all hover:bg-[#6C8CFF] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5B7FFF]/50 focus-visible:ring-offset-2 focus-visible:ring-offset-[#12161D]"
             type="submit"
             disabled={!isValid || loading}
-            className={`w-full mt-2 py-3 rounded-lg text-base font-extrabold ${
-              isValid && !loading
-                ? "bg-linear-to-r from-cyan-400 via-emerald-400 to-cyan-500 text-gray-950 hover:text-white shadow transition"
-                : "bg-[#364757] bg-opacity-60 text-gray-400 cursor-not-allowed"
-            }`}
           >
-            {loading ? "Creating account..." : "SIGN UP"}
+            {loading && <SpinnerIcon />}
+            {loading ? "Creating account…" : "Create account"}
           </button>
         </form>
 
         {/* Separator */}
-        <div className="flex items-center w-full my-5">
-          <div className="flex-1 border-t border-[#2a3a4a]" />
-          <span className="text-[#4a5d6f] mx-3 text-xs font-bold">OR</span>
-          <div className="flex-1 border-t border-[#2a3a4a]" />
+        <div ref={collectField} className="my-6 flex w-full items-center">
+          <div className="flex-1 border-t border-white/10" />
+          <span className="mx-3 text-[11px] font-medium uppercase tracking-wider text-[#5B6472]">or continue with</span>
+          <div className="flex-1 border-t border-white/10" />
         </div>
-        {/* Social Logins */}
-        <div className="flex gap-4 w-full">
+
+        {/* Social logins */}
+        <div ref={collectField} className="flex w-full gap-4">
           <button
             type="button"
-            onClick={() => { if (googleEnabled) window.location.href = `${apiUrl}/api/auth/google`; }}
+            onClick={() => {
+              if (googleEnabled) window.location.href = `${apiUrl}/api/auth/google`;
+            }}
             disabled={!googleEnabled}
-            className={`flex-1 flex items-center gap-2 py-3 rounded-lg bg-[#141b24] border border-[#1f2a38] text-white font-bold text-sm justify-center transition ${googleEnabled ? 'hover:bg-[#22344c]' : 'opacity-50 cursor-not-allowed'}`}
+            className={`flex h-[46px] flex-1 items-center justify-center gap-2.5 rounded-xl border text-[14px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5B7FFF]/50 ${googleEnabled
+              ? "border-white/10 bg-[#0D1117] text-[#E7EAEF] hover:border-white/20 hover:bg-[#151B24]"
+              : "cursor-not-allowed border-white/5 bg-[#0D1117]/60 text-[#5B6472]"
+              }`}
           >
-            <svg className="w-6 h-6 mr-2" viewBox="0 0 24 24" fill="none"><path d="M21.805 10.023H12.18v3.996h5.488c-.236 1.209-1.386 3.563-5.488 3.563-3.299 0-5.995-2.75-5.995-6.145 0-3.395 2.696-6.145 5.995-6.145 1.88 0 3.142.803 3.862 1.496l2.646-2.582C18.109 3.52 15.733 2.25 12.18 2.25c-5.378 0-9.752 4.374-9.752 9.75 0 5.376 4.374 9.75 9.752 9.75 5.632 0 9.366-3.962 9.366-9.537 0-.641-.069-1.13-.159-1.59z" fill="#fff"/></svg>
-            GOOGLE
-          </button>
-          <button className="flex-1 flex items-center gap-2 py-3 rounded-lg bg-[#141b24] border border-[#1f2a38] text-white font-bold text-sm justify-center hover:bg-[#22344c] transition opacity-50 cursor-not-allowed" disabled>
-            <svg className="w-6 h-6 mr-2" viewBox="0 0 20 20" fill="#ffffff"><path d="M10.5,16 L16,16 L16,10.5 L10.5,10.5 L10.5,16 Z M4,16 L9.5,16 L9.5,10.5 L4,10.5 L4,16 Z M10.5,9.5 L16,9.5 L16,4 L10.5,4 L10.5,9.5 Z M4,9.5 L9.5,9.5 L9.5,4 L4,4 L4,9.5 Z"/></svg>
-            MICROSOFT
+            <GoogleIcon />
+            Continue with Google
           </button>
         </div>
+
         {/* Terms */}
-        <p className="text-xs text-gray-500 mt-8 mb-2 text-center leading-5 font-semibold">
-          By signing up, you agree to our <span className="underline">Terms</span> and <span className="underline">Privacy Policy</span>.
+        <p ref={collectField} className="mb-2 mt-6 text-center text-[12px] font-medium leading-5 text-[#5B6472]">
+          By signing up, you agree to our{" "}
+          <span className="text-[#8891A0] underline decoration-white/20 underline-offset-2">Terms</span> and{" "}
+          <span className="text-[#8891A0] underline decoration-white/20 underline-offset-2">Privacy Policy</span>.
+        </p>
+        <p className="text-center text-[11px] leading-[1.5] text-[#4A5261]">
+          This site is protected by reCAPTCHA Enterprise and the Google{" "}
+          <span className="underline decoration-white/10 underline-offset-2">Privacy Policy</span> and{" "}
+          <span className="underline decoration-white/10 underline-offset-2">Terms of Service</span> apply.
         </p>
       </div>
     </div>

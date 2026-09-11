@@ -1,11 +1,13 @@
 import os
 import uuid
+
+import uvicorn
 from chunking import extract_text, chunk_text
 import chromadb
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-# import ollama
 from groq import Groq
+from pydantic import BaseModel
 import json
 import sys
 import asyncio
@@ -26,6 +28,7 @@ groq_client = Groq(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000", "http://localhost:5173"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -141,12 +144,18 @@ Rules:
 - Keep answers concise, direct, and helpful.
 """
 
-
+class AskRequest(BaseModel):
+    question: str
+    source: str | None = None
+print("AskRequest initialized", {AskRequest})
 # ---------------------------------------------------------------------------
 # 3. The endpoint — LLM decides whether to call the tool, we execute it if so
 # ---------------------------------------------------------------------------
-@app.get('/askPrompt')
-async def ask_prompt(question: str, source: str | None = None):
+@app.post('/askPrompt')
+async def ask_prompt(req: AskRequest):
+    print(f"Received request: {req}")
+    question = req.question
+    source = req.source
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": question},
@@ -214,14 +223,26 @@ async def ask_prompt(question: str, source: str | None = None):
 
 
 if __name__ == "__main__":
-    request = json.load(sys.stdin)
-    if request.get("action") == "remember":
-        file_data = request.get("file") or {}
-        uploaded_file = UploadFile(
-            filename=file_data.get("filename", "uploaded-file"),
-            file=io.BytesIO(base64.b64decode(file_data["data"])),
-        )
-        result = asyncio.run(upload_file(uploaded_file))
+    # Check if "serve" was passed as an argument (e.g., python main.py serve)
+    if len(sys.argv) > 1 and sys.argv[1] == "serve":
+        uvicorn.run("main:app", port=8000, reload=True)
+        
     else:
-        result = asyncio.run(ask_prompt(request.get("prompt", "")))
-    print(json.dumps(result), flush=True)
+        # Otherwise, default to processing the stdin JSON request
+        try:
+            request = json.load(sys.stdin)
+            if request.get("action") == "remember":
+                file_data = request.get("file") or {}
+                uploaded_file = UploadFile(
+                    filename=file_data.get("filename", "uploaded-file"),
+                    file=io.BytesIO(base64.b64decode(file_data["data"])),
+                )
+                result = asyncio.run(upload_file(uploaded_file))
+            else:
+                req = AskRequest(**request)
+                result = asyncio.run(ask_prompt(req))
+            
+            print(json.dumps(result), flush=True)
+            
+        except json.JSONDecodeError:
+            print(json.dumps({"error": "Invalid JSON input"}), flush=True)
