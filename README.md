@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Gamified LMS Platform for Coders
 
 A scalable, gamified Learning Management System (LMS) for coders, inspired by Duolingo.  
@@ -52,3 +53,7 @@ Built with the MERN stack and Next.js for high-performance, interactive learning
    npm start
    
    
+=======
+# Orb8
+Orbit is a social-medial platform powered by Igris AI
+>>>>>>> 22e57b90996f22b0ab0ebc03ffbd4c21f850881b
