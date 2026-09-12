@@ -28,6 +28,7 @@ import axios from 'axios';
 import { apiUrl, getAuthHeaders } from '../../utilites/DashboardHelper';
 import { setCurrentUser } from '../../redux/slices/dashboardSlice';
 import { registerPushNotifications } from '../../notifications/registerPushNotifications';
+import { GalleryHorizontal, Settings } from 'lucide-react';
 
 const communityNavItems = [
   { key: 'home', label: 'Home', icon: FaHome, to: '/community', match: ['/community'] },
@@ -161,6 +162,15 @@ export default function AppSidebar() {
             >
               <span className='py-2'><FaBell /></span>
               {!isDesktopCollapsed && <span>Notifications</span>}
+            </button>
+
+            {/* settings */}
+            <button
+              onClick={handleEnableNotifications}
+              className='text-white gap-3 flex justify-center w-full items-center bg-gray-500 text-center p-2 rounded-3xl cursor-pointer mb-2'
+            >
+              <span className='py-2'><Settings /></span>
+              {!isDesktopCollapsed && <span>Settings</span>}
             </button>
 
             {/* Log Out */}
