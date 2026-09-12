@@ -35,7 +35,7 @@ app.add_middleware(
 
 
 # --- Step 3: the endpoint your React frontend calls ----------------------
-@app.post("/upload")
+@app.post("/remember")
 async def upload_file(file: UploadFile = File(...)):
     file_bytes = await file.read()
 
@@ -171,7 +171,7 @@ async def ask_prompt(req: AskRequest):
             tools=[SEARCH_TOOL],
             tool_choice="auto",
             temperature=0.6,
-            max_completion_tokens=2048,
+            max_completion_tokens=524,
             top_p=0.95,
             reasoning_effort="default",
         )

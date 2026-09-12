@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Paperclip, Image as ImageIcon, FileText, X } from "lucide-react";
 import axios from "axios";
-import { apiUrl, getAuthHeaders } from "../utilites/DashboardHelper";
+import { getAuthHeaders } from "../utilites/DashboardHelper";
 
 const MAX_TEXTAREA_HEIGHT = 200;
-const API_URL = `${apiUrl}/api/askigris`;
+const API_URL = import.meta.env.VITE_PYTHON_API_URL || '';
 
 export default function RememberIgris({ onSend } = {}) {
     const [text, setText] = useState("");
@@ -96,7 +96,7 @@ export default function RememberIgris({ onSend } = {}) {
             formData.append("file", attachment.file, attachment.name);
 
             try {
-                const res = await axios.post(API_URL, formData, {
+                const res = await axios.post(`${API_URL}/remember`, formData, {
                     withCredentials: true,
                     headers: getAuthHeaders(),
                 });
