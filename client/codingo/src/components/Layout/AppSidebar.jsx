@@ -166,7 +166,7 @@ export default function AppSidebar() {
 
             {/* settings */}
             <button
-              onClick={handleEnableNotifications}
+              // onClick={}
               className='text-white gap-3 flex justify-center w-full items-center bg-gray-500 text-center p-2 rounded-3xl cursor-pointer mb-2'
             >
               <span className='py-2'><Settings /></span>
