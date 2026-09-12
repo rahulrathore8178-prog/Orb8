@@ -1,7 +1,7 @@
 const { cert, getApps, initializeApp } = require("firebase-admin/app");
 const { getMessaging } = require("firebase-admin/messaging");
 const User = require("../models/user.model");
-const serviceAccount = require("../../../orbit-661b7-firebase-adminsdk-fbsvc-8e8ddf5842.json");
+const serviceAccount = require("../config/orbit-661b7-firebase-adminsdk-fbsvc-8e8ddf5842.json");
 
 const firebaseApp = getApps().length
   ? getApps()[0]
