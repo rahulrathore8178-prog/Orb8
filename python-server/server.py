@@ -27,7 +27,7 @@ groq_client = Groq(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:5173"],
+    allow_origins=["http://localhost:3000", "http://localhost:5173", "https://orb8-ochre.vercel.app", "https://orb8.onrender.com", "https://orb8-python.onrender.com"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

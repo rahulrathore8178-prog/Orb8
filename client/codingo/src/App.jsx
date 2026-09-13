@@ -74,19 +74,74 @@ function ProtectedRoute({ children }) {
       isActive = false;
     };
   }, []);
+  const fullScreen = true;
+  const label = "ORBIT";
+  const subtext = "Loading your feed...";
+  const wrapperClass = fullScreen
+    ? "fixed inset-0 z-50 bg-slate-950"
+    : "w-full";
 
   if (isChecking) {
     return (
-      <div className="fixed inset-0 flex items-center justify-center bg-gray-900 bg-opacity-75 z-50">
-        <div className="flex flex-col items-center">
-          {/* Spinner */}
-          <div className="w-16 h-16 border-4 border-blue-500 border-dashed rounded-full animate-spin"></div>
+      <div className={`${wrapperClass} flex flex-col items-center justify-center gap-6`}>
+        <div className="relative mx-auto w-full max-w-xs aspect-square">
+          <svg viewBox="0 0 400 400" className="w-full h-full">
+            {/* static background rings — orbital paths */}
+            <circle cx="200" cy="200" r="165" fill="none" stroke="rgba(148,163,184,0.12)" />
+            <circle cx="200" cy="200" r="130" fill="none" stroke="rgba(148,163,184,0.14)" />
+            <circle cx="200" cy="200" r="90" fill="none" stroke="rgba(148,163,184,0.16)" />
 
-          {/* Loading text */}
-          <p className="mt-4 text-white text-lg font-semibold animate-pulse">
-            Loading data...
-          </p>
+            {/* orbiting dots — each <g> rotates around the shared center (200,200) */}
+            <g className="orbit orbit-3">
+              <circle cx="200" cy="35" r="9" fill="#c084fc" />
+            </g>
+            <g className="orbit orbit-2">
+              <circle cx="200" cy="70" r="9" fill="#2dd4bf" />
+            </g>
+            <g className="orbit orbit-1">
+              <circle cx="200" cy="110" r="9" fill="#fb923c" />
+            </g>
+          </svg>
+
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="core-pulse w-16 h-16 rounded-full bg-gradient-to-br from-orange-400 via-teal-400 to-violet-400 flex items-center justify-center font-semibold text-slate-950 text-sm tracking-tight">
+              {label}
+            </div>
+          </div>
         </div>
+
+        <p className="text-slate-400 text-sm">{subtext}</p>
+
+        <style>{`
+        .orbit {
+          transform-origin: 200px 200px;
+          animation-timing-function: linear;
+          animation-iteration-count: infinite;
+          animation-name: orbit-spin;
+        }
+        /* smaller ring = faster orbit, bigger ring = slower — same
+           relationship real orbits have (inner planets move faster) */
+        .orbit-1 { animation-duration: 6s; }
+        .orbit-2 { animation-duration: 8.5s; }
+        .orbit-3 { animation-duration: 11s; }
+ 
+        @keyframes orbit-spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+ 
+        .core-pulse {
+          animation: core-pulse 2.2s ease-in-out infinite;
+        }
+        @keyframes core-pulse {
+          0%, 100% { transform: scale(1); opacity: 1; }
+          50% { transform: scale(1.08); opacity: 0.85; }
+        }
+ 
+        @media (prefers-reduced-motion: reduce) {
+          .orbit, .core-pulse { animation: none; }
+        }
+      `}</style>
       </div>
     );
   }
