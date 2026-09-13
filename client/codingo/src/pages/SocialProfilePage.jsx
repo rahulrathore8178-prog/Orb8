@@ -211,7 +211,7 @@ export default function SocialProfileSection() {
                     localStorage.setItem('user', JSON.stringify(userData));
                 }
             }
-            console.log('Fetched user profile:', response.data);
+            console.log('Fetched user profile:', response);
         } catch (err) {
             console.error('Failed to fetch user profile:', err);
             setError('Failed to load profile.');

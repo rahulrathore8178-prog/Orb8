@@ -46,6 +46,7 @@ import Capsules from '../components/Comments/Capsules';
 import CapsulePostModal from '../components/Comments/CapsulePostModal';
 import { FiMessageCircle, FiSend } from 'react-icons/fi';
 import Comments from './CommentsModal';
+import { Plus } from 'lucide-react';
 /* ─── Constants ───────────────────────────────────────────────── */
 
 // Cycled per card — colored ambient glow
@@ -369,11 +370,10 @@ function ComposerCard({
             type="button"
             onClick={handlePost}
             disabled={!canPost}
-            className={`w-full py-3 rounded-[10px] font-['Syne'] font-extrabold text-[14px] tracking-[0.3px] transition-all duration-200 ${
-              canPost
-                ? 'bg-[#404040] text-white hover:bg-[#505050] cursor-pointer'
-                : 'bg-[#303030] text-[#aaaaaa] cursor-not-allowed'
-            }`}
+            className={`w-full py-3 rounded-[10px] font-['Syne'] font-extrabold text-[14px] tracking-[0.3px] transition-all duration-200 ${canPost
+              ? 'bg-[#404040] text-white hover:bg-[#505050] cursor-pointer'
+              : 'bg-[#303030] text-[#aaaaaa] cursor-not-allowed'
+              }`}
           >
             {isPosting ? 'Posting...' : 'Post'}
           </button>
@@ -463,6 +463,14 @@ export function PostComposer({
     if (videoInputRef.current) videoInputRef.current.value = '';
   };
 
+  // place above the component or in a utils file
+  const extractHashtags = (text) => {
+    // requires # at start of string or after whitespace, avoids matching mid-word "foo#bar"
+    const matches = text.match(/(?:^|\s)#([a-zA-Z0-9_]+)/g) || [];
+    const tags = matches.map((m) => m.trim().slice(1).toLowerCase());
+    return [...new Set(tags)]; // dedupe
+  };
+
   const handlePost = async () => {
     const trimmedContent = content.trim();
     const fileToSend =
@@ -483,10 +491,15 @@ export function PostComposer({
       const formData = new FormData();
       if (trimmedContent) formData.append('content', trimmedContent);
 
+      const hashtags = extractHashtags(trimmedContent);
+      if (hashtags.length) {
+        formData.append('hashtags', JSON.stringify(hashtags)); // see note below
+      }
+
       if (fileToSend) {
         formData.append('media', fileToSend, fileToSend.name || 'upload');
       }
-
+      console.log('Posting with hashtags:', hashtags, formData);
       const res = await axios.post(`${apiUrl}/api/community/posts`, formData, {
         withCredentials: true,
         headers: { ...getAuthHeaders() },
@@ -918,7 +931,8 @@ export default function CommunityPage() {
   const hasMore = useSelector((state) => state.feed.hasMore);
   const isLoading = useSelector((state) => state.feed.isLoading);
   const error = useSelector((state) => state.feed.error);
-  console.log('localstorage:', localStorage)
+  // console.log('localstorage:', localStorage)
+  console.log('posts:', posts);
 
   const observerRef = useRef(null);
   const loadingRef = useRef(null);
@@ -1204,11 +1218,13 @@ export default function CommunityPage() {
 
       {/* FAB: new post (all screen sizes) */}
       <button
-        onClick={() => setShowComposer(true)}
-        className="fixed bottom-8 right-8 w-14 h-14 rounded-full bg-gradient-to-br from-[#00b4cc] to-[#00e5ff] text-black text-[28px] font-bold flex items-center justify-center shadow-[0_4px_24px_#00e5ff55] z-50 active:scale-95 transition-transform"
+        onClick={() => {
+          setShowComposer(true);
+        }}
+        className="fixed bottom-8 right-8 w-14 h-14 rounded-full bg-gradient-to-br from-[#858585] to-[#656565] text-black flex items-center justify-center shadow-[0_4px_24px_#a6a6a6] z-50 transition-all duration-300 ease-out hover:shadow-[0_6px_32px_#a6a6a6] hover:scale-110 active:scale-95 ring-2 ring-[#858585] hover:ring-[#a6a6a6]"
         aria-label="New post"
       >
-        +
+        <Plus size={26} strokeWidth={2.5} />
       </button>
 
       {/* Capsule modals */}
