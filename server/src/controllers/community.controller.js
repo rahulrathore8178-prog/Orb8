@@ -20,9 +20,28 @@ async function createPost(req, res) {
       return res.status(400).json({ message: 'Post content exceeds 2000 characters' });
     }
 
+    // --- hashtags: parse + normalize what the client sent ---
+    let hashtags = [];
+    if (req.body.hashtags) {
+      try {
+        const parsed = JSON.parse(req.body.hashtags);
+        if (Array.isArray(parsed)) hashtags = parsed;
+      } catch (err) {
+        // malformed field, just ignore rather than failing the whole post
+        hashtags = [];
+      }
+    }
+    hashtags = [...new Set(
+      hashtags
+        .filter((t) => typeof t === 'string' && t.trim())
+        .map((t) => t.trim().toLowerCase().replace(/[^a-z0-9_]/g, ''))
+        .filter(Boolean)
+    )].slice(0, 30);
+
     const postData = {
       author: req.user.id,
       content: content.trim(),
+      hashtags,
       image: '',
       video: ''
     };
@@ -78,7 +97,7 @@ async function createPost(req, res) {
         }
       }
     }
-
+    console.log('[POST DEBUG] postData.hashtags:', postData.hashtags);
     const post = await Post.create(postData);
     await post.populate('author', 'username profilePic league level totalXp');
 
@@ -95,6 +114,7 @@ async function createPost(req, res) {
           totalXp: post.author.totalXp || 0
         },
         content: post.content,
+        hashtags: post.hashtags || [],
         image: post.image,
         video: post.video,
         likes: [],
@@ -111,6 +131,8 @@ async function createPost(req, res) {
     return res.status(500).json({ message: error.message });
   }
 }
+
+
 async function deletePost(req, res) {
   console.log('Deleting post with ID:', req.params.postId);
   try {
@@ -179,6 +201,7 @@ async function getFeed(req, res) {
           totalXp: post.author.totalXp || 0,
         },
         content: post.content || "",
+        hashtags: post.hashtags || [],
         image: post.image || "",
         video: post.video || "",
         likes: (post.likes || []).map((id) => String(id)),
@@ -284,6 +307,7 @@ async function getPost(req, res) {
         level: post.author.level || 1,
         totalXp: post.author.totalXp || 0
       },
+      hashtags: post.hashtags || [],
       content: post.content,
       image: post.image,
       video: post.video || '',
