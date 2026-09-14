@@ -198,7 +198,7 @@ export function FriendsPage() {
           )}
         </div>
         <div className="flex-1 min-w-0">
-          <div onClick={() => friend._id && navigate(`/profile/${friend._id}`)} className="font-light text-sm sm:text-lg truncate hover:text-white/80 transition">{friend.username}</div>
+          <div onClick={() => friend._id && navigate(`/socialprofile/${friend._id}`)} className="font-light text-sm sm:text-lg truncate hover:text-white/80 transition">{friend.username}</div>
         </div>
         <div className="text-right shrink-0">
           <button
