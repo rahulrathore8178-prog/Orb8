@@ -1057,6 +1057,11 @@ export default function CommunityPage() {
   const handlePostCreated = (newPost) => {
     dispatch(addPostToTop(newPost));
     setShowComposer(false);
+
+    window.scrollTo({
+      top: 0,
+      behavior: 'smooth' // optional: smooth animation
+    });
   };
 
   const handleDelete = async (postId) => {

@@ -52,7 +52,7 @@ export default function MessagesApp() {
   useEffect(() => {
     if (!currentUser?.id) return;
 
-    const socketUrl = import.meta.env.VITE_SOCKET_URL || "ws://localhost:5000";
+    const socketUrl = import.meta.env.VITE_API_URL || "ws://localhost:5000";
     const socket = new WebSocket(socketUrl);
     wsRef.current = socket;
 

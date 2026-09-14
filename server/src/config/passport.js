@@ -3,11 +3,7 @@ const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const User = require('../models/user.model');
 
 const NODE_ENV = process.env.NODE_ENV || 'development';
-const BACKEND_URL =
-  process.env.BACKEND_URL ||
-  (NODE_ENV === 'production'
-    ? 'https://orb8.onrender.com'
-    : 'http://localhost:5000');
+const BACKEND_URL = process.env.BACKEND_URL;
 
 let isGoogleEnabled = false;
 
