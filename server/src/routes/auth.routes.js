@@ -26,11 +26,7 @@ router.get('/oauth/status', (req, res) => {
   res.json({ google: isGoogleEnabled });
 });
 
-const frontendUrl =
-  process.env.FRONTEND_URL ||
-  (process.env.NODE_ENV === 'production'
-    ? 'https://lms-peach-pi.vercel.app'
-    : 'http://localhost:5173');
+const frontendUrl = process.env.FRONTEND_URL
 
 if (isGoogleEnabled) {
   router.get(
