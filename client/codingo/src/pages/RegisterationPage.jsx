@@ -273,6 +273,7 @@ export default function PreferencesSetup({ onSubmit }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    navigate("/community");
     onSubmit?.({ ...text, ...tags });
   };
 

@@ -6,7 +6,7 @@ const NODE_ENV = process.env.NODE_ENV || 'development';
 const BACKEND_URL =
   process.env.BACKEND_URL ||
   (NODE_ENV === 'production'
-    ? 'https://your-render-service.onrender.com'
+    ? 'https://orb8.onrender.com'
     : 'http://localhost:5000');
 
 let isGoogleEnabled = false;
