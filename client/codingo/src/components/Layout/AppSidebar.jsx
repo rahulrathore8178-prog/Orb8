@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   FaBars,
   FaBell,
@@ -28,7 +28,7 @@ import axios from 'axios';
 import { apiUrl, getAuthHeaders } from '../../utilites/DashboardHelper';
 import { setCurrentUser } from '../../redux/slices/dashboardSlice';
 import { registerPushNotifications } from '../../notifications/registerPushNotifications';
-import { GalleryHorizontal, Settings } from 'lucide-react';
+import { ChevronRight, Settings } from 'lucide-react';
 
 const communityNavItems = [
   { key: 'home', label: 'Home', icon: FaHome, to: '/community', match: ['/community'] },
@@ -48,6 +48,8 @@ const lmsNavItems = [
   { key: 'profile', label: 'Profile', icon: FaMedal, to: '/profile', match: ['/profile'] },
   { key: 'progress', label: 'Progress', icon: FaChartLine, to: '/progress', match: ['/progress'] },
 ];
+
+const MODES = ['Social', 'Professional', 'Private'];
 
 function SidebarItem({ item, isActive, collapsed, onClick, iconOnly = false }) {
   const Icon = item.icon;
@@ -75,6 +77,31 @@ export default function AppSidebar() {
   const dispatch = useDispatch();
   const isDesktopCollapsed = useSelector(state => state.sideBar.isDesktopCollapsed);
   const isMobileMenuOpen = useSelector(state => state.sideBar.isMobileMenuOpen);
+
+  // Personality mode 
+  const [activeMode, setActiveMode] = useState('Social');
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef(null);
+
+  // closes the menu on outside tap/click — needed for mobile since there's no "mouse leave"
+  useEffect(() => {
+    const handleOutsideClick = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    document.addEventListener('touchstart', handleOutsideClick);
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+      document.removeEventListener('touchstart', handleOutsideClick);
+    };
+  }, []);
+
+  const handleSelect = (mode) => {
+    setActiveMode(mode);
+    setIsOpen(false);
+  };
 
   const handleLogout = async () => {
     try {
@@ -135,8 +162,43 @@ export default function AppSidebar() {
           className={`sticky flex flex-col justify-between h-screen bg-[#2B2B2B] border-r border-[#414141] py-4 transition-width duration-200 ease-in-out will-change-[width] ${isDesktopCollapsed ? 'w-20 px-2' : 'w-45 px-2'
             }`}
         >
-
           <nav className="space-y-1">
+            {isDesktopCollapsed == false && (
+              <div
+                ref={containerRef}
+                className="relative mb-5 w-full"
+              >
+                <button
+                  onClick={() => setIsOpen((prev) => !prev)}
+                  className="flex items-center justify-center gap-2 py-1 px-3 rounded-xl w-full text-white bg-[#525252] hover:bg-[#616161] active:bg-[#6b6b6b] transition-colors duration-200"
+                >
+                  <span>{activeMode}</span>
+                  <span className={`transition-transform duration-200 ${isOpen ? 'rotate-90' : ''}`}>
+                    <ChevronRight size={18} />
+                  </span>
+                </button>
+
+                <div
+                  className={`absolute left-0 right-0 top-full mt-1.5 rounded-xl bg-[#525252] overflow-hidden z-10 origin-top shadow-lg transition-all duration-200 ease-out ${isOpen
+                    ? 'opacity-100 scale-y-100 translate-y-0 pointer-events-auto'
+                    : 'opacity-0 scale-y-95 -translate-y-1 pointer-events-none'
+                    }`}
+                >
+                  {MODES.map((mode) => (
+                    <button
+                      key={mode}
+                      onClick={() => handleSelect(mode)}
+                      className={`w-full text-left px-3 py-2 text-sm transition-colors duration-150 ${activeMode === mode
+                        ? 'bg-[#6b6b6b] text-white font-medium'
+                        : 'text-gray-200 hover:bg-[#616161]'
+                        }`}
+                    >
+                      {mode}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             {navItems.map((item) => (
               <SidebarItem
                 key={item.key}
@@ -197,16 +259,16 @@ export default function AppSidebar() {
 
           <div className='flex flex-col justify-between'>
             <div>
-            {navItems.map((item) => (
-              <SidebarItem
-                key={item.key}
-                item={item}
-                isActive={isActiveItem(item)}
-                collapsed={false}
-                onClick={handleNavigate}
-                iconOnly
-              />
-            ))}
+              {navItems.map((item) => (
+                <SidebarItem
+                  key={item.key}
+                  item={item}
+                  isActive={isActiveItem(item)}
+                  collapsed={false}
+                  onClick={handleNavigate}
+                  iconOnly
+                />
+              ))}
             </div>
 
             <div>
