@@ -21,6 +21,7 @@ router.post('/user/rewards/claim', protect, authController.claimReward);
 router.post('/user/forgot-password', authController.forgotPassword);
 router.post('/user/reset-password', authController.resetPassword);
 router.get('/user/logout', authController.logoutUser);
+router.post('/completeProfile', authController.completeProfile);
 
 router.get('/oauth/status', (req, res) => {
   res.json({ google: isGoogleEnabled });
@@ -52,10 +53,13 @@ if (isGoogleEnabled) {
     }),
     (req, res) => {
       const token = jwt.sign({ id: req.user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
-      const redirectUrl = `${frontendUrl}/oauth/callback?token=${token}`;
+      const user = req.user;
       console.log(`[AUTH] Google OAuth success user=${req.user._id}`);
-      console.log(`[AUTH] Redirecting -> ${redirectUrl}`);
-      res.redirect(redirectUrl);
+      if (user.needsProfileCompletion == true) {
+        return res.redirect(`${frontendUrl}/signup?token=${token}`);
+      }
+      console.log(`[AUTH] Google OAuth success, redirecting to ${frontendUrl}/auth/success?token=${token}`);
+      return res.redirect(`${frontendUrl}/auth/success?token=${token}`);
     }
   );
 } else {

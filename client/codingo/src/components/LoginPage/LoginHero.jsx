@@ -140,7 +140,7 @@ const LoginHero = () => {
   const passwordShrink = focusedField === "password" || password.length > 0;
 
   return (
-    <div className="font-body relative min-h-[calc(100vh-3.5rem)] overflow-hidden bg-[#0A0D12] px-4 py-10 sm:px-6 sm:py-12 flex items-center justify-center">
+    <div className="font-body relative min-h-screen overflow-hidden bg-[#0A0D12] px-4 py-10 sm:px-6 sm:py-12 flex items-center justify-center">
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap');
         .font-display { font-family: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif; }
