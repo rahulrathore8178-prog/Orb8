@@ -496,6 +496,41 @@ async function resetPassword(req, res) {
   }
 }
 
+
+const completeProfile = async (req, res) => {
+  try {
+    const { username, password } = req.body;
+
+    if (!username || username.trim().length < 3) {
+      return res.status(400).json({ message: 'Username must be at least 3 characters' });
+    }
+    if (!password || password.length < 6) {
+      return res.status(400).json({ message: 'Password must be at least 6 characters' });
+    }
+
+    const taken = await User.findOne({ username: username.trim(), _id: { $ne: req.user.id } });
+    if (taken) {
+      return res.status(409).json({ message: 'Username already taken' });
+    }
+
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    user.username = username.trim();
+    user.password = await bcrypt.hash(password, 10);
+    user.needsProfileCompletion = false;
+    await user.save();
+
+    return res.status(200).json({
+      message: 'Profile completed',
+      user: { id: user._id, username: user.username, email: user.email },
+    });
+  } catch (err) {
+    console.error('Complete profile error:', err);
+    return res.status(500).json({ message: err.message });
+  }
+};
+
 async function logoutUser(req, res) {
   res.clearCookie('token', getCookieOptions());
   return res.status(200).json({ message: 'Logout successful' });
@@ -514,5 +549,6 @@ module.exports = {
   claimReward,
   forgotPassword,
   resetPassword,
+  completeProfile,
   logoutUser,
 };
