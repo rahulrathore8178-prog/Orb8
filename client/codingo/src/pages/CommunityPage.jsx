@@ -101,6 +101,7 @@ const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime', 'vide
 const MAX_IMAGE_SIZE = 8 * 1024 * 1024;   // 8MB
 const MAX_VIDEO_SIZE = 50 * 1024 * 1024;  // 50MB — match your multer limit
 
+
 function ComposerCard({
   onPostCreated,
   onClose,
@@ -397,6 +398,56 @@ function ComposerCard({
         className="hidden"
         id={videoInputId.current}
       />
+    </div>
+  );
+}
+
+function ComposerModal({
+  onPostCreated,
+  onClose,
+  composerFile,
+  setComposerFile,
+  composerPreview,
+  setComposerPreview,
+}) {
+  const dispatch = useDispatch();
+
+  // This is the ONLY way the modal closes. It always discards whatever
+  // wasn't posted — draft text, selected file, preview — before closing.
+  const handleDismiss = () => {
+    if (composerPreview) URL.revokeObjectURL(composerPreview);
+    setComposerFile(null);
+    setComposerPreview(null);
+    dispatch(setImagePreview(null));
+    dispatch(setContent(''));
+    dispatch(setError(''));
+    onClose();
+  };
+
+  // Lock background scroll while the modal is open
+  useEffect(() => {
+    const original = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = original;
+    };
+  }, []);
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
+      {/* Backdrop — intentionally has no onClick, so it can't close the modal */}
+      <div className="absolute inset-0 bg-black/65 backdrop-blur-md" />
+
+      <div className="relative w-full max-w-[380px] sm:max-w-[420px] md:max-w-[440px] max-h-[92vh] overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <ComposerCard
+          onPostCreated={onPostCreated}
+          onClose={handleDismiss}
+          composerFile={composerFile}
+          setComposerFile={setComposerFile}
+          composerPreview={composerPreview}
+          setComposerPreview={setComposerPreview}
+        />
+      </div>
     </div>
   );
 }
@@ -1133,24 +1184,23 @@ export default function CommunityPage() {
           )}
 
           {/* Snap-scroll container */}
+          {/* Composer now renders as a modal, outside the feed */}
+          {showComposer && (
+            <ComposerModal
+              onPostCreated={handlePostCreated}
+              onClose={() => setShowComposer(false)}
+              composerFile={composerFile}
+              setComposerFile={setComposerFile}
+              composerPreview={composerPreview}
+              setComposerPreview={setComposerPreview}
+            />
+          )}
+
           <div
             ref={scrollRef}
             className="flex-1 overflow-y-scroll snap-y snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           >
-            {showComposer && (
-              <div className="h-[73vh] z-10 snap-center flex items-center justify-center px-3 [content-visibility:auto] [contain-intrinsic-size:0_73vh]">
-                <ComposerCard
-                  onPostCreated={handlePostCreated}
-                  onClose={() => setShowComposer(false)}
-                  composerFile={composerFile}
-                  setComposerFile={setComposerFile}
-                  composerPreview={composerPreview}
-                  setComposerPreview={setComposerPreview}
-                />
-              </div>
-            )}
-
-            {posts.length === 0 && !isLoading && !showComposer ? (
+            {posts.length === 0 && !isLoading ? (
               <div className="h-full flex items-center justify-center">
                 <div className="text-center">
                   <div className="text-[60px] mb-4">👩‍💻</div>
