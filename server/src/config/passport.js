@@ -34,10 +34,7 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
           }
 
           user = await User.create({
-            username:
-              (profile.displayName?.replace(/\s+/g, '_').toLowerCase() || 'google_user') +
-              '_' +
-              Date.now().toString(36),
+            username: profile.displayName?.replace(/\s+/g, '_').toLowerCase() || 'google_user',
             email: email || `${profile.id}@google.oauth`,
             googleId: profile.id,
             authProvider: 'google',
