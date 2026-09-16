@@ -16,16 +16,16 @@ const replySchema = new mongoose.Schema({
     type: Date,
     default: Date.now
   }
-}, {_id: true});
+}, { _id: true });
 
 const commentSchema = new mongoose.Schema({
-  author: { 
-    type: mongoose.Schema.Types.ObjectId, 
-    ref: 'User', 
-    required: true 
+  author: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
   },
-  content: { 
-    type: String, 
+  content: {
+    type: String,
     trim: true,
     maxlength: 500
   },
@@ -34,37 +34,37 @@ const commentSchema = new mongoose.Schema({
     default: '',
   },
   voiceNote: {
-    url: {type: String, default: ''},
-    duration: {type: Number, default: 0}
+    url: { type: String, default: '' },
+    duration: { type: Number, default: 0 }
   },
   likes: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     default: []
   }],
-  createdAt: { 
-    type: Date, 
-    default: Date.now 
+  createdAt: {
+    type: Date,
+    default: Date.now
   },
   replies: [replySchema]
 }, { _id: true });
 
 const postSchema = new mongoose.Schema({
-  author: { 
-    type: mongoose.Schema.Types.ObjectId, 
-    ref: 'User', 
+  author: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
     required: true,
     index: true
   },
-  content: { 
-    type: String, 
+  content: {
+    type: String,
     required: true,
     trim: true,
     maxlength: 2000
   },
-  image: { 
-    type: String, 
-    default: '' 
+  image: {
+    type: String,
+    default: ''
   },
   video: {
     type: String,
@@ -83,6 +83,9 @@ const postSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
   }],
+  voiceNote: { type: String, default: '' },
+  voiceNoteFileId: { type: String, default: '' },
+  voiceNoteDuration: { type: Number, default: 0 },
   comments: [commentSchema],
   isActive: {
     type: Boolean,
@@ -99,4 +102,4 @@ postSchema.index({ likes: 1 });
 
 const Post = mongoose.model('Post', postSchema);
 const Comment = mongoose.model('Comment', commentSchema);
-module.exports = {Post, Comment};
+module.exports = { Post, Comment };

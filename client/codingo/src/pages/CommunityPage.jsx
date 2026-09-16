@@ -46,7 +46,7 @@ import Capsules from '../components/Comments/Capsules';
 import CapsulePostModal from '../components/Comments/CapsulePostModal';
 import { FiMessageCircle, FiSend } from 'react-icons/fi';
 import Comments from './CommentsModal';
-import { Plus } from 'lucide-react';
+import { Mic, Pause, PauseIcon, Play, Plus, StopCircle, Trash2 } from 'lucide-react';
 /* ─── Constants ───────────────────────────────────────────────── */
 
 // Cycled per card — colored ambient glow
@@ -100,6 +100,8 @@ const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg
 const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime', 'video/mov'];
 const MAX_IMAGE_SIZE = 8 * 1024 * 1024;   // 8MB
 const MAX_VIDEO_SIZE = 50 * 1024 * 1024;  // 50MB — match your multer limit
+const MAX_AUDIO_SIZE = 15 * 1024 * 1024;  // 15MB — for voice notes
+const MAX_RECORDING_SECONDS = 120; // hard stop at 2 minutes — adjust as you like
 
 
 function ComposerCard({
@@ -118,6 +120,22 @@ function ComposerCard({
   const currentUser = getStoredUser();
   const dispatch = useDispatch();
   const cardRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
+  const recordingTimerRef = useRef(null);
+  const recordingStartRef = useRef(null);
+  const previewAudioRef = useRef(null);
+
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0); // live counter while recording
+  const [recordedBlob, setRecordedBlob] = useState(null);
+  const [recordedPreviewUrl, setRecordedPreviewUrl] = useState(null);
+  const [recordedDuration, setRecordedDuration] = useState(0); // final measured duration
+  console.log('recordedDuration:', recordedDuration);
+  const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
+
+  const isRecordingSupported =
+    typeof window !== 'undefined' && !!navigator.mediaDevices && typeof window.MediaRecorder !== 'undefined';
 
   const content = useSelector((state) => state.post.content);
   const isPosting = useSelector((state) => state.post.isPosting);
@@ -125,9 +143,117 @@ function ComposerCard({
 
   const isVideoFile = composerFile?.type?.startsWith('video/');
 
+  const getSupportedAudioMimeType = () => {
+    const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg'];
+    return candidates.find((type) => window.MediaRecorder?.isTypeSupported?.(type)) || '';
+  };
+
+  const stopRecording = () => {
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
+    setIsRecording(false);
+  };
+
+  const startRecording = async () => {
+    if (composerFile || isVideoFile) {
+      dispatch(setError('Remove the attached image/video before recording a voice note'));
+      return;
+    }
+    dispatch(setError(''));
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = getSupportedAudioMimeType();
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      audioChunksRef.current = [];
+
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+
+      recorder.onstop = () => {
+        stream.getTracks().forEach((track) => track.stop()); // release the mic
+        const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+        const elapsedSeconds = Math.max(1, Math.round((Date.now() - recordingStartRef.current) / 1000));
+
+        if (blob.size > MAX_AUDIO_SIZE) {
+          dispatch(setError('Voice note is too large (max 15MB) — try recording something shorter'));
+          return;
+        }
+
+        setRecordedBlob(blob);
+        setRecordedPreviewUrl(URL.createObjectURL(blob));
+        setRecordedDuration(elapsedSeconds);
+        console.log('Recorded voice note duration (seconds):', elapsedSeconds);
+      };
+
+      mediaRecorderRef.current = recorder;
+      recordingStartRef.current = Date.now();
+      recorder.start();
+      setIsRecording(true);
+      setRecordingSeconds(0);
+
+      recordingTimerRef.current = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - recordingStartRef.current) / 1000);
+        setRecordingSeconds(elapsed);
+        if (elapsed >= MAX_RECORDING_SECONDS) stopRecording();
+      }, 250);
+    } catch (err) {
+      dispatch(
+        setError(err?.name === 'NotAllowedError' ? 'Microphone permission denied' : 'Could not access microphone')
+      );
+    }
+  };
+
+  const removeAudio = () => {
+    setRecordedBlob(null);
+    setRecordedPreviewUrl(null);
+    setRecordedDuration(0);
+    setRecordingSeconds(0);
+    setIsPreviewPlaying(false);
+  };
+
+  const togglePreviewPlayback = () => {
+    const el = previewAudioRef.current;
+    if (!el) return;
+    if (el.paused) el.play();
+    else el.pause();
+  };
+
+  const formatDuration = (seconds) => {
+    const total = Math.max(0, Math.floor(seconds || 0));
+    return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+  };
+
+  useEffect(() => {
+    return () => {
+      if (recordedPreviewUrl) URL.revokeObjectURL(recordedPreviewUrl);
+    };
+  }, [recordedPreviewUrl]);
+
+  useEffect(() => {
+    return () => {
+      if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.stop();
+      }
+    };
+  }, []);
+
   const handleMediaSelect = (e) => {
     const file = e.target?.files?.[0] || null;
     if (!file) return;
+
+    if (recordedBlob) {
+      dispatch(setError('Remove your voice note before attaching an image or video'));
+      e.target.value = '';
+      return;
+    }
 
     const isImage = ALLOWED_IMAGE_TYPES.includes(file.type);
     const isVideo = ALLOWED_VIDEO_TYPES.includes(file.type);
@@ -172,9 +298,10 @@ function ComposerCard({
       imageInputRef.current?.files?.[0] ||
       videoInputRef.current?.files?.[0] ||
       null;
+    const hasAudio = Boolean(recordedBlob);
 
-    if (!trimmedContent && !fileToSend) {
-      return dispatch(setError('Write something or attach an image/video'));
+    if (!trimmedContent && !fileToSend && !hasAudio) {
+      return dispatch(setError('Write something or attach an image, video, or voice note'));
     }
     if (content.length > 2000) return dispatch(setError('Exceeds 2000 chars'));
 
@@ -185,7 +312,11 @@ function ComposerCard({
       const formData = new FormData();
       if (trimmedContent) formData.append('content', trimmedContent);
 
-      if (fileToSend) {
+      if (hasAudio) {
+        const ext = (recordedBlob.type.split('/')[1] || 'webm').split(';')[0];
+        formData.append('media', recordedBlob, `voice-note.${ext}`);
+        formData.append('voiceNoteDuration', String(recordedDuration));
+      } else if (fileToSend) {
         formData.append('media', fileToSend, fileToSend.name || 'upload');
       }
 
@@ -201,6 +332,7 @@ function ComposerCard({
       dispatch(setImagePreview(null));
       if (imageInputRef.current) imageInputRef.current.value = '';
       if (videoInputRef.current) videoInputRef.current.value = '';
+      removeAudio();
 
       if (onPostCreated) onPostCreated(res.data.post);
       if (onClose) onClose();
@@ -270,7 +402,7 @@ function ComposerCard({
                   title="Change media"
                   aria-label="Change media"
                 >
-                  ⟲
+                  <RefreshCw size={12} />
                 </button>
                 <button
                   type="button"
@@ -279,7 +411,7 @@ function ComposerCard({
                   title="Remove media"
                   aria-label="Remove media"
                 >
-                  ✕
+                  <Trash2 size={12} />
                 </button>
               </>
             )}
@@ -336,6 +468,57 @@ function ComposerCard({
                 alt="Preview"
                 className="relative block h-auto max-h-[50vh] w-auto max-w-full rounded-[1.75rem] object-contain"
               />
+            )}
+          </div>
+        ) : isRecordingSupported ? (
+          <div className="flex items-center gap-2">
+            {!isRecording && !recordedBlob && (
+              <button
+                type="button"
+                onClick={startRecording}
+                disabled={isPosting}
+                className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-[#0D1117] text-[#8891A0] transition-colors hover:border-white/20 hover:text-[#E7EAEF] disabled:cursor-not-allowed disabled:opacity-50"
+                aria-label="Record voice note"
+              >
+                <Mic size={14} />
+              </button>
+            )}
+
+            {isRecording && (
+              <button
+                type="button"
+                onClick={stopRecording}
+                className="flex h-9 items-center gap-2 rounded-full border border-red-500/30 bg-red-500/10 px-3 text-[13px] font-medium text-red-300"
+              >
+                <span className="h-2 w-2 animate-pulse rounded-full bg-red-400" />
+                {formatDuration(recordingSeconds)}
+                <StopCircle size={11} />
+              </button>
+            )}
+
+            {recordedBlob && !isRecording && (
+              <div className="flex h-9 items-center gap-2 rounded-full border border-white/10 bg-[#0D1117] px-3">
+                <button
+                  type="button"
+                  onClick={togglePreviewPlayback}
+                  className="text-[#E7EAEF]"
+                  aria-label={isPreviewPlaying ? 'Pause preview' : 'Play preview'}
+                >
+                  {isPreviewPlaying ? <Pause size={12} /> : <Play size={12} />}
+                </button>
+                <span className="text-[12px] text-[#8891A0] tabular-nums">{formatDuration(recordedDuration)}</span>
+                <button type="button" onClick={removeAudio} className="text-[#8891A0] hover:text-red-300" aria-label="Remove voice note">
+                  <Trash2 size={11} />
+                </button>
+                <audio
+                  ref={previewAudioRef}
+                  src={recordedPreviewUrl}
+                  onPlay={() => setIsPreviewPlaying(true)}
+                  onPause={() => setIsPreviewPlaying(false)}
+                  onEnded={() => setIsPreviewPlaying(false)}
+                  className="hidden"
+                />
+              </div>
             )}
           </div>
         ) : null}
@@ -452,235 +635,6 @@ function ComposerModal({
   );
 }
 
-export function PostComposer({
-  onPostCreated,
-  composerFile,
-  setComposerFile,
-  composerPreview,
-  setComposerPreview,
-}) {
-  const imageInputRef = useRef(null);
-  const videoInputRef = useRef(null);
-  const imageInputId = useRef(`post-image-input-${Math.random().toString(36).slice(2)}`);
-  const videoInputId = useRef(`post-video-input-${Math.random().toString(36).slice(2)}`);
-  const apiUrl = import.meta.env.VITE_API_URL || '';
-  const currentUser = getStoredUser();
-  const dispatch = useDispatch();
-
-  const content = useSelector((state) => state.post.content);
-  const focused = useSelector((state) => state.post.focused);
-  const isPosting = useSelector((state) => state.post.isPosting);
-  const error = useSelector((state) => state.post.error);
-
-  const isVideoFile = composerFile?.type?.startsWith('video/');
-
-  const handleMediaSelect = (e) => {
-    const file = e.target?.files?.[0] || null;
-    if (!file) return;
-
-    const isImage = ALLOWED_IMAGE_TYPES.includes(file.type);
-    const isVideo = ALLOWED_VIDEO_TYPES.includes(file.type);
-
-    if (!isImage && !isVideo) {
-      dispatch(setError(`Unsupported type: ${file.type || 'unknown'}`));
-      e.target.value = '';
-      return;
-    }
-
-    const maxSize = isVideo ? MAX_VIDEO_SIZE : MAX_IMAGE_SIZE;
-    if (file.size > maxSize) {
-      dispatch(setError(isVideo ? 'Video must be < 50MB' : 'Image must be < 8MB'));
-      e.target.value = '';
-      return;
-    }
-
-    if (composerPreview) URL.revokeObjectURL(composerPreview);
-
-    const objectUrl = URL.createObjectURL(file);
-    setComposerFile(file);
-    setComposerPreview(objectUrl);
-    dispatch(setImagePreview(objectUrl));
-    dispatch(setError(''));
-
-    e.target.value = ''; // allow re-selecting the same file later
-  };
-
-  const removeMedia = () => {
-    setComposerFile(null);
-    if (composerPreview) URL.revokeObjectURL(composerPreview);
-    setComposerPreview(null);
-    dispatch(setImagePreview(null));
-    if (imageInputRef.current) imageInputRef.current.value = '';
-    if (videoInputRef.current) videoInputRef.current.value = '';
-  };
-
-  // place above the component or in a utils file
-  const extractHashtags = (text) => {
-    // requires # at start of string or after whitespace, avoids matching mid-word "foo#bar"
-    const matches = text.match(/(?:^|\s)#([a-zA-Z0-9_]+)/g) || [];
-    const tags = matches.map((m) => m.trim().slice(1).toLowerCase());
-    return [...new Set(tags)]; // dedupe
-  };
-
-  const handlePost = async () => {
-    const trimmedContent = content.trim();
-    const fileToSend =
-      composerFile ||
-      imageInputRef.current?.files?.[0] ||
-      videoInputRef.current?.files?.[0] ||
-      null;
-
-    if (!trimmedContent && !fileToSend) {
-      return dispatch(setError('Write something or attach an image/video'));
-    }
-    if (content.length > 2000) return dispatch(setError('Exceeds 2000 chars'));
-
-    dispatch(setIsPosting(true));
-    dispatch(setError(''));
-
-    try {
-      const formData = new FormData();
-      if (trimmedContent) formData.append('content', trimmedContent);
-
-      const hashtags = extractHashtags(trimmedContent);
-      if (hashtags.length) {
-        formData.append('hashtags', JSON.stringify(hashtags)); // see note below
-      }
-
-      if (fileToSend) {
-        formData.append('media', fileToSend, fileToSend.name || 'upload');
-      }
-      console.log('Posting with hashtags:', hashtags, formData);
-      const res = await axios.post(`${apiUrl}/api/community/posts`, formData, {
-        withCredentials: true,
-        headers: { ...getAuthHeaders() },
-      });
-
-      dispatch(setContent(''));
-      dispatch(setFocused(false));
-      if (composerPreview) URL.revokeObjectURL(composerPreview);
-      setComposerFile(null);
-      setComposerPreview(null);
-      dispatch(setImagePreview(null));
-      if (imageInputRef.current) imageInputRef.current.value = '';
-      if (videoInputRef.current) videoInputRef.current.value = '';
-
-      if (onPostCreated) onPostCreated(res.data.post);
-    } catch (err) {
-      dispatch(setError(err?.response?.data?.message || 'Post failed'));
-    } finally {
-      dispatch(setIsPosting(false));
-    }
-  };
-
-  const canPost = (content.trim().length > 0 || !!composerFile) && !isPosting;
-
-  return (
-    <div
-      className={`bg-[#2B2B2B] rounded-[20px] px-[20px] pt-[20px] pb-[16px] mb-[8px] transition-colors duration-200 ease-in-out ${focused ? 'border border-[#aaaaaa]' : 'border border-[#2B2B2B]'
-        }`}
-    >
-      <div className="flex gap-[14px]">
-        {currentUser?.username ? (
-          <AvatarInitial name={currentUser.username} size={44} />
-        ) : (
-          <div className="w-[44px] h-[44px] rounded-full bg-[#1a2535] flex-shrink-0" />
-        )}
-
-        <div className="flex-1">
-          <textarea
-            value={content}
-            onChange={(e) => dispatch(setContent(e.target.value))}
-            onFocus={() => dispatch(setFocused(true))}
-            onBlur={() => dispatch(setFocused(false))}
-            placeholder="Share what you're building, learning, or breaking... 🚀"
-            maxLength={2000}
-            rows={focused || content ? 4 : 2}
-            className="w-full bg-transparent border-none outline-none resize-none text-[#e8f0fe] text-[15px] font-['Plus_Jakarta_Sans'] leading-[1.6] caret-[#00e5ff] transition-[height] duration-200 ease-in-out"
-          />
-
-          {composerPreview && (
-            <div className="relative inline-block mb-3">
-              {isVideoFile ? (
-                <video
-                  src={composerPreview}
-                  controls
-                  className="max-w-full max-h-[240px] rounded-xl border border-[#1a2535] block"
-                />
-              ) : (
-                <img
-                  src={composerPreview}
-                  alt="Preview"
-                  className="max-w-full max-h-[240px] rounded-xl border border-[#1a2535] block"
-                />
-              )}
-              <button
-                type="button"
-                onClick={removeMedia}
-                className="absolute top-2 right-2 w-7 h-7 rounded-full bg-red-500 text-white flex items-center justify-center"
-              >
-                <FaTimes />
-              </button>
-            </div>
-          )}
-
-          {error && <p className="text-[#f87171] text-xs mb-2">{error}</p>}
-
-          <div className="flex items-center justify-between pt-3 border-t border-[#1a2535]">
-            <div className="flex items-center gap-2">
-              <input
-                ref={imageInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleMediaSelect}
-                className="hidden"
-                id={imageInputId.current}
-              />
-              <label
-                htmlFor={imageInputId.current}
-                className="flex items-center gap-[6px] px-[14px] py-[7px] bg-[#404040] rounded-[10px] cursor-pointer text-[#aaaaaa] text-[13px] font-semibold font-['Plus_Jakarta_Sans'] transition-all duration-150 hover:text-white"
-              >
-                <FaImage className="text-[13px]" /> Image
-              </label>
-
-              <input
-                ref={videoInputRef}
-                type="file"
-                accept="video/*"
-                onChange={handleMediaSelect}
-                className="hidden"
-                id={videoInputId.current}
-              />
-              <label
-                htmlFor={videoInputId.current}
-                className="flex items-center gap-[6px] px-[14px] py-[7px] bg-[#404040] rounded-[10px] cursor-pointer text-[#aaaaaa] text-[13px] font-semibold font-['Plus_Jakarta_Sans'] transition-all duration-150 hover:text-white"
-              >
-                <FaVideo className="text-[13px]" /> Video
-              </label>
-
-              <span className="text-[11px] text-[#aaaaaa] font-['DM_Mono']">
-                {content.length}/2000
-              </span>
-            </div>
-
-            <button
-              type="button"
-              onClick={handlePost}
-              disabled={!canPost}
-              className={`flex items-center gap-[7px] px-[20px] py-[8px] border-none rounded-[10px] font-['Syne'] font-extrabold text-[13px] tracking-[0.3px] transition-all duration-200 ease-in-out ${canPost
-                ? 'bg-gradient-to-br from-[#00b4cc] to-[#00e5ff] text-black cursor-pointer shadow-[0_4px_16px_#00e5ff33]'
-                : 'bg-[#404040] text-[#aaaaaa] cursor-not-allowed'
-                }`}
-            >
-              {isPosting ? 'Posting' : <><FaPaperPlane style={{ fontSize: 12 }} /> Post</>}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function FilmPostCard({ post, cardRef, textGradient, isOwn, isActive, onLike, onDelete }) {
   const navigate = useNavigate();
   const dispatch = useDispatch();
@@ -688,6 +642,28 @@ function FilmPostCard({ post, cardRef, textGradient, isOwn, isActive, onLike, on
   const heartIconRef = useRef(null);
   const videoRef = useRef(null);
   const mediaContainerRef = useRef(null);
+  const audioRef = useRef(null);
+  const [isAudioPlaying, setIsAudioPlaying] = useState(false);
+  const [audioCurrentTime, setAudioCurrentTime] = useState(0);
+  // const audioUrl = post.voiceNote || '';
+  // const hasAudio = Boolean(audioUrl);
+  const audioProgress = post.voiceNoteDuration
+    ? Math.min(100, (audioCurrentTime / post.voiceNoteDuration) * 100)
+    : 0;
+
+  function toggleAudioPlay() {
+    const el = audioRef.current;
+    if (!el) return;
+    if (el.paused) el.play();
+    else el.pause();
+  }
+
+  function formatDuration(seconds) {
+    const total = Math.max(0, Math.floor(seconds || 0));
+    const m = Math.floor(total / 60);
+    const s = total % 60;
+    return `${m}:${String(s).padStart(2, '0')}`;
+  }
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(true); // must start muted for autoplay to be allowed by browsers
@@ -708,10 +684,12 @@ function FilmPostCard({ post, cardRef, textGradient, isOwn, isActive, onLike, on
 
   const imageUrl = post.image?.startsWith('/') ? `${apiUrl}${post.image}` : getDisplayImageUrl(post.image);
   const videoUrl = post.video?.startsWith('/') ? `${apiUrl}${post.video}` : post.video;
+  const audioUrl = post.voiceNote?.startsWith('/') ? `${apiUrl}${post.voiceNote}` : post.voiceNote;
 
   const hasImage = !!post.image;
   const hasVideo = !!post.video;
-  const hasMedia = hasImage || hasVideo;
+  const hasAudio = !!post.voiceNote;
+  const hasMedia = hasImage || hasVideo || hasAudio;
 
   // Autoplay when the video scrolls into view, pause when it leaves
   useEffect(() => {
@@ -875,6 +853,49 @@ function FilmPostCard({ post, cardRef, textGradient, isOwn, isActive, onLike, on
                 >
                   {isMuted ? <FaVolumeMute size={13} /> : <FaVolumeUp size={13} />}
                 </button>
+              </>
+            ) : hasAudio ? (
+              <>
+                {imageUrl ? (
+                  <img src={imageUrl} alt="" className="absolute inset-0 h-full w-full object-cover blur-md scale-110 opacity-70" loading="lazy" />
+                ) : (
+                  <div className="absolute inset-0 bg-gradient-to-br from-[#2a2f3a] to-[#12161d]" />
+                )}
+                <div className="absolute inset-0 bg-black/35" />
+
+                <div className="relative z-10 flex h-full w-full flex-col items-center justify-center gap-5 px-8">
+                  <button
+                    type="button"
+                    onClick={toggleAudioPlay}
+                    className="h-16 w-16 rounded-full bg-black/40 flex items-center justify-center text-white hover:bg-black/55 transition-colors"
+                    style={{ boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.4)' }}
+                    aria-label={isAudioPlaying ? 'Pause voice note' : 'Play voice note'}
+                  >
+                    {isAudioPlaying ? <PauseIcon size={18} /> : <FaPlay size={18} style={{ marginLeft: 3 }} />}
+                  </button>
+
+                  <div className="flex w-full max-w-[220px] items-center gap-2">
+                    <span className="text-white text-[12px] tabular-nums [text-shadow:0_2px_8px_rgba(0,0,0,0.25)]">
+                      {formatDuration(audioCurrentTime)}
+                    </span>
+                    <div className="relative h-1 flex-1 rounded-full bg-white/25 overflow-hidden">
+                      <div className="absolute inset-y-0 left-0 rounded-full bg-white" style={{ width: `${audioProgress}%` }} />
+                    </div>
+                    <span className="text-white text-[12px] tabular-nums [text-shadow:0_2px_8px_rgba(0,0,0,0.25)]">
+                      {formatDuration(post.voiceNoteDuration)}
+                    </span>
+                  </div>
+
+                  <audio
+                    ref={audioRef}
+                    src={audioUrl}
+                    onPlay={() => setIsAudioPlaying(true)}
+                    onPause={() => setIsAudioPlaying(false)}
+                    onEnded={() => setIsAudioPlaying(false)}
+                    onTimeUpdate={(e) => setAudioCurrentTime(e.currentTarget.currentTime)}
+                    className="hidden"
+                  />
+                </div>
               </>
             ) : (
               <img src={imageUrl} alt="" className="absolute inset-0 h-full w-full object-cover" loading="lazy" />
