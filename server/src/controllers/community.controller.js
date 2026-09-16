@@ -43,17 +43,23 @@ async function createPost(req, res) {
       content: content.trim(),
       hashtags,
       image: '',
-      video: ''
+      video: '',
+      // driveFileId: '',
+      voiceNote: '',
+      voiceNoteFileId: '',
+      voiceNoteDuration: 0
     };
 
     if (req.file && req.file.buffer) {
       const isImage = req.file.mimetype.startsWith('image/');
       const isVideo = req.file.mimetype.startsWith('video/');
+      const isVoiceNote = req.file.mimetype.startsWith('audio/');
 
-      if (!isImage && !isVideo) {
-        return res.status(400).json({ message: 'Unsupported file type. Only images and videos are allowed.' });
+      if (!isImage && !isVideo && !isVoiceNote) {
+        return res.status(400).json({ message: 'Unsupported file type. Only images, videos, and audio are allowed.' });
       }
 
+      // for image
       if (isImage) {
         let processedImageBuffer;
         try {
@@ -65,7 +71,6 @@ async function createPost(req, res) {
           console.error('[POST IMAGE] Sharp error:', err);
           return res.status(500).json({ message: 'Image transform failed' });
         }
-
         try {
           const timestamp = Date.now();
           const fileName = `post-${req.user.id}-${timestamp}.webp`;
@@ -78,6 +83,28 @@ async function createPost(req, res) {
         }
       }
 
+
+      // for voice notes
+      if (isVoiceNote) {
+        const MAX_AUDIO_BYTES = 15 * 1024 * 1024; // voice notes should be much smaller than video
+        if (req.file.size > MAX_AUDIO_BYTES) {
+          return res.status(400).json({ message: 'Voice note exceeds max allowed size (15MB)' });
+        }
+        try {
+          const timestamp = Date.now();
+          const ext = (req.file.mimetype.split('/')[1] || 'webm').split(';')[0];
+          const fileName = `post-voicenote-${req.user.id}-${timestamp}.${ext}`;
+          const { fileId } = await uploadBufferToDrive(req.file.buffer, fileName, req.file.mimetype);
+          postData.voiceNote = `/api/community/posts/voicenote/${fileId}`;
+          postData.voiceNoteFileId = fileId;
+          postData.voiceNoteDuration = Number(req.body.voiceNoteDuration) || 0;
+        } catch (err) {
+          console.error('[POST VOICE NOTE] Drive upload error:', err?.response?.data || err.message || err);
+          return res.status(500).json({ message: 'Voice note upload failed (drive)' });
+        }
+      }
+
+      // for video
       if (isVideo) {
         const MAX_VIDEO_BYTES = 50 * 1024 * 1024; // adjust to whatever you set in multer limits
         if (req.file.size > MAX_VIDEO_BYTES) {
@@ -116,6 +143,7 @@ async function createPost(req, res) {
         content: post.content,
         hashtags: post.hashtags || [],
         image: post.image,
+        voiceNote: post.voiceNote,
         video: post.video,
         likes: [],
         comments: [],
@@ -146,7 +174,8 @@ async function deletePost(req, res) {
     if (String(post.author) !== req.user.id) {
       return res.status(403).json({ message: 'Unauthorized to delete this post' });
     };
-
+    
+    // Delete the associated drive file if it exists
     if (post.driveFileId) {
       try {
         await deleteFileFromDrive(post.driveFileId);
@@ -204,6 +233,8 @@ async function getFeed(req, res) {
         hashtags: post.hashtags || [],
         image: post.image || "",
         video: post.video || "",
+        voiceNote: post.voiceNote || "",
+        voiceNoteDuration: post.voiceNoteDuration || 0,
         likes: (post.likes || []).map((id) => String(id)),
         comments: (post.comments || [])
           .filter((comment) => comment?.author)
@@ -272,6 +303,15 @@ async function getPostVideo(req, res) {
   } catch (err) {
     console.error('Video proxy error:', err);
     return res.status(404).json({ message: 'Video not found' });
+  }
+}
+
+async function getPostVoiceNote(req, res) {
+  try {
+    await streamFileFromDrive(req.params.fileId, res, req);
+  } catch (err) {
+    console.error('Voice note proxy error:', err);
+    return res.status(404).json({ message: 'Voice note not found' });
   }
 }
 
@@ -759,5 +799,6 @@ module.exports = {
   commentReply,
   likeComment,
   getPostVideo,
+  getPostVoiceNote,
   discoverNearbyPeople
 };
