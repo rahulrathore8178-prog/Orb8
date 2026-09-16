@@ -544,12 +544,9 @@ export default function SocialProfileSection() {
                                 </span>
                                 <span className="text-neutral-600">|</span>
                                 <span>
-                                    <span className="font-bold text-white">{PROFILE.followers}</span> Followers
+                                    <span className="font-bold text-white">{PROFILE.followers}</span> Friends
                                 </span>
                                 <span className="text-neutral-600 hidden sm:inline">|</span>
-                                <span>
-                                    <span className="font-bold text-white">{PROFILE.following}</span> Following
-                                </span>
                             </div>
                         </div>
                     </div>
