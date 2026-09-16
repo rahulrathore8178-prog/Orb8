@@ -18,6 +18,16 @@ const allowedVideoMimeTypes = new Set([
   'video/quicktime' // .mov
 ]);
 
+const allowedAudioMimeTypes = new Set([
+  'audio/webm',
+  'audio/ogg',
+  'audio/mpeg',
+  'audio/mp3',
+  'audio/wav',
+  'audio/x-wav',
+  'audio/mp4', // some browsers report m4a recordings this way
+]);
+
 // --- Profile image upload: unchanged, image-only, 8MB cap ---
 const profileImageMulter = multer({
   storage: multer.memoryStorage(),
@@ -49,18 +59,18 @@ const postMediaMulter = multer({
 
     const isImage = allowedImageMimeTypes.has(file.mimetype);
     const isVideo = allowedVideoMimeTypes.has(file.mimetype);
+    const isAudio = allowedAudioMimeTypes.has(file.mimetype);
 
-    if (!isImage && !isVideo) {
+    if (!isImage && !isVideo && !isAudio) {
       return cb(new Error(`Unsupported file type: ${file.mimetype}`));
     }
     // stash which kind it was so the size check downstream (post-multer) can
-    // enforce the tighter 8MB image limit — multer's own `limits.fileSize` can't
-    // vary per mimetype, so we let video-sized files through here and check below.
-    file._detectedKind = isVideo ? 'video' : 'image';
+    // enforce the tighter per-type limits — multer's own `limits.fileSize` can't
+    // vary per mimetype, so we let the largest-allowed size through here and check below.
+    file._detectedKind = isVideo ? 'video' : isAudio ? 'audio' : 'image';
     return cb(null, true);
   }
 });
-
 function handleUpload(multerInstance, fieldName) {
   return (req, res, next) => {
     const uploadSingle = multerInstance.single(fieldName);

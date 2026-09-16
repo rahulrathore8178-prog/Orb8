@@ -12,7 +12,8 @@ const {
   likeComment,
   getPostImage,
   getPostVideo,
-  discoverNearbyPeople
+  discoverNearbyPeople,
+  getPostVoiceNote
 } = require('../controllers/community.controller');
 const { protect } = require('../middlewares/auth.middleware');
 const { postMediaUpload } = require('../middlewares/upload.middleware');
@@ -27,6 +28,9 @@ router.get('/posts/image/:fileId', getPostImage);
 
 // Proxy video from Drive
 router.get('/posts/video/:fileId', getPostVideo);
+
+// Proxy voice note from Drive
+router.get('/posts/voiceNote/:fileId', getPostVoiceNote);
 
 // Create a new post (with optional image)
 router.post('/posts', protect, postMediaUpload, createPost);
