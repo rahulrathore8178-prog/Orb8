@@ -100,7 +100,7 @@ function handleUpload(multerInstance, fieldName) {
   };
 }
 
-const profileImageUpload = handleUpload(profileImageMulter, 'image');
+const profileImageUpload = handleUpload(profileImageMulter, 'profilePic');
 const postMediaUpload = handleUpload(postMediaMulter, 'media');
 
 module.exports = {

@@ -87,8 +87,8 @@ async function registerUser(req, res) {
       password: hashedPassword,
       notifications: [
         {
-          title: 'Welcome to Codify',
-          detail: 'Your learning dashboard is ready.'
+          title: 'Welcome to Orb8',
+          detail: 'Your feed is ready.'
         }
       ]
     });
@@ -250,7 +250,7 @@ async function uploadProfileImage(req, res) {
     return res.status(200).json({
       message: 'Profile image uploaded successfully.',
       user: buildUserPayload(updatedUser),
-      imageSizeBytes: optimizedBuffer.length
+      imageSizeBytes: optimizedBuffer.length,
     });
   } catch (error) {
     return res.status(500).json({ message: error.message });
@@ -498,6 +498,7 @@ async function resetPassword(req, res) {
 
 
 const completeProfile = async (req, res) => {
+  console.log('[AUTH] completeProfile hit', req.body);
   try {
     const { username, password } = req.body;
 
@@ -508,12 +509,12 @@ const completeProfile = async (req, res) => {
       return res.status(400).json({ message: 'Password must be at least 6 characters' });
     }
 
-    const taken = await User.findOne({ username: username.trim(), _id: { $ne: req.user.id } });
+    const taken = await userModel.findOne({ username: username.trim(), _id: { $ne: req.user.id } });
     if (taken) {
       return res.status(409).json({ message: 'Username already taken' });
     }
 
-    const user = await User.findById(req.user.id);
+    const user = await userModel.findById(req.user.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
     user.username = username.trim();

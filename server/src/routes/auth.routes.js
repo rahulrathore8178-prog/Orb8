@@ -5,6 +5,7 @@ const { isGoogleEnabled } = require('../config/passport');
 const jwt = require('jsonwebtoken');
 const { protect } = require('../middlewares/auth.middleware');
 const { profileImageUpload } = require('../middlewares/upload.middleware');
+const upload = require('../middlewares/upload.middleware');
 
 const router = express.Router();
 
@@ -21,7 +22,7 @@ router.post('/user/rewards/claim', protect, authController.claimReward);
 router.post('/user/forgot-password', authController.forgotPassword);
 router.post('/user/reset-password', authController.resetPassword);
 router.get('/user/logout', authController.logoutUser);
-router.post('/completeProfile', authController.completeProfile);
+router.patch('/complete-profile', protect, upload.profileImageUpload, authController.completeProfile);
 
 router.get('/oauth/status', (req, res) => {
   res.json({ google: isGoogleEnabled });
@@ -58,8 +59,8 @@ if (isGoogleEnabled) {
       if (user.needsProfileCompletion == true) {
         return res.redirect(`${frontendUrl}/signup?token=${token}`);
       }
-      console.log(`[AUTH] Google OAuth success, redirecting to ${frontendUrl}/auth/success?token=${token}`);
-      return res.redirect(`${frontendUrl}/auth/success?token=${token}`);
+      console.log(`[AUTH] Google OAuth success, redirecting to ${frontendUrl}/community?token=${token}`);
+      return res.redirect(`${frontendUrl}/community?token=${token}`);
     }
   );
 } else {

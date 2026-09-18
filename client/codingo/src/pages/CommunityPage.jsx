@@ -645,6 +645,94 @@ function FilmPostCard({ post, cardRef, textGradient, isOwn, isActive, onLike, on
   const audioRef = useRef(null);
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
   const [audioCurrentTime, setAudioCurrentTime] = useState(0);
+  const audioContextRef = useRef(null);
+  const analyserRef = useRef(null);
+  const sourceNodeRef = useRef(null);
+  const canvasRef = useRef(null);
+  const animationFrameRef = useRef(null);
+
+  function ensureAudioGraph() {
+    if (sourceNodeRef.current) return; // already wired up, don't redo it
+
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    const audioContext = new AudioContextClass();
+    const analyser = audioContext.createAnalyser();
+    analyser.fftSize = 256; // small + fast; plenty of resolution for a thin line
+
+    const source = audioContext.createMediaElementSource(audioRef.current);
+    source.connect(analyser);
+    analyser.connect(audioContext.destination); // required, or you'll lose sound entirely
+
+    audioContextRef.current = audioContext;
+    analyserRef.current = analyser;
+    sourceNodeRef.current = source;
+  }
+
+  function toggleAudioPlay() {
+    const el = audioRef.current;
+    if (!el) return;
+    ensureAudioGraph();
+    if (audioContextRef.current?.state === 'suspended') audioContextRef.current.resume();
+    if (el.paused) el.play();
+    else el.pause();
+  }
+
+  useEffect(() => {
+    if (!isAudioPlaying) {
+      if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+      return;
+    }
+
+    const canvas = canvasRef.current;
+    const analyser = analyserRef.current;
+    if (!canvas || !analyser) return;
+
+    const ctx = canvas.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    const width = canvas.clientWidth;
+    const height = canvas.clientHeight;
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+    ctx.scale(dpr, dpr);
+
+    const bufferLength = analyser.fftSize;
+    const dataArray = new Uint8Array(bufferLength);
+
+    function draw() {
+      animationFrameRef.current = requestAnimationFrame(draw);
+      analyser.getByteTimeDomainData(dataArray); // raw waveform samples, not frequency bins
+
+      ctx.clearRect(0, 0, width, height);
+      ctx.beginPath();
+
+      const sliceWidth = width / bufferLength;
+      let x = 0;
+      for (let i = 0; i < bufferLength; i++) {
+        const v = dataArray[i] / 128 - 1; // 0..255 -> -1..1
+        const y = height / 2 + v * (height / 2) * 0.9;
+        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+        x += sliceWidth;
+      }
+
+      ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+      ctx.lineWidth = 1.5;
+      ctx.lineJoin = 'round';
+      ctx.stroke();
+    }
+    draw();
+
+    return () => { if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current); };
+  }, [isAudioPlaying]);
+
+  // release the AudioContext when this post leaves the feed
+  useEffect(() => {
+    return () => {
+      if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+      if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+        audioContextRef.current.close();
+      }
+    };
+  }, []);
   // const audioUrl = post.voiceNote || '';
   // const hasAudio = Boolean(audioUrl);
   const audioProgress = post.voiceNoteDuration
@@ -878,9 +966,19 @@ function FilmPostCard({ post, cardRef, textGradient, isOwn, isActive, onLike, on
                     <span className="text-white text-[12px] tabular-nums [text-shadow:0_2px_8px_rgba(0,0,0,0.25)]">
                       {formatDuration(audioCurrentTime)}
                     </span>
-                    <div className="relative h-1 flex-1 rounded-full bg-white/25 overflow-hidden">
-                      <div className="absolute inset-y-0 left-0 rounded-full bg-white" style={{ width: `${audioProgress}%` }} />
+                    <div className="relative h-8 flex-1 overflow-hidden rounded-full bg-white/10">
+                      <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" style={{ opacity: isAudioPlaying ? 1 : 0.35 }} />
+                      {!isAudioPlaying && (
+                        <div className="absolute inset-x-2 top-1/2 h-px -translate-y-1/2 bg-white/40" />
+                      )}
+                      <div
+                        className="absolute inset-y-0 w-[2px] bg-white shadow-[0_0_4px_rgba(255,255,255,0.8)] transition-[left] duration-100 ease-linear"
+                        style={{ left: `${audioProgress}%` }}
+                      />
                     </div>
+                    {/* <div className="relative h-1 flex-1 rounded-full bg-white/25 overflow-hidden">
+                      <div className="absolute inset-y-0 left-0 rounded-full bg-white" style={{ width: `${audioProgress}%` }} />
+                    </div> */}
                     <span className="text-white text-[12px] tabular-nums [text-shadow:0_2px_8px_rgba(0,0,0,0.25)]">
                       {formatDuration(post.voiceNoteDuration)}
                     </span>
