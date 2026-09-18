@@ -104,8 +104,23 @@ export default function SignupHero() {
     if (isCompletingProfile) return; // already authenticated via Google, no need to check
     axios.get(`${apiUrl}/api/auth/oauth/status`).then(r => {
       if (r.data?.google) setGoogleEnabled(true);
-    }).catch(() => {});
+    }).catch(() => { });
   }, [apiUrl, isCompletingProfile]);
+
+  useEffect(() => {
+    if (!oauthToken) return;
+
+    axios
+      .get(`${apiUrl}/api/auth/user/me`, {
+        headers: { Authorization: `Bearer ${oauthToken}` },
+      })
+      .then((res) => {
+        if (res.data?.user?.email) setEmail(res.data.user.email);
+      })
+      .catch(() => {
+        setErrorMsg("Could not load your Google account details.");
+      });
+  }, [oauthToken]);
 
   const usernameShrink = focusedField === "username" || username.length > 0;
   const emailShrink = focusedField === "email" || email.length > 0;
@@ -141,6 +156,7 @@ export default function SignupHero() {
         const formData = new FormData();
         formData.append("username", username.trim());
         formData.append("password", password);
+        formData.append("email", email.trim().toLowerCase());
         if (profilePic) formData.append("profilePic", profilePic);
 
         // Don't set Content-Type manually — axios handles the multipart
@@ -287,6 +303,10 @@ export default function SignupHero() {
               Username
             </label>
           </div>
+
+          {isCompletingProfile && (
+            <input className="bg-white" type="email" value={email} readOnly disabled />
+          )}
 
           {!isCompletingProfile && (
             <div ref={collectField} className="relative">

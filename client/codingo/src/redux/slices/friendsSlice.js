@@ -1,5 +1,7 @@
-import { createSlice } from "@reduxjs/toolkit";
-import { fetchFriends, fetchFriendRequests, searchUsers } from "../../pages/FriendsPage";
+import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
+import { searchUsers } from "../../pages/FriendsPage";
+import { apiUrl, getAuthHeaders } from "../../utilites/communityHelper";
+import axios from "axios";
 
 const friendsSlice = createSlice({
     name: 'friends',
@@ -90,6 +92,35 @@ const friendsSlice = createSlice({
             state.error = action.payload;
         });
     }
-})
+});
+
+// Fetch friends list
+export const fetchFriends = createAsyncThunk('friends/fetchFriends', async (_, { rejectWithValue }) => {
+    try {
+        const response = await axios.get(`${apiUrl}/api/social/friends`, {
+            withCredentials: true,
+            headers: getAuthHeaders()
+        });
+        setFriends(response.data.friends);
+        return response.data.friends;
+        // console.log('Fetched friends:', response.data.friends);
+    } catch (error) {
+        return rejectWithValue(error.response?.data?.message || 'Failed to load friends');
+    }
+});
+
+// Fetch friend requests
+export const fetchFriendRequests = createAsyncThunk('friends/fetchFriendRequests', async (_, { rejectWithValue }) => {
+    try {
+        const response = await axios.get(`${apiUrl}/api/social/friend-requests`, {
+            withCredentials: true,
+            headers: getAuthHeaders()
+        });
+        setFriendRequests(response.data.requests);
+        return response.data.requests;
+    } catch (err) {
+        return rejectWithValue(err.response?.data?.message || 'Failed to load friend requests');
+    }
+});
 export const { setActiveTab, setFriends, setFriendRequests, setSearchQuery, setSearchResults, setIsLoading, setError, setSuccessMessage, setIsSearching, setConfirmRemoveId } = friendsSlice.actions;
 export default friendsSlice.reducer;

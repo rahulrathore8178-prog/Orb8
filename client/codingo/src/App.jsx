@@ -160,6 +160,26 @@ function App() {
 
 function AppShell() {
   const location = useLocation();
+  const navigate = useNavigate();
+
+  // Runs synchronously during render — must happen here, not in a
+  // useEffect, because ProtectedRoute (a descendant) fires its own
+  // auth-check effect before any effect declared in this component
+  // would (React fires passive effects bottom-up on mount).
+  const urlToken = new URLSearchParams(window.location.search).get('token');
+  if (urlToken) {
+    localStorage.setItem('token', urlToken);
+  }
+
+  // Cosmetic: strip ?token= from the address bar once mounted, via
+  // React Router's own navigate so its internal location state stays
+  // in sync (a raw window.history.replaceState call would desync it).
+  useEffect(() => {
+    if (urlToken) {
+      navigate(location.pathname, { replace: true });
+    }
+  }, []);
+
   const sidebarHiddenRoutes = ['/', '/login', '/Login', '/signup', '/next-step', '/forgot-password', '/reset-password', '/oauth/callback'];
   const showSidebar = !sidebarHiddenRoutes.includes(location.pathname);
 
@@ -185,9 +205,9 @@ function AppShell() {
   return (
     <>
       {/* <LandingHeader /> */}
-      <div className="flex min-h-screen">
+      <div className="flex max-h-screen">
         {showSidebar ? <AppSidebar /> : null}
-        <div className={`flex-1 min-w-0 min-h-screen ${showSidebar ? 'pl-10 lg:pl-0' : ''}`}>
+        <div className={`flex-1 min-w-0 max-h-screen ${showSidebar ? 'pl-10 lg:pl-0' : ''}`}>
           <Routes>
             <Route path="/" element={<LandingPage />} />
             <Route path="/language/:langId" element={<LanguagePageWrapper />} />
@@ -290,7 +310,7 @@ function AppShell() {
               path="/profile"
               element={(
                 <ProtectedRoute>
-                  <ProfilePage />
+                  <SocialProfileSection />
                 </ProtectedRoute>
               )}
             />
