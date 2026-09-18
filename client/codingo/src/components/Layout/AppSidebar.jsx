@@ -35,8 +35,8 @@ const communityNavItems = [
   { key: 'messages', label: 'Messages', icon: FaFacebookMessenger, to: '/messages', match: ['/messages'] },
   { key: 'askIgris', label: 'Ask Igris', icon: FaBrain, to: '/askIgris', match: ['/askIgris'] },
   { key: 'rememberIgris', label: 'Remember Igris', icon: FaBook, to: '/rememberIgris', match: ['/rememberIgris'] },
-  { key: 'friends', label: 'Friends', icon: FaUserFriends, to: '/friends', match: ['/friends'] },
-  { key: 'discover', label: 'Discover', icon: FaSearch, to: '/discover', match: ['/discover'] },
+  { key: 'friends', label: 'Search', icon: FaSearch, to: '/friends', match: ['/friends'] },
+  { key: 'discover', label: 'Discover', icon: FaUserFriends, to: '/discover', match: ['/discover'] },
   { key: 'socialprofile', label: 'Social Profile', icon: FaUser, to: '/socialprofile', match: ['/socialprofile'] },
 ];
 

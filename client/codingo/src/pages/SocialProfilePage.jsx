@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import gsap from "gsap";
 import { ImageCard, TextCard } from "../components/SocialProfile/SocialImageCard";
 import { ArticleCard, QuoteCard } from "../components/SocialProfile/SocialQouteArticleCard";
@@ -8,8 +8,10 @@ import { useParams } from "react-router-dom";
 import axios from "axios";
 import { FaCamera, FaEdit, FaHeart, FaSave, FaTimes } from "react-icons/fa";
 import PostPreview from "../components/SocialProfile/postPreview";
+import { useDispatch, useSelector } from "react-redux";
+import { FaSearch, FaUserCircle /* ...your existing icons */ } from "react-icons/fa";
+import { fetchFriendRequests, fetchFriends } from "../redux/slices/friendsSlice";
 
-const TABS = ["Your Posts"];
 
 // ---------------------------------------------------------------
 // Sample data — swap these out for real API data later.
@@ -106,19 +108,26 @@ function LinkRow({ label, url }) {
             <span className="text-xs sm:text-sm text-neutral-400 truncate">{url}</span>
         </div>
     );
-}
+};
 
 // ---------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------
 
 export default function SocialProfileSection() {
-    const [activeTab, setActiveTab] = useState("Your Posts");
+    const [activeTab, setActiveTab] = useState("Posts");
     const { userId } = useParams();
     const storedUser = getStoredUser();
-    const   isOwnProfile = !userId || userId === storedUser?.id;
+    const isOwnProfile = !userId || userId === storedUser?.id;
     const [currentUser, setCurrentUser] = useState(isOwnProfile ? storedUser : null);
-    console.log('currentUser', currentUser)
+    console.log('currentUser', currentUser);
+    const reduxfriends = useSelector((state) => state.friends);
+    const friends = useSelector(state => state.friends.friends);
+    console.log('friends', friends);
+    // console.log('redux friends', reduxfriends);
+    const friendsCount = currentUser?.friends?.length || 0;
+    const friendRequests = currentUser?.friendRequests?.length || 0;
+    // console.log('requests', currentUser?.friendRequests);
     const [isEditingUsername, setIsEditingUsername] = useState(false);
     const [editedUsername, setEditedUsername] = useState('');
     const [isEditingBio, setIsEditingBio] = useState(false);
@@ -131,8 +140,41 @@ export default function SocialProfileSection() {
     const [postsLoading, setPostsLoading] = useState(true);
     const [showPostPreview, setShowPostPreview] = useState(false);
     const [selectedPostIndex, setSelectedPostIndex] = useState(0);
+    const [friendSearch, setFriendSearch] = useState("");
+    const friendsListRef = useRef(null);
+    const [friendsList, setFriendsList] = useState([]);
+    const [friendsLoading, setFriendsLoading] = useState(false);
+    const dispatch = useDispatch();
+
+
+    // Swap `friendsList`/`friendsLoading` for whatever your actual fetch state is called —
+    // I don't have that code, so these are placeholders for the array + loading flag.
+    const filteredFriends = useMemo(() => {
+        const term = friendSearch.trim().toLowerCase();
+        if (!term) return friendsList;
+        return friendsList.filter((f) => f.username?.toLowerCase().includes(term));
+    }, [friendsList, friendSearch]);
+
+    useEffect(() => {
+        if (activeTab !== 'Friends' || !friendsListRef.current) return;
+        const ctx = gsap.context(() => {
+            gsap.fromTo(
+                friendsListRef.current.children,
+                { opacity: 0, y: 12 },
+                { opacity: 1, y: 0, duration: 0.4, stagger: 0.05, ease: "power3.out" }
+            );
+        }, friendsListRef);
+        return () => ctx.revert();
+    }, [activeTab, friendsList.length]);
+
+    const TABS = [
+        { label: 'Posts', count: userPosts?.length ?? 0 },
+        { label: 'Friends', count: friendsCount },
+        { label: 'Requests', count: friendRequests },
+    ];
 
     const rootRef = useRef(null);
+    const actionsRef = useRef(null);
     const headerRef = useRef(null);
     const avatarRef = useRef(null);
     const infoRef = useRef(null);
@@ -168,9 +210,6 @@ export default function SocialProfileSection() {
         fetchUserPosts();
     }, [userId, storedUser?.id]);
 
-    // const imageUrl = post.image?.startsWith('/')
-    //     ? `${apiUrl}${post.image}`
-    //     : post.image;
 
     const getDisplayImageUrl = (imageUrl) => {
         if (!imageUrl) return '';
@@ -199,7 +238,6 @@ export default function SocialProfileSection() {
                 withCredentials: true,
                 headers: getAuthHeaders()
             });
-            console.log('ownprofile', isOwnProfile)
 
             if (response.data?.user) {
                 const userData = response.data.user;
@@ -211,7 +249,7 @@ export default function SocialProfileSection() {
                     localStorage.setItem('user', JSON.stringify(userData));
                 }
             }
-            console.log('Fetched user profile:', response);
+            console.log('Fetched user profile:', response?.data?.user);
         } catch (err) {
             console.error('Failed to fetch user profile:', err);
             setError('Failed to load profile.');
@@ -237,7 +275,7 @@ export default function SocialProfileSection() {
 
         try {
             const formData = new FormData();
-            formData.append('image', file);
+            formData.append('profilePic', file);
 
             const response = await axios.patch(
                 `${apiUrl}/api/auth/user/profile/image`,
@@ -314,6 +352,16 @@ export default function SocialProfileSection() {
         }
     };
 
+    // Load friends when tab changes to friends
+    useEffect(() => {
+        if (activeTab === 'Friends') {
+            dispatch(fetchFriends());
+            console.log('dispatching fetchFriends', reduxfriends);
+        } else if (activeTab === 'Requests') {
+            dispatch(fetchFriendRequests());
+        }
+    }, [activeTab, dispatch]);
+
     // Page-open animation
     useEffect(() => {
         const ctx = gsap.context(() => {
@@ -329,15 +377,25 @@ export default function SocialProfileSection() {
                     { opacity: 0, y: 16 },
                     { opacity: 1, y: 0, duration: 0.5, stagger: 0.08 },
                     "-=0.45"
-                )
-                .fromTo(
-                    tabsRef.current,
-                    { opacity: 0, y: 12 },
+                );
+
+            if (actionsRef.current) {
+                tl.fromTo(
+                    actionsRef.current,
+                    { opacity: 0, y: 14 },
                     { opacity: 1, y: 0, duration: 0.4 },
                     "-=0.2"
-                )
+                );
+            }
+
+            tl.fromTo(
+                tabsRef.current,
+                { opacity: 0, y: 12 },
+                { opacity: 1, y: 0, duration: 0.4 },
+                "-=0.2"
+            )
                 .fromTo(
-                    contentRef.current.children,
+                    contentRef.current,
                     { opacity: 0, y: 24 },
                     { opacity: 1, y: 0, duration: 0.5, stagger: 0.1 },
                     "-=0.15"
@@ -400,15 +458,7 @@ export default function SocialProfileSection() {
             ref={rootRef}
             className="relative min-h-screen w-full overflow-hidden bg-black text-white"
         >
-            {/* ---------- Background: dark navy silk texture fading to black ---------- */}
-            <div className="pointer-events-none absolute inset-0">
-                <div className="absolute inset-x-0 top-0 h-[280px] sm:h-[420px] bg-gradient-to-b from-[#25406b] via-[#16233d] to-transparent" />
-                <div className="hidden sm:block absolute -left-20 top-[-100px] h-[500px] w-[700px] rounded-full bg-[#2f5590]/40 blur-[110px]" />
-                <div className="hidden sm:block absolute right-[-150px] top-[-60px] h-[450px] w-[600px] rounded-full bg-[#1c3a66]/50 blur-[120px]" />
-                <div className="absolute inset-0 bg-gradient-to-b from-transparent via-black/60 to-black" />
-            </div>
-
-            <div className="relative z-10 mx-auto max-w-6xl px-3 sm:px-6 md:px-10 pb-12 sm:pb-16 md:pb-20 pt-8 sm:pt-12 md:pt-16">
+            <div className="relative max-h-screen overflow-auto z-10 mx-auto max-w-6xl scrollbar-none px-3 sm:px-6 md:px-10 pb-12 sm:pb-16 md:pb-20 pt-8 sm:pt-12 md:pt-16">
                 {/* ---------------- Header ---------------- */}
                 <div ref={headerRef} className="flex flex-col sm:flex-row items-start justify-between gap-6 sm:gap-8">
                     <div className="flex flex-col sm:flex-row items-start gap-4 sm:gap-6 md:gap-8 w-full sm:w-auto">
@@ -493,9 +543,6 @@ export default function SocialProfileSection() {
                                 </>
                             )}
 
-                            {/* <p className="mt-2 text-xl text-neutral-300">{currentUser?.username}</p> */}
-                            {/* <p className="mt-1 text-xs sm:text-sm text-neutral-500">{PROFILE.handle}</p> */}
-
                             {isOwnProfile && isEditingBio ? (
                                 <div>
                                     <textarea
@@ -532,43 +579,51 @@ export default function SocialProfileSection() {
                             ) : (
                                 <div className="flex items-start justify-between">
 
-                                    {(
-                                        <p onClick={() => setIsEditingBio(true)} className="text-gray-300 text-xs sm:text-sm flex-1">{currentUser?.bio || (isOwnProfile ? 'No bio yet. Click edit to add one.' : 'No bio yet.')}</p>
+                                    {isOwnProfile && (
+                                        <p onClick={() => setIsEditingBio(true)} className="text-gray-300 text-xs sm:text-sm flex-1">{currentUser?.bio || (isOwnProfile ? 'No bio yet. Click here to add one.' : 'No bio yet.')}</p>
                                     )}
                                 </div>
                             )}
-
-                            <div className="mt-4 sm:mt-5 flex items-center gap-2 sm:gap-3 text-neutral-400 text-xs sm:text-sm flex-wrap">
-                                <span>
-                                    <span className="font-bold text-white">{userPosts?.length}</span> Posts
-                                </span>
-                                <span className="text-neutral-600">|</span>
-                                <span>
-                                    <span className="font-bold text-white">{PROFILE.followers}</span> Friends
-                                </span>
-                                <span className="text-neutral-600 hidden sm:inline">|</span>
-                            </div>
                         </div>
                     </div>
 
                 </div>
+                {!isOwnProfile && (
+                    <div
+                        ref={actionsRef}
+                        className="mt-6 sm:mt-8 mx-auto flex w-full max-w-xs flex-col items-stretch justify-center gap-2 px-4 sm:max-w-none sm:w-auto sm:flex-row sm:items-center sm:gap-3 sm:px-0"
+                    >
+                        {friends == true ? (
+                            <button className="flex-1 rounded-lg bg-gray-600 px-4 py-2 text-xs font-semibold transition-all hover:bg-gray-700 active:scale-[0.97] sm:min-w-[140px] sm:flex-none sm:py-2.5 sm:text-sm">
+                                Friends
+                            </button>
+                        ) : (
+                            <button className="flex-1 rounded-lg bg-cyan-600 px-4 py-2 text-xs font-semibold transition-all hover:bg-cyan-700 active:scale-[0.97] sm:min-w-[140px] sm:flex-none sm:py-2.5 sm:text-sm">
+                                Add Friend
+                            </button>
+                        )}
+                        <button className="flex-1 rounded-lg bg-cyan-600 px-4 py-2 text-xs font-semibold transition-all hover:bg-cyan-700 active:scale-[0.97] sm:min-w-[140px] sm:flex-none sm:py-2.5 sm:text-sm">
+                            Send Message
+                        </button>
+                    </div>
+                )}
 
                 {/* ---------------- Tabs ---------------- */}
                 <div
                     ref={tabsRef}
-                    className="mt-8 sm:mt-10 flex items-center justify-center gap-6 sm:gap-10 border-b border-white/10 pb-3 sm:pb-4 overflow-x-auto"
+                    className="mt-8 sm:mt-10 flex items-center justify-center gap-6 sm:gap-10 border-b border-white/10 pb-3 sm:pb-4"
                 >
-                    {TABS.map((tab) => {
-                        const active = tab === activeTab;
+                    {TABS.map(({ label, count }) => {
+                        const active = label === activeTab;
                         return (
                             <button
-                                key={tab}
-                                data-tab={tab}
-                                onClick={() => handleTabClick(tab)}
-                                className={`relative pb-2 text-sm sm:text-lg font-medium transition-colors whitespace-nowrap ${active ? "font-bold text-white" : "text-neutral-500 hover:text-neutral-300"
+                                key={label}
+                                data-tab={label}
+                                onClick={() => handleTabClick(label)}
+                                className={`relative pb-2 text-sm sm:text-lg font-medium transition-colors whitespace-nowrap ${active ? 'font-bold text-white' : 'text-neutral-500 hover:text-neutral-300'
                                     }`}
                             >
-                                [ {tab} ]
+                                [ {label} {count} ]
                                 {active && (
                                     <span className="underline-bar absolute -bottom-[17px] left-0 h-[2px] w-full bg-white" />
                                 )}
@@ -576,60 +631,109 @@ export default function SocialProfileSection() {
                         );
                     })}
                 </div>
+                {activeTab === 'Friends' ? (
+                    <div>
+                        <div className="relative mb-4 sm:mb-6 mt-5 max-w-md mx-auto sm:mx-0">
+                            <FaSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500" size={13} />
+                            <input
+                                type="text"
+                                value={friendSearch}
+                                onChange={(e) => setFriendSearch(e.target.value)}
+                                placeholder="Search friends..."
+                                className="w-full bg-transparent border border-white/10 rounded-full pl-9 pr-4 py-2 sm:py-2.5 text-sm text-white placeholder-gray-500 outline-none transition-colors focus:border-white/25"
+                            />
+                        </div>
 
-                {/* ---------------- Content grid ---------------- */}
-                <div ref={contentRef} className="mt-8 sm:mt-10">
-                    {postsLoading ? (
+                        {friendsLoading ? (
+                            <div className="text-center text-gray-400 text-sm sm:text-base">Loading friends...</div>
+                        ) : friends.length === 0 ? (
+                            <div className="text-center text-gray-400 text-sm sm:text-base">No friends yet.</div>
+                        ) : (
+                            <div ref={friendsListRef} className="flex flex-col divide-y divide-white/5 min-w-2xl mx-auto">
+                                {friends.map((friend) => (
+                                    <div
+                                        key={friend.id}
+                                        className="flex items-center gap-3 rounded-xl px-3 py-2.5 sm:px-4 sm:py-3 cursor-pointer transition-transform duration-200 hover:scale-[1.02] active:scale-[0.97]"
+                                    >
+                                        {friend.profilePic ? (
+                                            <img
+                                                src={friend.profilePic}
+                                                alt={friend.username || 'Friend'}
+                                                className="h-11 w-11 sm:h-12 sm:w-12 flex-shrink-0 rounded-full border border-white/10 object-cover"
+                                            />
+                                        ) : (
+                                            <div className="flex h-11 w-11 sm:h-12 sm:w-12 flex-shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5">
+                                                <FaUserCircle className="text-gray-500" size={22} />
+                                            </div>
+                                        )}
+                                        <div className="min-w-0 flex-1">
+                                            <div className="truncate cursor-pointer text-sm font-semibold text-white sm:text-base">{friend.username}</div>
+                                            {/* {friend.league && (
+                                                <div className="truncate text-xs text-gray-400 sm:text-sm">
+                                                    {friend.league} · Lv {friend.level ?? 1}
+                                                </div>
+                                            )} */}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                ) : (
+                    postsLoading ? (
                         <div className="text-center text-gray-400 text-sm sm:text-base">Loading posts...</div>
                     ) : userPosts.length === 0 ? (
                         <div className="text-center text-gray-400 text-sm sm:text-base">No posts yet.</div>
                     ) : (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 md:gap-6 max-w-6xl mx-auto">
-                            {userPosts.map((post, postIndex) => {
-                                const imageUrl = getDisplayImageUrl(post.image);
-                                const videoUrl = post.video?.startsWith('/') ? `${apiUrl}${post.video}` : post.video;
+                        <div ref={contentRef} className="mt-8 sm:mt-10">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 md:gap-6 max-w-6xl mx-auto">
+                                {userPosts.map((post, postIndex) => {
+                                    const imageUrl = getDisplayImageUrl(post.image);
+                                    const videoUrl = post.video?.startsWith('/') ? `${apiUrl}${post.video}` : post.video;
 
-                                return (
-                                    <div
-                                        key={post.id}
-                                        onClick={() => showPostModal(postIndex)}
-                                        role="button"
-                                        tabIndex={0}
-                                        onKeyDown={(event) => {
-                                            if (event.key === 'Enter' || event.key === ' ') showPostModal(postIndex);
-                                        }}
-                                        className="rounded-lg sm:rounded-2xl border border-white/10 bg-[#2B2B2B] p-3 sm:p-4 transition-transform duration-300 hover:scale-105 hover:shadow-lg"
-                                    >
-                                        <div className="mb-3 text-xs sm:text-sm text-gray-400">
-                                            {new Date(post.createdAt).toLocaleDateString()}
+                                    return (
+                                        <div
+                                            key={post.id}
+                                            onClick={() => showPostModal(postIndex)}
+                                            role="button"
+                                            tabIndex={0}
+                                            onKeyDown={(event) => {
+                                                if (event.key === 'Enter' || event.key === ' ') showPostModal(postIndex);
+                                            }}
+                                            className="rounded-lg sm:rounded-2xl border border-white/10 bg-[#2B2B2B] p-3 sm:p-4 transition-transform duration-300 hover:scale-105 hover:shadow-lg"
+                                        >
+                                            <div className="mb-3 text-xs sm:text-sm text-gray-400">
+                                                {new Date(post.createdAt).toLocaleDateString()}
+                                            </div>
+                                            <div className="text-white text-sm sm:text-base mb-3 line-clamp-3">{post.content}</div>
+                                            {post.image && (
+                                                <div className="overflow-hidden rounded-lg sm:rounded-xl aspect-square mb-3">
+                                                    <img src={imageUrl} alt="" className="w-full h-full object-cover" />
+                                                </div>
+                                            )}
+                                            {post.video && (
+                                                <div className="overflow-hidden rounded-lg sm:rounded-xl aspect-square mb-3">
+                                                    <video src={videoUrl} muted playsInline preload="metadata" className="w-full h-full object-cover" />
+                                                </div>
+                                            )}
+                                            <div className="flex items-center justify-between text-xs sm:text-sm text-gray-400 flex-wrap gap-2">
+                                                <div className="flex items-center gap-1">
+                                                    <span className="flex items-center justify-center"><FaHeart size={12} className="sm:w-4 sm:h-4" /></span>
+                                                    <span>{post.likesCount} likes</span>
+                                                </div>
+                                                <span>{post.commentsCount} comments</span>
+                                            </div>
                                         </div>
-                                        <div className="text-white text-sm sm:text-base mb-3 line-clamp-3">{post.content}</div>
-                                        {post.image && (
-                                            <div className="overflow-hidden rounded-lg sm:rounded-xl aspect-square mb-3">
-                                                <img src={imageUrl} alt="" className="w-full h-full object-cover" />
-                                            </div>
-                                        )}
-                                        {post.video && (
-                                            <div className="overflow-hidden rounded-lg sm:rounded-xl aspect-square mb-3">
-                                                <video src={videoUrl} muted playsInline preload="metadata" className="w-full h-full object-cover" />
-                                            </div>
-                                        )}
-                                        <div className="flex items-center justify-between text-xs sm:text-sm text-gray-400 flex-wrap gap-2">
-                                            <div className="flex items-center gap-1">
-                                                <span className="flex items-center justify-center"><FaHeart size={12} className="sm:w-4 sm:h-4" /></span>
-                                                <span>{post.likesCount} likes</span>
-                                            </div>
-                                            <span>{post.commentsCount} comments</span>
-                                        </div>
-                                    </div>
-                                );
-                            })}
+                                    );
+                                })}
+                            </div>
                         </div>
-                        )}
-                        {showPostPreview && (
-                            <PostPreview posts={userPosts} initialIndex={selectedPostIndex} isOpen={showPostPreview} onClose={() => setShowPostPreview(false)} />
-                        )}
-                </div>
+                    )
+                )}
+                {/* ---------------- Content grid ---------------- */}
+                {showPostPreview && (
+                    <PostPreview posts={userPosts} initialIndex={selectedPostIndex} isOpen={showPostPreview} onClose={() => setShowPostPreview(false)} />
+                )}
             </div>
         </div>
     );
