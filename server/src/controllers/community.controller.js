@@ -704,6 +704,10 @@ async function getUserPosts(req, res) {
       },
       content: post.content,
       image: post.image,
+      video: post.video || '',
+      voiceNote: post.voiceNote || '',
+      voiceNoteDuration: post.voiceNoteDuration || 0,
+      hashtags: post.hashtags || [],
       likes: post.likes.map(id => String(id)),
       comments: post.comments.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).map(comment => ({
         id: String(comment._id),
