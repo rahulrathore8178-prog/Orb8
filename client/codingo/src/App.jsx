@@ -78,7 +78,7 @@ function ProtectedRoute({ children }) {
   const label = "ORBIT";
   const subtext = "Loading your feed...";
   const wrapperClass = fullScreen
-    ? "fixed inset-0 z-50 bg-slate-950"
+    ? "fixed inset-0 z-50 bg-black"
     : "w-full";
 
   if (isChecking) {
