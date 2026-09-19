@@ -46,7 +46,7 @@ import Capsules from '../components/Comments/Capsules';
 import CapsulePostModal from '../components/Comments/CapsulePostModal';
 import { FiMessageCircle, FiSend } from 'react-icons/fi';
 import Comments from './CommentsModal';
-import { Mic, Pause, PauseIcon, Play, Plus, StopCircle, Trash2 } from 'lucide-react';
+import { Mic, Pause, PauseIcon, Play, Plus, RefreshCw, StopCircle, Trash2 } from 'lucide-react';
 /* ─── Constants ───────────────────────────────────────────────── */
 
 // Cycled per card — colored ambient glow
@@ -650,6 +650,41 @@ function FilmPostCard({ post, cardRef, textGradient, isOwn, isActive, onLike, on
   const sourceNodeRef = useRef(null);
   const canvasRef = useRef(null);
   const animationFrameRef = useRef(null);
+  const imageUrl = post.image?.startsWith('/') ? `${apiUrl}${post.image}` : getDisplayImageUrl(post.image);
+  const videoUrl = post.video?.startsWith('/') ? `${apiUrl}${post.video}` : post.video;
+  const audioUrl = post.voiceNote?.startsWith('/') ? `${apiUrl}${post.voiceNote}` : post.voiceNote;
+
+  const hasImage = !!post.image;
+  const hasVideo = !!post.video;
+  const hasAudio = !!post.voiceNote;
+  const hasMedia = hasImage || hasVideo || hasAudio;
+
+  const MIN_RATIO = 9 / 16;
+  const MAX_RATIO = 16 / 9;
+  const DEFAULT_RATIO = 4 / 5;
+  const CARD_MAX_HEIGHT = 'min(74dvh, 52rem)';
+  const FRAME_CHROME = 168; // px used by header + caption + like row
+  const ratioCache = new Map();
+  const toRatio = (w, h) =>
+    w > 0 && h > 0 ? Math.min(MAX_RATIO, Math.max(MIN_RATIO, w / h)) : DEFAULT_RATIO;
+
+  const mediaKey = videoUrl || imageUrl || '';
+  const [mediaRatio, setMediaRatio] = useState(() => ratioCache.get(mediaKey) ?? DEFAULT_RATIO);
+  const reportMediaSize = (w, h) => {
+    const next = toRatio(w, h);
+    if (mediaKey) ratioCache.set(mediaKey, next);
+    setMediaRatio((prev) => (Math.abs(prev - next) < 0.005 ? prev : next));
+  };
+  const contentLength = (post.content || '').length;
+  const textTypography =
+    contentLength <= 100 ? 'text-[22px] leading-[1.45] text-center'
+      : contentLength <= 280 ? 'text-[17px] leading-[1.6] text-center'
+        : 'text-[15px] leading-[1.65] text-left';
+  const isFramed = hasVideo || (!hasAudio && !!imageUrl);
+  const cardWidth = isFramed
+    ? `min(100%, 26.25rem, max(15rem, calc((${CARD_MAX_HEIGHT} - ${FRAME_CHROME}px) * ${mediaRatio} + 2rem)))`
+    : undefined;
+  const frameShadow = 'inset 0 0 0 1px rgba(255,255,255,0.4), 0 8px 24px rgba(0,0,0,0.25)';
 
   function ensureAudioGraph() {
     if (sourceNodeRef.current) return; // already wired up, don't redo it
@@ -739,12 +774,12 @@ function FilmPostCard({ post, cardRef, textGradient, isOwn, isActive, onLike, on
     ? Math.min(100, (audioCurrentTime / post.voiceNoteDuration) * 100)
     : 0;
 
-  function toggleAudioPlay() {
-    const el = audioRef.current;
-    if (!el) return;
-    if (el.paused) el.play();
-    else el.pause();
-  }
+  // function toggleAudioPlay() {
+  //   const el = audioRef.current;
+  //   if (!el) return;
+  //   if (el.paused) el.play();
+  //   else el.pause();
+  // }
 
   function formatDuration(seconds) {
     const total = Math.max(0, Math.floor(seconds || 0));
@@ -769,15 +804,6 @@ function FilmPostCard({ post, cardRef, textGradient, isOwn, isActive, onLike, on
     }
     return imageUrl;
   }
-
-  const imageUrl = post.image?.startsWith('/') ? `${apiUrl}${post.image}` : getDisplayImageUrl(post.image);
-  const videoUrl = post.video?.startsWith('/') ? `${apiUrl}${post.video}` : post.video;
-  const audioUrl = post.voiceNote?.startsWith('/') ? `${apiUrl}${post.voiceNote}` : post.voiceNote;
-
-  const hasImage = !!post.image;
-  const hasVideo = !!post.video;
-  const hasAudio = !!post.voiceNote;
-  const hasMedia = hasImage || hasVideo || hasAudio;
 
   // Autoplay when the video scrolls into view, pause when it leaves
   useEffect(() => {
@@ -843,18 +869,18 @@ function FilmPostCard({ post, cardRef, textGradient, isOwn, isActive, onLike, on
   return (
     <div
       ref={cardRef}
-      className={`relative h-165 w-full max-w-[420px] z-10 mx-auto rounded-[2.5rem] overflow-hidden transform-gpu transition-[transform,opacity] duration-200 ease-out ${isActive ? 'scale-100 opacity-100' : 'scale-[0.82] opacity-[0.35]'}`}
-      style={{ transformOrigin: 'center center' }}
+      className={`relative isolate mx-auto w-full max-w-[420px] transform-gpu transition-[transform,opacity] duration-200 ease-out motion-reduce:transition-none ${isActive ? 'scale-100 opacity-100' : 'scale-[0.82] opacity-[0.35]'}`}
+      style={{ transformOrigin: 'center center', width: cardWidth }}
     >
       <div
-        className="pointer-events-none absolute -inset-6 -z-10 blur-2xl"
+        className="pointer-events-none absolute -inset-3 -z-10 rounded-[3rem] opacity-80 blur-2xl sm:-inset-5"
         style={{ background: glow }}
         aria-hidden="true"
       />
-
       <div
-        className="relative h-full w-full rounded-[2.5rem] overflow-hidden flex flex-col"
+        className="relative flex w-full flex-col overflow-hidden rounded-[2rem] sm:rounded-[2.5rem]"
         style={{
+          maxHeight: CARD_MAX_HEIGHT,
           background: hasMedia
             ? 'linear-gradient(160deg, rgba(255,255,255,0.22) 0%, rgba(255,255,255,0.05) 100%)'
             : textGradient,
@@ -865,30 +891,30 @@ function FilmPostCard({ post, cardRef, textGradient, isOwn, isActive, onLike, on
             '0 25px 70px rgba(0,0,0,0.45), inset 0 1px 1px rgba(255,255,255,0.5), inset 0 0 0 1px rgba(255,255,255,0.12)',
         }}
       >
-        <div className="relative z-10 flex items-center gap-3 px-5 pt-5 pb-4 flex-shrink-0">
-          <div className="cursor-pointer flex-shrink-0">
+        <div
+          className="pointer-events-none absolute inset-0 rounded-[inherit]"
+          style={{ background: 'radial-gradient(120% 55% at 0% 0%, rgba(255,255,255,0.16), rgba(255,255,255,0) 60%)' }}
+          aria-hidden="true"
+        />
+
+        {/* Header */}
+        <div className="relative z-10 flex shrink-0 items-center gap-3 px-4 pb-3 pt-4 sm:px-5 sm:pb-4 sm:pt-5">
+          <div className="shrink-0 cursor-pointer">
             {post.author.profilePic ? (
-              <img
-                src={post.author.profilePic}
-                alt=""
-                className="h-9 w-9 rounded-full object-cover ring-2 ring-white/50"
-              />
+              <img src={post.author.profilePic} alt="" className="h-9 w-9 rounded-full object-cover ring-2 ring-white/50" />
             ) : (
               <AvatarInitial name={post.author.username} size={36} />
             )}
           </div>
-          <div className="flex-1 cursor-pointer min-w-0">
+          <div className="min-w-0 flex-1 cursor-pointer">
             <span
               onClick={() => post.author.id && navigate(`/socialprofile/${post.author.id}`)}
-              className="text-[14px] font-semibold text-white block truncate [text-shadow:0_1px_3px_rgba(0,0,0,0.35)]"
+              className="block truncate text-[14px] font-semibold text-white [text-shadow:0_1px_3px_rgba(0,0,0,0.35)]"
               style={{ fontFamily: "'Syne'" }}
             >
               {post.author.username}
             </span>
-            <span
-              className={`text-[11px] text-white/70 ${hasMedia ? 'ml-auto' : ''}`}
-              style={{ fontFamily: "'DM Mono'" }}
-            >
+            <span className="text-[11px] text-white/70" style={{ fontFamily: "'DM Mono'" }}>
               {formatTimeAgo(post.createdAt)} ago
             </span>
           </div>
@@ -896,7 +922,7 @@ function FilmPostCard({ post, cardRef, textGradient, isOwn, isActive, onLike, on
             <button
               type="button"
               onClick={() => onDelete && onDelete(post.id)}
-              className="text-white/70 hover:text-[#f87171] transition-colors flex-shrink-0 rounded-full p-1.5"
+              className="shrink-0 rounded-full p-1.5 text-white/70 transition-colors hover:text-[#f87171]"
               aria-label="Delete"
             >
               <FaTrash size={15} />
@@ -904,105 +930,113 @@ function FilmPostCard({ post, cardRef, textGradient, isOwn, isActive, onLike, on
           )}
         </div>
 
-        {/* Media — image, video, or text-only */}
-        {hasMedia ? (
+        {/* Body */}
+        {hasVideo ? (
           <div
             ref={mediaContainerRef}
-            className="relative mx-4 flex-1 min-h-0 rounded-[1.75rem] overflow-hidden"
-            style={{ boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.4), 0 8px 24px rgba(0,0,0,0.25)' }}
+            className="relative z-10 min-h-0 w-[calc(100%-1.5rem)] shrink self-center overflow-hidden rounded-[1.5rem] bg-black/40 sm:w-[calc(100%-2rem)] sm:rounded-[1.75rem]"
+            style={{ aspectRatio: mediaRatio, boxShadow: frameShadow }}
           >
-            {hasVideo ? (
-              <>
-                <video
-                  ref={videoRef}
-                  src={videoUrl}
-                  className="absolute inset-0 h-full w-full object-cover cursor-pointer"
-                  playsInline
-                  loop
-                  muted={isMuted}
-                  onClick={toggleVideoPlay}
-                  onPlay={() => setIsPlaying(true)}
-                  onPause={() => setIsPlaying(false)}
-                />
-
-                {!isPlaying && (
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <div className="h-14 w-14 rounded-full bg-black/40 flex items-center justify-center">
-                      <FaPlay size={18} color="white" style={{ marginLeft: 3 }} />
-                    </div>
-                  </div>
-                )}
-
-                <button
-                  type="button"
-                  onClick={toggleMute}
-                  className="absolute bottom-3 right-3 h-8 w-8 rounded-full bg-black/45 flex items-center justify-center text-white hover:bg-black/65 transition-colors"
-                  aria-label={isMuted ? 'Unmute' : 'Mute'}
-                >
-                  {isMuted ? <FaVolumeMute size={13} /> : <FaVolumeUp size={13} />}
-                </button>
-              </>
-            ) : hasAudio ? (
-              <>
-                {imageUrl ? (
-                  <img src={imageUrl} alt="" className="absolute inset-0 h-full w-full object-cover blur-md scale-110 opacity-70" loading="lazy" />
-                ) : (
-                  <div className="absolute inset-0 bg-gradient-to-br from-[#2a2f3a] to-[#12161d]" />
-                )}
-                <div className="absolute inset-0 bg-black/35" />
-
-                <div className="relative z-10 flex h-full w-full flex-col items-center justify-center gap-5 px-8">
-                  <button
-                    type="button"
-                    onClick={toggleAudioPlay}
-                    className="h-16 w-16 rounded-full bg-black/40 flex items-center justify-center text-white hover:bg-black/55 transition-colors"
-                    style={{ boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.4)' }}
-                    aria-label={isAudioPlaying ? 'Pause voice note' : 'Play voice note'}
-                  >
-                    {isAudioPlaying ? <PauseIcon size={18} /> : <FaPlay size={18} style={{ marginLeft: 3 }} />}
-                  </button>
-
-                  <div className="flex w-full max-w-[220px] items-center gap-2">
-                    <span className="text-white text-[12px] tabular-nums [text-shadow:0_2px_8px_rgba(0,0,0,0.25)]">
-                      {formatDuration(audioCurrentTime)}
-                    </span>
-                    <div className="relative h-8 flex-1 overflow-hidden rounded-full bg-white/10">
-                      <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" style={{ opacity: isAudioPlaying ? 1 : 0.35 }} />
-                      {!isAudioPlaying && (
-                        <div className="absolute inset-x-2 top-1/2 h-px -translate-y-1/2 bg-white/40" />
-                      )}
-                      <div
-                        className="absolute inset-y-0 w-[2px] bg-white shadow-[0_0_4px_rgba(255,255,255,0.8)] transition-[left] duration-100 ease-linear"
-                        style={{ left: `${audioProgress}%` }}
-                      />
-                    </div>
-                    {/* <div className="relative h-1 flex-1 rounded-full bg-white/25 overflow-hidden">
-                      <div className="absolute inset-y-0 left-0 rounded-full bg-white" style={{ width: `${audioProgress}%` }} />
-                    </div> */}
-                    <span className="text-white text-[12px] tabular-nums [text-shadow:0_2px_8px_rgba(0,0,0,0.25)]">
-                      {formatDuration(post.voiceNoteDuration)}
-                    </span>
-                  </div>
-
-                  <audio
-                    ref={audioRef}
-                    src={audioUrl}
-                    onPlay={() => setIsAudioPlaying(true)}
-                    onPause={() => setIsAudioPlaying(false)}
-                    onEnded={() => setIsAudioPlaying(false)}
-                    onTimeUpdate={(e) => setAudioCurrentTime(e.currentTarget.currentTime)}
-                    className="hidden"
+            <video
+              ref={videoRef}
+              src={videoUrl}
+              className="absolute inset-0 h-full w-full cursor-pointer object-contain"
+              playsInline
+              loop
+              preload="metadata"
+              muted={isMuted}
+              onLoadedMetadata={(e) => reportMediaSize(e.currentTarget.videoWidth, e.currentTarget.videoHeight)}
+              onClick={toggleVideoPlay}
+              onPlay={() => setIsPlaying(true)}
+              onPause={() => setIsPlaying(false)}
+            />
+            {!isPlaying && (
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-black/40">
+                  <FaPlay size={18} color="white" style={{ marginLeft: 3 }} />
+                </div>
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={toggleMute}
+              className="absolute bottom-3 right-3 flex h-8 w-8 items-center justify-center rounded-full bg-black/45 text-white transition-colors hover:bg-black/65"
+              aria-label={isMuted ? 'Unmute' : 'Mute'}
+            >
+              {isMuted ? <FaVolumeMute size={13} /> : <FaVolumeUp size={13} />}
+            </button>
+          </div>
+        ) : hasAudio ? (
+          <div
+            className="relative z-10 mx-3 shrink-0 overflow-hidden rounded-[1.5rem] sm:mx-4 sm:rounded-[1.75rem]"
+            style={{ boxShadow: frameShadow }}
+          >
+            {imageUrl ? (
+              <img src={imageUrl} alt="" className="absolute inset-0 h-full w-full scale-110 object-cover opacity-70 blur-md" loading="lazy" />
+            ) : (
+              <div className="absolute inset-0 bg-gradient-to-br from-[#2a2f3a] to-[#12161d]" />
+            )}
+            <div className="absolute inset-0 bg-black/35" />
+            <div className="relative z-10 flex items-center gap-3 px-3 py-3.5 sm:gap-4 sm:px-4 sm:py-4">
+              <button
+                type="button"
+                onClick={toggleAudioPlay}
+                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-black/40 text-white transition-colors hover:bg-black/55"
+                style={{ boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.4)' }}
+                aria-label={isAudioPlaying ? 'Pause voice note' : 'Play voice note'}
+              >
+                {isAudioPlaying ? <PauseIcon size={18} /> : <FaPlay size={18} style={{ marginLeft: 3 }} />}
+              </button>
+              <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+                <div className="relative h-9 w-full overflow-hidden rounded-full bg-white/10">
+                  <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" style={{ opacity: isAudioPlaying ? 1 : 0.35 }} />
+                  {!isAudioPlaying && <div className="absolute inset-x-2 top-1/2 h-px -translate-y-1/2 bg-white/40" />}
+                  <div
+                    className="absolute inset-y-0 w-[2px] bg-white shadow-[0_0_4px_rgba(255,255,255,0.8)] transition-[left] duration-100 ease-linear"
+                    style={{ left: `${audioProgress}%` }}
                   />
                 </div>
-              </>
-            ) : (
-              <img src={imageUrl} alt="" className="absolute inset-0 h-full w-full object-cover" loading="lazy" />
-            )}
+                <div className="flex items-center justify-between px-1 text-[11px] tabular-nums text-white [text-shadow:0_2px_8px_rgba(0,0,0,0.25)]">
+                  <span>{formatDuration(audioCurrentTime)}</span>
+                  <span>{formatDuration(post.voiceNoteDuration)}</span>
+                </div>
+              </div>
+            </div>
+            <audio
+              ref={audioRef}
+              src={audioUrl}
+              onPlay={() => setIsAudioPlaying(true)}
+              onPause={() => setIsAudioPlaying(false)}
+              onEnded={() => setIsAudioPlaying(false)}
+              onTimeUpdate={(e) => setAudioCurrentTime(e.currentTarget.currentTime)}
+              className="hidden"
+            />
+          </div>
+        ) : imageUrl ? (
+          <div
+            ref={mediaContainerRef}
+            className="relative z-10 min-h-0 w-[calc(100%-1.5rem)] shrink self-center overflow-hidden rounded-[1.5rem] bg-black/30 sm:w-[calc(100%-2rem)] sm:rounded-[1.75rem]"
+            style={{ aspectRatio: mediaRatio, boxShadow: frameShadow }}
+          >
+            <img
+              src={imageUrl}
+              alt=""
+              aria-hidden="true"
+              className="absolute inset-0 h-full w-full scale-125 object-cover opacity-60 blur-xl"
+              loading="lazy"
+            />
+            <img
+              src={imageUrl}
+              alt={post.content ? post.content.slice(0, 100) : 'Post image'}
+              className="absolute inset-0 h-full w-full object-contain"
+              loading="lazy"
+              onLoad={(e) => reportMediaSize(e.currentTarget.naturalWidth, e.currentTarget.naturalHeight)}
+            />
           </div>
         ) : (
-          <div className="relative flex-1 min-h-0 flex items-center justify-center px-8">
+          <div className="relative z-10 min-h-0 overflow-y-auto overscroll-y-contain px-6 py-3 sm:px-8 [scrollbar-color:rgba(255,255,255,0.35)_transparent] [scrollbar-width:thin]">
             <p
-              className="text-white text-[18px] leading-[1.7] text-center line-clamp-6 [text-shadow:0_2px_8px_rgba(0,0,0,0.25)]"
+              className={`whitespace-pre-wrap text-white [overflow-wrap:anywhere] [text-shadow:0_2px_8px_rgba(0,0,0,0.25)] ${textTypography}`}
               style={{ fontFamily: "'Plus Jakarta Sans'" }}
             >
               {post.content}
@@ -1010,26 +1044,26 @@ function FilmPostCard({ post, cardRef, textGradient, isOwn, isActive, onLike, on
           </div>
         )}
 
-        <div className="relative z-10 flex-shrink-0 px-5 pt-3 pb-5">
+        {/* Footer */}
+        <div className={`relative z-10 shrink-0 px-4 pb-4 sm:px-5 sm:pb-5 ${hasMedia ? 'pt-3' : 'pt-2'}`}>
           {hasMedia && post.content && (
-            <div className="flex items-start gap-2 mb-3">
+            <div className="mb-3 flex items-start gap-2">
               <p
-                className="text-[13px] leading-[1.5] text-white/95 [text-shadow:0_1px_2px_rgba(0,0,0,0.2)] line-clamp-2 flex-1"
+                className="line-clamp-2 min-w-0 flex-1 text-[13px] leading-[1.5] text-white/95 [overflow-wrap:anywhere] [text-shadow:0_1px_2px_rgba(0,0,0,0.2)]"
                 style={{ fontFamily: "'Plus Jakarta Sans'" }}
               >
                 {post.content}
               </p>
-              <button type="button" className="text-white/80 hover:text-white transition-colors flex-shrink-0 mt-0.5" aria-label="Share">
+              <button type="button" className="mt-0.5 shrink-0 text-white/80 transition-colors hover:text-white" aria-label="Share">
                 <FiSend size={14} />
               </button>
             </div>
           )}
-
           <div className="flex items-center gap-5">
             <button
               type="button"
               onClick={handleLikeClick}
-              className="flex items-center gap-1.5 text-white/90 hover:text-white transition-colors focus-visible:outline-none rounded-full"
+              className="flex items-center gap-1.5 rounded-full text-white/90 transition-colors hover:text-white focus-visible:outline-none"
               aria-label="Like"
             >
               {!liked ? (
@@ -1039,49 +1073,27 @@ function FilmPostCard({ post, cardRef, textGradient, isOwn, isActive, onLike, on
               ) : (
                 <span ref={heartIconRef} className="inline-flex" style={{ transform: heartAnim ? 'scale(1.25)' : 'scale(1)', transition: 'transform 0.18s ease' }}>
                   <FaHeart size={17} fill={liked ? '#fb7185' : 'currentColor'} color={liked ? '#fb7185' : 'currentColor'} />
-                </span>)}
+                </span>
+              )}
               <span className="text-[12.5px]" style={{ fontFamily: "'DM Mono'" }}>{likeCount.toLocaleString()}</span>
             </button>
-
             <button
               type="button"
               onClick={() => dispatch(setShowModal({ postId: post.id, value: true }))}
-              className="flex items-center gap-1.5 text-white/90 hover:text-white transition-colors focus-visible:outline-none rounded-full"
+              className="flex items-center gap-1.5 rounded-full text-white/90 transition-colors hover:text-white focus-visible:outline-none"
               aria-label="Comment"
             >
               <FiMessageCircle size={17} />
               <span className="text-[12.5px]" style={{ fontFamily: "'DM Mono'" }}>{post.commentsCount}</span>
             </button>
-
-            {showModal && (
-              <Comments post={post} />
-            )}
-
+            {showModal && <Comments post={post} />}
             {!hasMedia && (
-              <button type="button" className="text-white/80 hover:text-white transition-colors ml-auto" aria-label="Share">
+              <button type="button" className="ml-auto text-white/80 transition-colors hover:text-white" aria-label="Share">
                 <FiSend size={16} />
               </button>
             )}
           </div>
         </div>
-      </div>
-    </div>
-  );
-}
-
-function TrendingTopics() {
-  const topics = ['#JavaScript', '#ReactJS', '#WebDev', '#CSS', '#NodeJS', '#TypeScript', '#OpenSource', '#API'];
-  return (
-    <div className="bg-[#2B2B2B] border border-[#1a2535] rounded-[16px] px-[18px] py-[16px] mb-[12px]">
-      <div className="flex items-center gap-[8px] mb-[14px] font-['Syne'] font-bold text-[13px] text-[#e8f0fe] tracking-[0.3px]">
-        <FaFire className="text-[#fb923c] text-[14px]" /> Trending
-      </div>
-      <div className="flex flex-wrap gap-[6px]">
-        {topics.map((t) => (
-          <span key={t} className="px-[10px] py-[4px] bg-[#404040] rounded-[8px] text-[12px] text-[#aaaaaa] font-['DM_Mono'] hover:text-white">
-            {t}
-          </span>
-        ))}
       </div>
     </div>
   );
@@ -1150,13 +1162,42 @@ export default function CommunityPage() {
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    const visibilityRatios = new Map();
-    const SCROLL_THRESHOLD = 200; // px of movement needed before we react
+    const SCROLL_THRESHOLD = 200;
+    let raf = 0;
+
+    const pickActive = () => {
+      raf = 0;
+      const count = posts.length;
+      if (!count) return;
+      const maxScroll = el.scrollHeight - el.clientHeight;
+      let next = 0;
+      if (maxScroll > 4 && el.scrollTop <= 2) {
+        next = 0;
+      } else if (maxScroll > 4 && el.scrollTop >= maxScroll - 2) {
+        next = count - 1;
+      } else {
+        const box = el.getBoundingClientRect();
+        const mid = box.top + box.height / 2;
+        let best = Infinity;
+        for (let i = 0; i < count; i++) {
+          const card = cardRefs.current[i];
+          if (!card) continue;
+          const r = card.getBoundingClientRect();
+          const dist = Math.abs(r.top + r.height / 2 - mid);
+          if (dist < best) { best = dist; next = i; }
+        }
+      }
+      if (next !== activeIndexRef.current) {
+        activeIndexRef.current = next;
+        setActiveIndex(next);
+      }
+    };
+
+    const schedule = () => { if (!raf) raf = requestAnimationFrame(pickActive); };
 
     const onScroll = () => {
       const currentPos = el.scrollTop;
       const delta = currentPos - lastScrollPos.current;
-
       if (currentPos <= 0) {
         setShowCapsules(true);
         lastScrollPos.current = 0;
@@ -1164,36 +1205,16 @@ export default function CommunityPage() {
         setShowCapsules(delta < 0);
         lastScrollPos.current = currentPos;
       }
+      schedule();
     };
 
-    const observer = new IntersectionObserver((entries) => {
-      entries.forEach((entry) => {
-        const index = cardRefs.current.indexOf(entry.target);
-        if (index !== -1) {
-          visibilityRatios.set(index, entry.isIntersecting ? entry.intersectionRatio : 0);
-        }
-      });
-
-      let nextIndex = activeIndexRef.current;
-      let highestRatio = visibilityRatios.get(nextIndex) || 0;
-      visibilityRatios.forEach((ratio, index) => {
-        if (ratio > highestRatio) {
-          highestRatio = ratio;
-          nextIndex = index;
-        }
-      });
-      setActiveIndex((previous) => {
-        if (previous === nextIndex) return previous;
-        activeIndexRef.current = nextIndex;
-        return nextIndex;
-      });
-    }, { root: el, threshold: [0, 0.6, 0.8, 1] });
-
-    cardRefs.current.forEach((card) => card && observer.observe(card));
     el.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', schedule);
+    schedule();
     return () => {
-      observer.disconnect();
+      if (raf) cancelAnimationFrame(raf);
       el.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', schedule);
     };
   }, [posts]);
 
@@ -1374,7 +1395,7 @@ export default function CommunityPage() {
             </div>
           </div>
 
-          <TrendingTopics />
+          {/* <TrendingTopics /> */}
 
           <div className="bg-black/40 backdrop-blur-md border border-white/[0.08] rounded-[16px] px-[18px] py-[16px]">
             <div className="font-['Syne'] font-bold text-[13px] text-[#e8f0fe] mb-[12px] tracking-[0.3px] flex items-center">
