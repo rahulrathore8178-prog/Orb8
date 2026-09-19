@@ -120,12 +120,13 @@ export default function SocialProfileSection() {
     const storedUser = getStoredUser();
     const isOwnProfile = !userId || userId === storedUser?.id;
     const [currentUser, setCurrentUser] = useState(isOwnProfile ? storedUser : null);
-    console.log('currentUser', currentUser);
+    console.log('currentUser', currentUser?.friends);
     const reduxfriends = useSelector((state) => state.friends);
     const friends = useSelector(state => state.friends.friends);
     console.log('friends', friends);
     // console.log('redux friends', reduxfriends);
     const friendsCount = currentUser?.friends?.length || 0;
+    console.log('friendsCount', friendsCount);
     const friendRequests = currentUser?.friendRequests?.length || 0;
     // console.log('requests', currentUser?.friendRequests);
     const [isEditingUsername, setIsEditingUsername] = useState(false);
@@ -137,6 +138,7 @@ export default function SocialProfileSection() {
     const [error, setError] = useState(null);
     const fileInputRef = useRef(null);
     const [userPosts, setUserPosts] = useState([]);
+    console.log('userPosts', userPosts);
     const [postsLoading, setPostsLoading] = useState(true);
     const [showPostPreview, setShowPostPreview] = useState(false);
     const [selectedPostIndex, setSelectedPostIndex] = useState(0);
@@ -653,6 +655,10 @@ export default function SocialProfileSection() {
                                 {friends.map((friend) => (
                                     <div
                                         key={friend.id}
+                                        onClick={() => {
+                                            // Navigate to friend's profile page
+                                            window.location.href = `/socialprofile/${friend._id}`;
+                                        }}
                                         className="flex items-center gap-3 rounded-xl px-3 py-2.5 sm:px-4 sm:py-3 cursor-pointer transition-transform duration-200 hover:scale-[1.02] active:scale-[0.97]"
                                     >
                                         {friend.profilePic ? (
@@ -690,7 +696,6 @@ export default function SocialProfileSection() {
                                 {userPosts.map((post, postIndex) => {
                                     const imageUrl = getDisplayImageUrl(post.image);
                                     const videoUrl = post.video?.startsWith('/') ? `${apiUrl}${post.video}` : post.video;
-
                                     return (
                                         <div
                                             key={post.id}
