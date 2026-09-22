@@ -1,10 +1,11 @@
+import json
 import os
 import uuid
-
+from fastapi.concurrency import run_in_threadpool
 import uvicorn
 from chunking import extract_text, chunk_text
 import chromadb
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, Form, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from groq import Groq
 from pydantic import BaseModel
@@ -13,10 +14,9 @@ import sys
 import asyncio
 import base64
 import io
-from fastapi import HTTPException
-from fastapi import UploadFile
 from rag_search import run_platform_search, collection
 from dotenv import load_dotenv
+from visual_model import describe_image
 
 load_dotenv()  # Load environment variables from .env file
 
@@ -62,28 +62,6 @@ async def upload_file(file: UploadFile = File(...)):
     }
 
 
-# --- Bonus: a query endpoint, so React can also ask questions ------------
-# @app.get("/ask")
-# async def ask(question: str, source: str | None = None):
-#     where_filter = {"source": source} if source else None
-#     results = collection.query(query_texts=[question], n_results=5, where=where_filter)
-    
-# #     response = await ollama.chat(
-# #     model='llama3.2:3b',
-# #     messages=[
-# #         {
-# #             'role': 'user',
-# #             'content': 'why is the sky blue?'
-# #         },
-# #     ],
-# # )
-
-# print(response['message']['content'])
-
-#     return [
-#         {"text": doc, "source": meta["source"]}
-#         for doc, meta in zip(results["documents"][0], results["metadatas"][0])
-#     ]
 
 """
 Agentic RAG version of /askPrompt.
@@ -166,7 +144,7 @@ async def ask_prompt(req: AskRequest):
 
     for _ in range(MAX_TOOL_HOPS):
         response = groq_client.chat.completions.create(
-            model='qwen/qwen3.6-27b',
+            model='qwen/qwen3.8-27b',
             messages=messages,
             tools=[SEARCH_TOOL],
             tool_choice="auto",
@@ -220,6 +198,92 @@ async def ask_prompt(req: AskRequest):
         status_code=500,
         detail="The assistant could not produce an answer after multiple tool calls.",
     )
+            
+
+@app.post("/describe_image")
+async def describe_image_endpoint(
+    file: UploadFile = File(...),
+    # Form(...) reads this from the multipart body (a plain `str = ""` would
+    # be treated as a query parameter).
+#     systemprompt: str = Form('''You are the content-understanding engine of a social media recommendation system.
+# Input: a post's media (image, or frames sampled from a video) plus optional caption,
+# hashtags, and speech transcript. Analyze what the post is actually about and return
+# ONE JSON object. Output only JSON: no markdown, no code fences, no commentary.
+
+# Schema:
+# {
+#   "summary": string,        // 1-2 factual sentences: what is shown, said, and taught
+#   "language": string,       // ISO 639-1 code of the main spoken/written language, "none" if no language
+#   "format": string,         // one of: tutorial, demo, meme, skit, news, opinion, vlog, showcase, promo, other
+#   "topics": { string: number },   // topic -> relevance
+#   "attributes": { "educational": number, "entertainment": number, "motivational": number, "emotional": number },
+#   "keywords": [string],     // 5-10 specific lowercase terms (tools, concepts, entities), no generic words
+#   "safety": { "nsfw": number, "violence": number, "hate": number }
+# }
+
+# Rules:
+# - All scores are 0.00-1.00 with two decimals. They are independent and need not sum to 1.
+#   0 = absent, 0.5 = present but secondary, 1 = dominant theme.
+# - topics: use ONLY these labels: technology, ai, programming, gaming, comedy, education,
+#   science, business, finance, fitness, health, food, travel, music, sports, fashion, art,
+#   news, politics, lifestyle, other. Include only topics scoring >= 0.30, at most 5.
+# - Judge from visible content, on-screen text, transcript, and caption. If media and caption
+#   disagree, trust the media. Never invent details or identify people from their faces.
+# - If unsure, lower the score rather than guess.
+# - The output must parse with json.loads.'''),
+):
+    mime_type = file.content_type or "image/jpeg"
+    if not mime_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Uploaded file must be an image.")
+ 
+    image_bytes = await file.read()
+    print(f"Received image of size {len(image_bytes)} bytes with MIME type {mime_type}")
+    prompt = '''You are the content-understanding engine of a social media recommendation system.
+Input: a post's media (image, or frames sampled from a video) plus optional caption,
+hashtags, and speech transcript. Analyze what the post is actually about and return
+ONE JSON object. Output only JSON: no markdown, no code fences, no commentary.
+
+Schema:
+{
+  "summary": string,        // 1-2 factual sentences: what is shown, said, and taught
+  "language": string,       // ISO 639-1 code of the main spoken/written language, "none" if no language
+  "format": string,         // one of: tutorial, demo, meme, skit, news, opinion, vlog, showcase, promo, other
+  "topics": { string: number },   // topic -> relevance
+  "attributes": { "educational": number, "entertainment": number, "motivational": number, "emotional": number },
+  "keywords": [string],     // 5-10 specific lowercase terms (tools, concepts, entities), no generic words
+  "safety": { "nsfw": number, "violence": number, "hate": number }
+}
+
+Rules:
+- All scores are 0.00-1.00 with two decimals. They are independent and need not sum to 1.
+  0 = absent, 0.5 = present but secondary, 1 = dominant theme.
+- topics: use ONLY these labels: technology, ai, programming, gaming, comedy, education,
+  science, business, finance, fitness, health, food, travel, music, sports, fashion, art,
+  news, politics, lifestyle, other. Include only topics scoring >= 0.30, at most 5.
+- Judge from visible content, on-screen text, transcript, and caption. If media and caption
+  disagree, trust the media. Never invent details or identify people from their faces.
+- If unsure, lower the score rather than guess.
+- The output must parse with json.loads.'''
+ 
+    try:
+        raw = await run_in_threadpool(describe_image, image_bytes, prompt, mime_type)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Image model request failed: {e}")
+
+    # Defensive cleanup: some models wrap output in ```json fences even when told not to
+    cleaned = raw.strip()
+    if cleaned.startswith("```"):
+        cleaned = cleaned.strip("`")
+        if cleaned.lower().startswith("json"):
+            cleaned = cleaned[4:]
+        cleaned = cleaned.strip()
+
+    try:
+        parsed = json.loads(cleaned)
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=502, detail=f"Model returned invalid JSON: {e}")
+
+    return {"answer": parsed}
 
 
 if __name__ == "__main__":
@@ -246,3 +310,36 @@ if __name__ == "__main__":
             
         except json.JSONDecodeError:
             print(json.dumps({"error": "Invalid JSON input"}), flush=True)
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+# --- Bonus: a query endpoint, so React can also ask questions ------------
+# @app.get("/ask")
+# async def ask(question: str, source: str | None = None):
+#     where_filter = {"source": source} if source else None
+#     results = collection.query(query_texts=[question], n_results=5, where=where_filter)
+    
+# #     response = await ollama.chat(
+# #     model='llama3.2:3b',
+# #     messages=[
+# #         {
+# #             'role': 'user',
+# #             'content': 'why is the sky blue?'
+# #         },
+# #     ],
+# # )
+
+# print(response['message']['content'])
+
+#     return [
+#         {"text": doc, "source": meta["source"]}
+#         for doc, meta in zip(results["documents"][0], results["metadatas"][0])
+#     ]

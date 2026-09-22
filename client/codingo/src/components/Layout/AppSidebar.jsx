@@ -82,7 +82,7 @@ const ICON_IDLE =
 
 // Active: crisp, a touch bigger, with a faint cyan glow.
 const ICON_ACTIVE =
-  '[&_svg]:scale-[1.15] [&_svg]:opacity-100 [&_svg]:drop-shadow-[0_0_6px_rgba(34,211,238,0.45)]';
+  '[&_svg]:scale-[1.30] [&_svg]:opacity-100 [&_svg]:drop-shadow-[0_0_6px_rgba(34,211,238,0.45)]';
 
 const GLASS_BTN =
   'text-white gap-3 flex justify-center w-full items-center text-center p-2 rounded-3xl cursor-pointer border backdrop-blur-md transition-colors duration-200';
