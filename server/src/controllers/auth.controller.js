@@ -346,8 +346,9 @@ async function getPublicProfile(req, res) {
     }
 
     const user = await userModel.findById(req.params.userId)
-      .select('username profilePic bio totalXp level league streakCount badges')
-      .populate('badges.badge');
+      .select('username profilePic bio totalXp level league streakCount badges friends')
+      .populate('badges.badge')
+      .populate('friends', 'username profilePic')
     if (!user) {
       return res.status(404).json({ message: 'User not found.' });
     }
@@ -360,6 +361,7 @@ async function getPublicProfile(req, res) {
         bio: user.bio || '',
         totalXp: user.totalXp || 0,
         level: user.level || 1,
+        friends: user.friends || [],
         league: user.league || 'Bronze 1',
         streakCount: user.streakCount || 0,
         badges: user.badges || []
