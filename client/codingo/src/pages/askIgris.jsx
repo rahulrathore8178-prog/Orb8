@@ -46,7 +46,7 @@ function getRandomGreeting() {
 }
 
 const MAX_TEXTAREA_HEIGHT = 200;
-const API_URL = `${import.meta.env.VITE_PYTHON_API_URL || "http://localhost:8000"}/askPrompt`;
+export const API_URL = `${import.meta.env.VITE_PYTHON_API_URL || "http://localhost:8000"}`;
 
 const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
@@ -132,6 +132,7 @@ export default function AskIgris({ onSend } = {}) {
     const [messages, setMessages] = useState([]); // { id, role, text, attachment?, isError? }
     const [text, setText] = useState("");
     const [attachment, setAttachment] = useState(null); // { name, size, kind: 'image' | 'pdf', preview? }
+    console.log('attachment:', attachment?.kind);
     const [menuOpen, setMenuOpen] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [greeting] = useState(getRandomGreeting);
@@ -312,10 +313,31 @@ export default function AskIgris({ onSend } = {}) {
             prevRectRef.current = composerWrapRef.current.getBoundingClientRect();
         }
 
-        const outgoingAttachment = attachment;
-        const userMsg = { id: uid(), role: "user", text: question, attachment: outgoingAttachment };
+        // Give the outgoing message its OWN blob URL. removeAttachment() below
+        // revokes the composer's preview URL, which would otherwise break the
+        // image shown in the chat bubble (blob:... ERR_FILE_NOT_FOUND).
+        // NOTE: "previewUrl" must match whatever field your attachment object
+        // uses for its preview (e.g. url / preview / src).
+        const outgoingAttachment = attachment
+            ? {
+                ...attachment,
+                previewUrl: attachment.file
+                    ? URL.createObjectURL(attachment.file)
+                    : attachment.previewUrl,
+            }
+            : null;
+
+        const isImage = attachment?.kind === "image";
+
+        const userMsg = {
+            id: uid(),
+            role: "user",
+            text: question,
+            attachment: outgoingAttachment,
+        };
 
         setMessages((prev) => [...prev, userMsg]);
+        setText("");
         removeAttachment();
         setMenuOpen(false);
         setIsLoading(true);
@@ -323,42 +345,56 @@ export default function AskIgris({ onSend } = {}) {
         if (onSend) onSend({ text: question, attachment: outgoingAttachment });
 
         try {
-            const requestBody = new FormData();
-            requestBody.append("question", question);
-            requestBody.append("title", question.slice(0, 60) || "New Conversation");
-            console.log("Sending request to API:", { question, outgoingAttachment, activeConversationId, requestBody })
-            if (activeConversationId) {
-                requestBody.append("conversationId", activeConversationId);
-            }
-            if (outgoingAttachment?.file) {
-                requestBody.append("file", outgoingAttachment.file, outgoingAttachment.name);
+            let data;
+
+            if (isImage) {
+                // ---- image branch: multipart/form-data via axios ----
+                const requestBody = new FormData();
+                requestBody.append("question", question);
+                requestBody.append("title", question.slice(0, 60) || "New Conversation");
+                requestBody.append("file", attachment.file, attachment.name);
+                requestBody.append("systemprompt", question || "Describe the image.");
+                if (activeConversationId) {
+                    requestBody.append("conversationId", activeConversationId);
+                }
+
+                const token = localStorage.getItem("token");
+
+                // axios already parses JSON into `.data` and throws on non-2xx,
+                // so there is no .ok / .json() here. Don't set Content-Type:
+                // the browser adds the multipart boundary itself.
+                const res = await axios.post(`${API_URL}/describe_image`, requestBody, {
+                    headers: { Authorization: `Bearer ${token}` },
+                });
+                data = res.data;
+            } else {
+                // ---- text branch: JSON via fetch ----
+                const res = await fetch(`${API_URL}/askPrompt`, {
+                    method: "POST",
+                    credentials: "include",
+                    headers: {
+                        "Content-Type": "application/json",
+                        ...getAuthHeaders(),
+                    },
+                    body: JSON.stringify({
+                        question,
+                        source: null,
+                    }),
+                });
+                if (!res.ok) throw new Error(`Request failed with status ${res.status}`);
+                data = await res.json();
             }
 
-            const token = localStorage.getItem("token");
-            const res = await fetch(API_URL, {
-                method: "POST",
-                credentials: "include",
-                headers: {
-                    "Content-Type": "application/json",
-                    ...getAuthHeaders()
-                },
-                body: JSON.stringify({
-                    question: text,
-                    source: null
-                }),
-            });
-            setText("");
-            console.log("Request sent to API:", { requestBody })
-            if (!res.ok) throw new Error(`Request failed with status ${res.status}`);
-            const data = await res.json();
-            if (data.conversation?._id) {
+            if (data?.conversation?._id) {
                 setActiveConversationId(data.conversation._id);
             }
-            // await getIgrisHistory();
-            console.log("Received response:", data);
-            console.log("response:", res);
-            const replyText = data?.answer ?? data?.prompt ?? data?.text ?? "Hmm, no reply came back.";
-            setMessages((prev) => [...prev, { id: uid(), role: "assistant", text: replyText }]);
+
+            const replyText =
+                data?.answer ?? data?.prompt ?? data?.text ?? "Hmm, no reply came back.";
+            setMessages((prev) => [
+                ...prev,
+                { id: uid(), role: "assistant", text: replyText },
+            ]);
         } catch (err) {
             console.error("send failed:", err);
             setMessages((prev) => [
@@ -374,7 +410,15 @@ export default function AskIgris({ onSend } = {}) {
             setIsLoading(false);
             textareaRef.current?.focus();
         }
-    }, [text, attachment, onSend, hasStarted, isLoading, removeAttachment, activeConversationId]);
+    }, [
+        text,
+        attachment,
+        onSend,
+        hasStarted,
+        isLoading,
+        removeAttachment,
+        activeConversationId,
+    ]);
 
     const handleKeyDown = (e) => {
         if (e.key === "Enter" && !e.shiftKey) {

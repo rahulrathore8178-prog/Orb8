@@ -120,7 +120,9 @@ export default function SocialProfileSection() {
     const storedUser = getStoredUser();
     const isOwnProfile = !userId || userId === storedUser?.id;
     const [currentUser, setCurrentUser] = useState(isOwnProfile ? storedUser : null);
-    console.log('currentUser', currentUser?.friends);
+    const userFriends = currentUser?.friends;
+    console.log('currentUser', currentUser);
+    console.log('currentUser friends', currentUser?.friends);
     const reduxfriends = useSelector((state) => state.friends);
     const friends = useSelector(state => state.friends.friends);
     console.log('friends', friends);
@@ -652,7 +654,7 @@ export default function SocialProfileSection() {
                             <div className="text-center text-gray-400 text-sm sm:text-base">No friends yet.</div>
                         ) : (
                             <div ref={friendsListRef} className="flex flex-col divide-y divide-white/5 min-w-2xl mx-auto">
-                                {friends.map((friend) => (
+                                {userFriends.map((friend) => (
                                     <div
                                         key={friend.id}
                                         onClick={() => {
@@ -674,11 +676,6 @@ export default function SocialProfileSection() {
                                         )}
                                         <div className="min-w-0 flex-1">
                                             <div className="truncate cursor-pointer text-sm font-semibold text-white sm:text-base">{friend.username}</div>
-                                            {/* {friend.league && (
-                                                <div className="truncate text-xs text-gray-400 sm:text-sm">
-                                                    {friend.league} · Lv {friend.level ?? 1}
-                                                </div>
-                                            )} */}
                                         </div>
                                     </div>
                                 ))}
