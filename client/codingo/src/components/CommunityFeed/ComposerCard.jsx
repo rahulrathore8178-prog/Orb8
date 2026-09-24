@@ -15,6 +15,34 @@ const MAX_VIDEO_SIZE = 50 * 1024 * 1024;  // 50MB — match your multer limit
 const MAX_AUDIO_SIZE = 15 * 1024 * 1024;  // 15MB — for voice notes
 const MAX_RECORDING_SECONDS = 120; // hard stop at 2 minutes — adjust as you like
 
+const analysis_prompt = `You are the content-understanding engine of a social media recommendation system.
+Input: a post's media (image, or frames sampled from a video) plus optional caption,
+hashtags, and speech transcript. Analyze what the post is actually about and return
+ONE JSON object. Output only JSON: no markdown, no code fences, no commentary.
+Also sending post_id along with it, attach it into the schema too.
+
+Schema:
+{
+  "summary": string,        // 1-2 factual sentences: what is shown, said, and taught
+  "language": string,       // ISO 639-1 code of the main spoken/written language, "none" if no language
+  "format": string,         // one of: tutorial, demo, meme, skit, news, opinion, vlog, showcase, promo, other
+  "topics": { string: number },   // topic -> relevance
+  "attributes": { "educational": number, "entertainment": number, "motivational": number, "emotional": number },
+  "keywords": [string],     // 5-10 specific lowercase terms (tools, concepts, entities), no generic words
+  "safety": { "nsfw": number, "violence": number, "hate": number }
+}
+
+Rules:
+- All scores are 0.00-1.00 with two decimals. They are independent and need not sum to 1.
+  0 = absent, 0.5 = present but secondary, 1 = dominant theme.
+- topics: use ONLY these labels: technology, ai, programming, gaming, comedy, education,
+  science, business, finance, fitness, health, food, travel, music, sports, fashion, art,
+  news, politics, lifestyle, other. Include only topics scoring >= 0.30, at most 5.
+- Judge from visible content, on-screen text, transcript, and caption. If media and caption
+  disagree, trust the media. Never invent details or identify people from their faces.
+- If unsure, lower the score rather than guess.
+- The output must parse with json.loads.`
+
 
 export default function ComposerCard({
     onPostCreated,
@@ -37,6 +65,7 @@ export default function ComposerCard({
     const recordingTimerRef = useRef(null);
     const recordingStartRef = useRef(null);
     const previewAudioRef = useRef(null);
+    const posts = useSelector((state) => state.feed.posts);
 
     const [isRecording, setIsRecording] = useState(false);
     const [recordingSeconds, setRecordingSeconds] = useState(0); // live counter while recording
@@ -249,16 +278,17 @@ export default function ComposerCard({
                 try {
                     const describeForm = new FormData();
                     describeForm.append('file', fileToSend, fileToSend.name || 'upload.jpg');
-                    // describeForm.append('systemprompt', trimmedContent || 'Describe the image.');
+                    describeForm.append('type', fileToSend.type)
+                    describeForm.append('prompt', analysis_prompt);
+                    describeForm.append('post_id', String(res?.data?.post?.id)); // only if you need it, see below
 
-                    const postDataRes = await axios.post(`${API_URL}/describe_image`, describeForm, {
+                    const postDataRes = await axios.post(`${API_URL}/postdata`, describeForm, {
                         withCredentials: true,
-                        headers: { ...getAuthHeaders() }, // let the browser set Content-Type + boundary
+                        headers: { ...getAuthHeaders() }, // don't set Content-Type manually
                     });
                     setPostData(postDataRes.data);
-                    console.log('Post data response:', postDataRes.data);
                 } catch (err) {
-                    console.error('Error describing image:', err);
+                    console.error('Error describing image:', err.response?.data || err);
                 }
             }
 

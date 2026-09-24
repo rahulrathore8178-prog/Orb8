@@ -34,11 +34,9 @@ import {
   handleLike,
   getStoredUser,
 } from '../utilites/communityHelper';
-import gsap from 'gsap';
 import Capsules from '../components/Comments/Capsules';
 import CapsulePostModal from '../components/Comments/CapsulePostModal';
-import { FiMessageCircle, FiSend } from 'react-icons/fi';
-import { Mic, Pause, PauseIcon, Play, Plus, RefreshCw, StopCircle, Trash2 } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import ComposerCard from '../components/CommunityFeed/ComposerCard';
 import FilmPostCard from '../components/CommunityFeed/FilmPostCard';
 /* ─── Constants ───────────────────────────────────────────────── */
