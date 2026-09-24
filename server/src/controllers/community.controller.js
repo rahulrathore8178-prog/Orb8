@@ -6,6 +6,54 @@ const fs = require('fs').promises;
 const { uploadBufferToDrive } = require('../utils/driveUpload');
 const { deleteFileFromDrive } = require('../utils/driveUpload');
 const { streamFileFromDrive } = require('../utils/driveUpload');
+const axios = require("axios");
+
+const PYTHON_API_URL = process.env.PYTHON_API_URL || 'http://localhost:8000';
+
+const analysis_prompt = `You are the content-understanding engine of a social media recommendation system.
+Input: a post's media (image, or frames sampled from a video) plus optional caption,
+hashtags, and speech transcript. Analyze what the post is actually about and return
+ONE JSON object. Output only JSON: no markdown, no code fences, no commentary.
+Also sending post_id along with it, attach it into the schema too.
+
+Schema:
+{
+  "summary": string,        // 1-2 factual sentences: what is shown, said, and taught
+  "language": string,       // ISO 639-1 code of the main spoken/written language, "none" if no language
+  "format": string,         // one of: tutorial, demo, meme, skit, news, opinion, vlog, showcase, promo, other
+  "topics": { string: number },   // topic -> relevance
+  "attributes": { "educational": number, "entertainment": number, "motivational": number, "emotional": number },
+  "keywords": [string],     // 5-10 specific lowercase terms (tools, concepts, entities), no generic words
+  "safety": { "nsfw": number, "violence": number, "hate": number }
+}
+
+Rules:
+- All scores are 0.00-1.00 with two decimals. They are independent and need not sum to 1.
+  0 = absent, 0.5 = present but secondary, 1 = dominant theme.
+- topics: use ONLY these labels: technology, ai, programming, gaming, comedy, education,
+  science, business, finance, fitness, health, food, travel, music, sports, fashion, art,
+  news, politics, lifestyle, other. Include only topics scoring >= 0.30, at most 5.
+- Judge from visible content, on-screen text, transcript, and caption. If media and caption
+  disagree, trust the media. Never invent details or identify people from their faces.
+- If unsure, lower the score rather than guess.
+- The output must parse with json.loads.`
+
+async function analyzeImage(fileBuffer, fileName, mimeType, postId) {
+  const form = new FormData();
+  form.append("file", fileBuffer, { filename: fileName, contentType: mimeType });
+  form.append("post_id", postId);   // Python needs this to write the Chroma entry
+  form.append('prompt', analysis_prompt)
+
+  try {
+    const res = await axios.post(`${PYTHON_API_URL}/describe_image`, form, {
+      headers: form.getHeaders(),
+      timeout: 30000,
+    });
+    return res.data.analysis;   // matches the trimmed { analysis: mongo_fields } shape from Python
+  } catch (error) {
+    console.error("image analyze error", error)
+  }
+}
 
 // Create a new post
 async function createPost(req, res) {
@@ -128,6 +176,20 @@ async function createPost(req, res) {
     const post = await Post.create(postData);
     await post.populate('author', 'username profilePic league level totalXp');
 
+    // Fire-and-forget: runs after the response has already gone out
+    const file = req.file
+    if (file && file.mimetype.startsWith("image/")) {
+      console.log('data:', file.buffer, file.originalname, file.mimetype, post._id.toString())
+      analyzeImage(file.buffer, file.originalname, file.mimetype, analysis_prompt)
+        .then(async (analysis) => {
+          console.log('analysis ready', analysis)
+          await Post.findByIdAndUpdate(post._id, { analysis, status: "ready" });
+        })
+        .catch(async (err) => {
+          console.error("Python 422 detail:", JSON.stringify(err.response?.data, null, 2));
+        });
+    }
+
     return res.status(201).json({
       message: 'Post created successfully',
       post: {
@@ -153,7 +215,7 @@ async function createPost(req, res) {
         createdAt: post.createdAt,
         updatedAt: post.updatedAt
       }
-    });
+    })
   } catch (error) {
     console.error('Create post error:', error);
     return res.status(500).json({ message: error.message });
@@ -174,7 +236,7 @@ async function deletePost(req, res) {
     if (String(post.author) !== req.user.id) {
       return res.status(403).json({ message: 'Unauthorized to delete this post' });
     };
-    
+
     // Delete the associated drive file if it exists
     if (post.driveFileId) {
       try {
