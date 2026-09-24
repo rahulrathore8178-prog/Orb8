@@ -142,7 +142,7 @@ function NavList({
       {/* The sliding glass pill */}
       <span
         aria-hidden="true"
-        className={`pointer-events-none absolute inset-x-0 top-0 z-0 rounded-2xl border border-white/20 bg-white/10 backdrop-blur-md shadow-[inset_0_1px_0_rgba(255,255,255,0.25),0_6px_20px_rgba(0,0,0,0.25)] motion-reduce:transition-none ${animate
+        className={`pointer-events-none absolute inset-x-0 top-0 z-0 rounded-2xl border border-white/10 bg-gradient-to-b from-white/[0.07] via-white/[0.03] to-black/30 backdrop-blur-md shadow-[inset_0_1px_1px_rgba(255,255,255,0.18),inset_0_-6px_10px_rgba(0,0,0,0.5),0_10px_18px_-4px_rgba(0,0,0,0.55),0_0_0_1px_rgba(0,0,0,0.25),0_0_20px_rgba(34,211,238,0.22)] motion-reduce:transition-none ${animate
           ? 'transition-[transform,height,opacity] duration-[350ms] ease-[cubic-bezier(0.34,1.35,0.64,1)]'
           : ''
           }`}

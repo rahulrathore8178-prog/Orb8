@@ -11,6 +11,8 @@ import PostPreview from "../components/SocialProfile/postPreview";
 import { useDispatch, useSelector } from "react-redux";
 import { FaSearch, FaUserCircle /* ...your existing icons */ } from "react-icons/fa";
 import { fetchFriendRequests, fetchFriends } from "../redux/slices/friendsSlice";
+import { Trash2 } from "lucide-react";
+import { setPosts } from "../redux/slices/feedSlice";
 
 
 // ---------------------------------------------------------------
@@ -140,7 +142,6 @@ export default function SocialProfileSection() {
     const [error, setError] = useState(null);
     const fileInputRef = useRef(null);
     const [userPosts, setUserPosts] = useState([]);
-    console.log('userPosts', userPosts);
     const [postsLoading, setPostsLoading] = useState(true);
     const [showPostPreview, setShowPostPreview] = useState(false);
     const [selectedPostIndex, setSelectedPostIndex] = useState(0);
@@ -149,6 +150,7 @@ export default function SocialProfileSection() {
     const [friendsList, setFriendsList] = useState([]);
     const [friendsLoading, setFriendsLoading] = useState(false);
     const dispatch = useDispatch();
+    // const [postId, setPostId] = useState();
 
 
     // Swap `friendsList`/`friendsLoading` for whatever your actual fetch state is called —
@@ -203,6 +205,8 @@ export default function SocialProfileSection() {
                 );
                 console.log('res', res);
                 setUserPosts(res.data.posts || []);
+                console.log('userPosts', res?.data?.id)
+                // setPostId(res?.id)
             } catch (err) {
                 console.error('Failed to fetch user posts:', err);
                 setError('Failed to load user posts.');
@@ -354,6 +358,20 @@ export default function SocialProfileSection() {
         } catch (err) {
             setError(err.response?.data?.message || 'Failed to update username');
         }
+    };
+
+    // delete function
+    const handleDelete = async (postId) => {
+        if (!confirm('Delete this post?')) return;
+        try {
+            console.log(postId)
+            await axios.delete(`${apiUrl}/api/community/posts/${postId}`, {
+                withCredentials: true,
+                headers: getAuthHeaders(),
+            });
+            dispatch(setPosts((prev) => prev.filter((p) => p.id !== postId)));
+            showPostModal(false);
+        } catch (err) { console.error('Delete error:', err); }
     };
 
     // Load friends when tab changes to friends
@@ -696,7 +714,6 @@ export default function SocialProfileSection() {
                                     return (
                                         <div
                                             key={post.id}
-                                            onClick={() => showPostModal(postIndex)}
                                             role="button"
                                             tabIndex={0}
                                             onKeyDown={(event) => {
@@ -704,9 +721,11 @@ export default function SocialProfileSection() {
                                             }}
                                             className="rounded-lg sm:rounded-2xl border border-white/10 bg-[#2B2B2B] p-3 sm:p-4 transition-transform duration-300 hover:scale-105 hover:shadow-lg"
                                         >
-                                            <div className="mb-3 text-xs sm:text-sm text-gray-400">
-                                                {new Date(post.createdAt).toLocaleDateString()}
+                                            <div className="mb-3 flex justify-between text-xs sm:text-sm text-gray-400">
+                                                <span>{new Date(post.createdAt).toLocaleDateString()}</span>
+                                                <span onClick={() => handleDelete(post.id)}><Trash2 /></span>
                                             </div>
+                                            <div onClick={() => showPostModal(postIndex)}>
                                             <div className="text-white text-sm sm:text-base mb-3 line-clamp-3">{post.content}</div>
                                             {post.image && (
                                                 <div className="overflow-hidden rounded-lg sm:rounded-xl aspect-square mb-3">
@@ -718,6 +737,7 @@ export default function SocialProfileSection() {
                                                     <video src={videoUrl} muted playsInline preload="metadata" className="w-full h-full object-cover" />
                                                 </div>
                                             )}
+                                            </div>
                                             <div className="flex items-center justify-between text-xs sm:text-sm text-gray-400 flex-wrap gap-2">
                                                 <div className="flex items-center gap-1">
                                                     <span className="flex items-center justify-center"><FaHeart size={12} className="sm:w-4 sm:h-4" /></span>

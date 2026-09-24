@@ -16,7 +16,7 @@ import base64
 import io
 from rag_search import run_platform_search, collection
 from dotenv import load_dotenv
-from visual_model import describe_image
+from visual_model import describe_image, post_data_collection
 
 load_dotenv()  # Load environment variables from .env file
 
@@ -33,13 +33,36 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.post("/postdata")
+async def analyze_post(
+    file: UploadFile = File(...),
+    prompt: str = Form(...),
+    post_id: str = Form(None),
+):
+    post_id = post_id or str(uuid.uuid4())
+    print(f"Received post with ID: {post_id}, prompt: {prompt}, file: {file.filename}")
+    image_bytes = await file.read()
+
+    raw = await run_in_threadpool(describe_image, image_bytes, prompt)
+    parsed = json.loads(raw)
+    parsed["post_id"] = post_id 
+
+    await run_in_threadpool(
+        post_data_collection.upsert,
+        ids=[post_id],
+        documents=[json.dumps(parsed)],
+        metadatas=[{"source": "post", "post_id": post_id}],
+    )
+
+    return {"post_id": post_id, "answer": parsed}
+
 
 # --- Step 3: the endpoint your React frontend calls ----------------------
 @app.post("/remember")
 async def upload_file(file: UploadFile = File(...)):
     file_bytes = await file.read()
 
-    # 1. File -> plain text (Chroma never sees the raw file)
+    # 1. File -> plain text
     raw_text = extract_text(file.filename, file_bytes)
     if not raw_text.strip():
         raise HTTPException(status_code=400, detail="No text could be extracted from this file")
@@ -47,13 +70,15 @@ async def upload_file(file: UploadFile = File(...)):
     # 2. Plain text -> chunks
     chunks = chunk_text(raw_text)
 
-    # 3. Chunks -> ChromaDB (embedding + storage happens automatically inside .add)
+    # 3. Chunks -> Orb8 (general knowledge)
     ids = [str(uuid.uuid4()) for _ in chunks]
     metadatas = [
         {"source": file.filename, "chunk_index": i}
         for i in range(len(chunks))
     ]
-    collection.add(documents=chunks, metadatas=metadatas, ids=ids)
+    await run_in_threadpool(
+        collection.add, documents=chunks, metadatas=metadatas, ids=ids
+    )
 
     return {
         "filename": file.filename,
@@ -199,13 +224,7 @@ async def ask_prompt(req: AskRequest):
         detail="The assistant could not produce an answer after multiple tool calls.",
     )
             
-
-@app.post("/describe_image")
-async def describe_image_endpoint(
-    file: UploadFile = File(...),
-    # Form(...) reads this from the multipart body (a plain `str = ""` would
-    # be treated as a query parameter).
-#     systemprompt: str = Form('''You are the content-understanding engine of a social media recommendation system.
+#     system_prompt = '''You are the content-understanding engine of a social media recommendation system.
 # Input: a post's media (image, or frames sampled from a video) plus optional caption,
 # hashtags, and speech transcript. Analyze what the post is actually about and return
 # ONE JSON object. Output only JSON: no markdown, no code fences, no commentary.
@@ -230,7 +249,13 @@ async def describe_image_endpoint(
 # - Judge from visible content, on-screen text, transcript, and caption. If media and caption
 #   disagree, trust the media. Never invent details or identify people from their faces.
 # - If unsure, lower the score rather than guess.
-# - The output must parse with json.loads.'''),
+# - The output must parse with json.loads.'''
+
+@app.post("/describe_image")
+async def describe_image_endpoint(
+    file: UploadFile = File(...),
+    post_id: str = Form(...),
+    prompt: str = Form(...),
 ):
     mime_type = file.content_type or "image/jpeg"
     if not mime_type.startswith("image/"):
@@ -238,32 +263,6 @@ async def describe_image_endpoint(
  
     image_bytes = await file.read()
     print(f"Received image of size {len(image_bytes)} bytes with MIME type {mime_type}")
-    prompt = '''You are the content-understanding engine of a social media recommendation system.
-Input: a post's media (image, or frames sampled from a video) plus optional caption,
-hashtags, and speech transcript. Analyze what the post is actually about and return
-ONE JSON object. Output only JSON: no markdown, no code fences, no commentary.
-
-Schema:
-{
-  "summary": string,        // 1-2 factual sentences: what is shown, said, and taught
-  "language": string,       // ISO 639-1 code of the main spoken/written language, "none" if no language
-  "format": string,         // one of: tutorial, demo, meme, skit, news, opinion, vlog, showcase, promo, other
-  "topics": { string: number },   // topic -> relevance
-  "attributes": { "educational": number, "entertainment": number, "motivational": number, "emotional": number },
-  "keywords": [string],     // 5-10 specific lowercase terms (tools, concepts, entities), no generic words
-  "safety": { "nsfw": number, "violence": number, "hate": number }
-}
-
-Rules:
-- All scores are 0.00-1.00 with two decimals. They are independent and need not sum to 1.
-  0 = absent, 0.5 = present but secondary, 1 = dominant theme.
-- topics: use ONLY these labels: technology, ai, programming, gaming, comedy, education,
-  science, business, finance, fitness, health, food, travel, music, sports, fashion, art,
-  news, politics, lifestyle, other. Include only topics scoring >= 0.30, at most 5.
-- Judge from visible content, on-screen text, transcript, and caption. If media and caption
-  disagree, trust the media. Never invent details or identify people from their faces.
-- If unsure, lower the score rather than guess.
-- The output must parse with json.loads.'''
  
     try:
         raw = await run_in_threadpool(describe_image, image_bytes, prompt, mime_type)
@@ -284,6 +283,12 @@ Rules:
         raise HTTPException(status_code=502, detail=f"Model returned invalid JSON: {e}")
 
     return {"answer": parsed}
+
+
+
+
+
+
 
 
 if __name__ == "__main__":

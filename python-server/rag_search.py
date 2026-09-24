@@ -1,9 +1,14 @@
+# import chromadb
+# # --- ChromaDB setup (runs once, when the server starts) -----------------
 import chromadb
 
-
-# --- ChromaDB setup (runs once, when the server starts) -----------------
-chroma_client = chromadb.PersistentClient(path="./chroma_db")
-collection = chroma_client.get_or_create_collection(name="documents")
+client = chromadb.CloudClient(
+  api_key='ck-3JpuM4dG74PbN9uSojsHi6Z3KSsTM5TUTvvEEtxHVNeZ',
+  tenant='f64e7b0c-b54b-4e58-9ccc-504b45decdea',
+  database='Orb8'
+)
+collection = client.get_or_create_collection(name="Orb8")
+# from chromadb import collection
 
 # ---------------------------------------------------------------------------
 # 2. Retrieval helper — same chroma query you already had, just factored out
