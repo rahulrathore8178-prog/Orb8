@@ -23,6 +23,20 @@ const earnedBadgeSchema = new mongoose.Schema(
   { _id: true },
 );
 
+const userPreferenceSchema = new mongoose.Schema(
+  {
+    primaryLanguage: { type: String, default: "english" },
+    content: {
+      education: { type: Number, default: 0 },
+      entertainment: { type: Number, default: 0 },
+      news: { type: Number, default: 0 },
+      sports: { type: Number, default: 0 },
+      technology: { type: Number, default: 0 },
+    },
+  },
+  { _id: true },
+);
+
 const rewardSchema = new mongoose.Schema(
   {
     month: { type: String, required: true }, // e.g. "2025-07"
@@ -74,32 +88,42 @@ const userSchema = new mongoose.Schema(
     resetToken: { type: String, default: null, index: true },
     resetTokenExpiry: { type: Date, default: null },
     resetOtpAttempts: { type: Number, default: 0 },
-      // Geolocation for discover feature (GeoJSON Point)
-      location: {
-        type: {
-          type: String,
-          enum: ["Point"],
-          default: "Point",
-        },
-        coordinates: {
-          type: [Number], // [lng, lat]
-          default: [0, 0],
-        },
+    // Geolocation for discover feature (GeoJSON Point)
+    location: {
+      type: {
+        type: String,
+        enum: ["Point"],
+        default: "Point",
       },
-      locationUpdatedAt: { type: Date },
-      isDiscoverable: { type: Boolean, default: false },
-      deviceTokens: {
-        type: [String],
-        default: [],
+      coordinates: {
+        type: [Number], // [lng, lat]
+        default: [0, 0],
       },
+    },
+    locationUpdatedAt: { type: Date },
+    isDiscoverable: { type: Boolean, default: false },
+    deviceTokens: {
+      type: [String],
+      default: [],
+    },
+    preferences: {
+      primaryLanguage: { type: String, default: "english" },
+      content: {
+        education: { type: Number, default: 0 },
+        entertainment: { type: Number, default: 0 },
+        news: { type: Number, default: 0 },
+        sports: { type: Number, default: 0 },
+        technology: { type: Number, default: 0 },
+      },
+    },
   },
   {
     timestamps: true,
   },
 );
 
-  // Ensure 2dsphere index for geo queries
-  userSchema.index({ location: '2dsphere' });
+// Ensure 2dsphere index for geo queries
+userSchema.index({ location: '2dsphere' });
 
 const userModal = mongoose.model("User", userSchema);
 module.exports = userModal;

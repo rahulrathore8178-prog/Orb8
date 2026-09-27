@@ -1,5 +1,16 @@
-import { createSlice } from "@reduxjs/toolkit";
+import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
 import { fetchPosts, handleLike } from "../../utilites/communityHelper";
+import axios from "axios";
+
+export const registerView = createAsyncThunk(
+  'posts/registerView',
+  async (postId, { getState }) => {
+    if (getState().posts.viewedPostIds.includes(postId)) return { postId, counted: false };
+    const { data } = await axios.post(`/api/community/posts/${postId}/view`);
+    console.log('registerView response:', data);
+    return { postId, counted: data.counted };
+  }
+);
 
 const feedSlice = createSlice({
   name: 'feed',
@@ -160,7 +171,12 @@ const feedSlice = createSlice({
         // Prevent continuous pagination on server errors
         state.hasMore = false;
       })
-
+      .addCase(registerView.fulfilled, (state, action) => {
+        const { postId, counted } = action.payload;
+        if (counted) {
+          state.viewedPostIds.push(postId);
+        }
+      })
     builder
       .addCase(handleLike.pending, (state) => {
         state.isLoading = true;

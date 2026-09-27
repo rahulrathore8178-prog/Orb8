@@ -11,7 +11,7 @@ import PostPreview from "../components/SocialProfile/postPreview";
 import { useDispatch, useSelector } from "react-redux";
 import { FaSearch, FaUserCircle /* ...your existing icons */ } from "react-icons/fa";
 import { fetchFriendRequests, fetchFriends } from "../redux/slices/friendsSlice";
-import { Trash2 } from "lucide-react";
+import { Trash2, BarChart3 } from "lucide-react";
 import { setPosts } from "../redux/slices/feedSlice";
 
 
@@ -123,14 +123,14 @@ export default function SocialProfileSection() {
     const isOwnProfile = !userId || userId === storedUser?.id;
     const [currentUser, setCurrentUser] = useState(isOwnProfile ? storedUser : null);
     const userFriends = currentUser?.friends;
-    console.log('currentUser', currentUser);
-    console.log('currentUser friends', currentUser?.friends);
+    console.log('currentUser', currentUser?.preferences?.content);
+    // console.log('currentUser friends', currentUser?.friends);
     const reduxfriends = useSelector((state) => state.friends);
     const friends = useSelector(state => state.friends.friends);
-    console.log('friends', friends);
+    // console.log('friends', friends);
     // console.log('redux friends', reduxfriends);
     const friendsCount = currentUser?.friends?.length || 0;
-    console.log('friendsCount', friendsCount);
+    // console.log('friendsCount', friendsCount);
     const friendRequests = currentUser?.friendRequests?.length || 0;
     // console.log('requests', currentUser?.friendRequests);
     const [isEditingUsername, setIsEditingUsername] = useState(false);
@@ -192,7 +192,7 @@ export default function SocialProfileSection() {
         const fetchUserPosts = async () => {
             const id = userId || storedUser?.id;
             if (!id) return;
-            console.log('Fetching posts for user ID:', id, 'storedUser ID:', storedUser?.id, 'isUserId:', userId);
+            // console.log('Fetching posts for user ID:', id, 'storedUser ID:', storedUser?.id, 'isUserId:', userId);
 
             setPostsLoading(true);
             try {
@@ -203,9 +203,9 @@ export default function SocialProfileSection() {
                         headers: getAuthHeaders()
                     }
                 );
-                console.log('res', res);
+                // console.log('res', res);
                 setUserPosts(res.data.posts || []);
-                console.log('userPosts', res?.data?.id)
+                // console.log('userPosts', res?.data?.id)
                 // setPostId(res?.id)
             } catch (err) {
                 console.error('Failed to fetch user posts:', err);
@@ -237,7 +237,7 @@ export default function SocialProfileSection() {
 
     async function fetchUserProfile() {
         try {
-            console.log("fetch user profile");
+            // console.log("fetch user profile");
             const url = isOwnProfile
                 ? `${apiUrl}/api/auth/user/me`
                 : `${apiUrl}/api/auth/user/${userId}/public`;
@@ -257,7 +257,7 @@ export default function SocialProfileSection() {
                     localStorage.setItem('user', JSON.stringify(userData));
                 }
             }
-            console.log('Fetched user profile:', response?.data?.user);
+            // console.log('Fetched user profile:', response?.data?.user);
         } catch (err) {
             console.error('Failed to fetch user profile:', err);
             setError('Failed to load profile.');
@@ -364,7 +364,7 @@ export default function SocialProfileSection() {
     const handleDelete = async (postId) => {
         if (!confirm('Delete this post?')) return;
         try {
-            console.log(postId)
+            // console.log(postId)
             await axios.delete(`${apiUrl}/api/community/posts/${postId}`, {
                 withCredentials: true,
                 headers: getAuthHeaders(),
@@ -378,7 +378,7 @@ export default function SocialProfileSection() {
     useEffect(() => {
         if (activeTab === 'Friends') {
             dispatch(fetchFriends());
-            console.log('dispatching fetchFriends', reduxfriends);
+            // console.log('dispatching fetchFriends', reduxfriends);
         } else if (activeTab === 'Requests') {
             dispatch(fetchFriendRequests());
         }
@@ -744,6 +744,7 @@ export default function SocialProfileSection() {
                                                     <span>{post.likesCount} likes</span>
                                                 </div>
                                                 <span>{post.commentsCount} comments</span>
+                                                <span><BarChart3 size={20} /> Views: {post?.views}</span>
                                             </div>
                                         </div>
                                     );

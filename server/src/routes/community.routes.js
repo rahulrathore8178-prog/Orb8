@@ -13,7 +13,8 @@ const {
   getPostImage,
   getPostVideo,
   discoverNearbyPeople,
-  getPostVoiceNote
+  getPostVoiceNote,
+  registerPostView
 } = require('../controllers/community.controller');
 const { protect } = require('../middlewares/auth.middleware');
 const { postMediaUpload } = require('../middlewares/upload.middleware');
@@ -58,6 +59,9 @@ router.post('/posts/:postId/:commentId/commentReplies', protect, commentReply);
 
 // Delete a comment
 router.delete('/posts/:postId/comments/:commentId', protect, deleteComment);
+  
+// Register a post view
+router.post('/posts/:userId/:postId/views', protect, registerPostView);
 
 // Discover people nearby
 router.post('/discover/nearby', protect, discoverNearbyPeople);
