@@ -51,15 +51,10 @@ function buildUserPayload(user) {
     email: user.email,
     profilePic: user.profilePic || '',
     bio: user.bio || '',
-    totalXp: user.totalXp || 0,
-    level: user.level || 1,
-    league: user.league || 'Bronze 1',
-    streakCount: user.streakCount || 0,
-    badges: user.badges || [],
     notifications: (user.notifications || []).slice(-10).reverse(),
     friends: user.friends || [],
     friendRequests: user.friendRequests || [],
-    rewards: user.rewards || [],
+    preferences: user.preferences || [],
   };
 }
 
@@ -117,12 +112,12 @@ async function loginUser(req, res) {
     });
 
     if (!user) {
-      return res.status(401).json({ message: 'Invalid credentials' });
+      return res.status(401).json({ message: 'User not found' });
     }
 
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
-      return res.status(401).json({ message: 'Invalid credentials' });
+      return res.status(401).json({ message: 'Invalid username or password' });
     }
 
     const token = signToken(user._id);

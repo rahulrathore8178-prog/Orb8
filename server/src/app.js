@@ -27,9 +27,9 @@ app.use(
 );
 
 app.use((req, _res, next) => {
-  // console.log(
-  //   `[REQ] ${req.method} ${req.originalUrl} host=${req.headers.host} origin=${req.headers.origin || '-'} proto=${req.headers['x-forwarded-proto'] || req.protocol}`
-  // );
+  console.log(
+    `[REQ] ${req.method} ${req.originalUrl} host=${req.headers.host} origin=${req.headers.origin || '-'} proto=${req.headers['x-forwarded-proto'] || req.protocol}`
+  );
   next();
 });
 

@@ -267,11 +267,11 @@ export default function AppSidebar() {
   return (
     <>
       {/* ───────────────────────── Desktop ───────────────────────── */}
-      <aside className="hidden z-10 max-h-screen lg:block shrink-0">
+      <aside className="hidden z-10 bg-black max-h-screen lg:block shrink-0">
         <div
           onMouseEnter={() => dispatch(setDesktopCollapsed(false))}
           onMouseLeave={() => { dispatch(setDesktopCollapsed(true)); setIsOpen(false); }}
-          className={`sticky top-0 flex flex-col justify-between h-screen bg-[#2B2B2B] border-r border-white/10 py-4 transition-[width,padding] duration-200 ease-in-out will-change-[width] ${isDesktopCollapsed ? 'w-20 px-2' : 'w-45 px-2'
+          className={`sticky z-10 top-0 flex flex-col h-[95vh] mt-5 justify-between bg-[#2B2B2B] border-r border-white/10 py-4 rounded-2xl ml-4 transition-[width,padding] duration-200 ease-in-out will-change-[width] ${isDesktopCollapsed ? 'w-20  px-2' : 'w-45 px-2'
             }`}
         >
           <nav className="space-y-1">

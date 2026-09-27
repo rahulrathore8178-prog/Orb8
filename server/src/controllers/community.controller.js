@@ -208,6 +208,8 @@ async function createPost(req, res) {
         voiceNote: post.voiceNote,
         video: post.video,
         likes: [],
+        views: 0,
+        viewedBy: [],
         comments: [],
         likesCount: 0,
         commentsCount: 0,
@@ -295,6 +297,8 @@ async function getFeed(req, res) {
         hashtags: post.hashtags || [],
         image: post.image || "",
         video: post.video || "",
+        views: post.views || 0,
+        viewedBy: (post.viewedBy || []).map((id) => String(id)),
         voiceNote: post.voiceNote || "",
         voiceNoteDuration: post.voiceNoteDuration || 0,
         likes: (post.likes || []).map((id) => String(id)),
@@ -771,6 +775,8 @@ async function getUserPosts(req, res) {
       voiceNoteDuration: post.voiceNoteDuration || 0,
       hashtags: post.hashtags || [],
       likes: post.likes.map(id => String(id)),
+      views: post.views || 0,
+      viewedBy: (post.viewedBy || []).map(id => String(id)),
       comments: post.comments.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).map(comment => ({
         id: String(comment._id),
         author: {
@@ -852,6 +858,31 @@ const discoverNearbyPeople = async (req, res) => {
   }
 };
 
+const registerPostView = async (req, res) => {
+  try {
+    const { userId, postId } = req.params;
+    console.log('Registering view for post ID:', postId);
+    console.log('User ID:', userId);
+
+    const result = await Post.updateOne(
+      { _id: postId, viewedBy: { $ne: userId } },
+      {
+        $inc: { views: 1 },
+        $addToSet: { viewedBy: userId },
+      }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ message: 'Post not found' });
+    }
+
+    return res.status(200).json({ counted: result.modifiedCount === 1 });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: 'Failed to register view' });
+  }
+};
+
 module.exports = {
   createPost,
   getFeed,
@@ -866,5 +897,6 @@ module.exports = {
   likeComment,
   getPostVideo,
   getPostVoiceNote,
-  discoverNearbyPeople
+  discoverNearbyPeople,
+  registerPostView
 };
