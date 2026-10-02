@@ -28,14 +28,15 @@ import axios from 'axios';
 import { apiUrl, getAuthHeaders } from '../../utilites/DashboardHelper';
 import { setCurrentUser } from '../../redux/slices/dashboardSlice';
 import { registerPushNotifications } from '../../notifications/registerPushNotifications';
-import { ChevronRight, Settings } from 'lucide-react';
+import { ChevronRight, Settings, Users2Icon } from 'lucide-react';
 
 const communityNavItems = [
   { key: 'home', label: 'Home', icon: FaHome, to: '/community', match: ['/community'] },
   { key: 'messages', label: 'Messages', icon: FaFacebookMessenger, to: '/messages', match: ['/messages'] },
   { key: 'askIgris', label: 'Ask Igris', icon: FaBrain, to: '/askIgris', match: ['/askIgris'] },
   { key: 'rememberIgris', label: 'Remember Igris', icon: FaBook, to: '/rememberIgris', match: ['/rememberIgris'] },
-  { key: 'friends', label: 'Search', icon: FaSearch, to: '/friends', match: ['/friends'] },
+  { key: 'friends', label: 'Friends', icon: Users2Icon, to: '/friends', match: ['/friends'] },
+  { key: 'search', label: 'Search', icon: FaSearch, to: '/search', match: ['/search'] },
   { key: 'discover', label: 'Discover', icon: FaUserFriends, to: '/discover', match: ['/discover'] },
   { key: 'socialprofile', label: 'Social Profile', icon: FaUser, to: '/socialprofile', match: ['/socialprofile'] },
 ];

@@ -4,6 +4,7 @@ import {
     useEffect,
     useLayoutEffect,
     useCallback,
+    useMemo,
 } from "react";
 import {
     Paperclip, Image as ImageIcon, FileText, X, ArrowUp, Copy, Check,
@@ -50,9 +51,291 @@ export const API_URL = `${import.meta.env.VITE_PYTHON_API_URL || "http://localho
 
 const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
+// Respect the user's OS-level motion preference for the hand-rolled GSAP
+// entrances below (CSS already has its own reduced-motion block).
+// const prefersReducedMotion = () =>
+//     typeof window !== "undefined" &&
+//     window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+
+// ---------------------------------------------------------------------
+// Small shared style tokens so the panels/pills stay visually consistent
+// without repeating long class strings everywhere.
+// ---------------------------------------------------------------------
+const PANEL = "bg-[#131316] border border-white/[0.08]";
+const SUBTLE_PANEL = "bg-white/[0.04] border border-white/[0.08]";
+
+// ---------------------------------------------------------------------
+// Reusable round icon button — used for the hamburger, attach clip,
+// close buttons, etc. so every tappable icon in the UI behaves & feels
+// the same.
+// ---------------------------------------------------------------------
+function IconButton({ label, children, className = "", ...props }) {
+    return (
+        <button
+            type="button"
+            aria-label={label}
+            className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.06] transition-colors duration-200 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent ${className}`}
+            {...props}
+        >
+            {children}
+        </button>
+    );
+}
+
+// ---------------------------------------------------------------------
+// Igris mark — an abstract, monochrome glyph standing in for the brand
+// face. Self-contained and reusable (drop it anywhere), with a soft
+// pulse so it feels alive without being busy. Swap the paths out later
+// for the final artwork.
+// ---------------------------------------------------------------------
+function IgrisMark({ className = "", size, powerOnDelay = 900, onPowerOn }) {
+    const rootRef = useRef(null);
+    const sphereRef = useRef(null);
+    const frameRef = useRef(null);
+    const particlesRef = useRef(null);
+    const eyesRef = useRef(null);
+    const eyeGlowRef = useRef(null);
+
+    const particles = useMemo(() => generateParticles(), []);
+
+    useLayoutEffect(() => {
+        const reduced = prefersReducedMotion();
+
+        const ctx = gsap.context(() => {
+            if (reduced) {
+                gsap.set(
+                    [sphereRef.current, frameRef.current, particlesRef.current, eyesRef.current, eyeGlowRef.current],
+                    { opacity: 1 }
+                );
+                gsap.set(eyeGlowRef.current, { scale: 1 });
+                onPowerOn?.();
+                return;
+            }
+
+            gsap.set(sphereRef.current, { opacity: 0 });
+            gsap.set(frameRef.current, { opacity: 0 });
+            gsap.set(particlesRef.current, { opacity: 0 });
+            gsap.set(eyesRef.current, { opacity: 0 });
+            gsap.set(eyeGlowRef.current, { opacity: 0, scale: 0.5, transformOrigin: "50% 50%" });
+
+            const tl = gsap.timeline({ delay: powerOnDelay / 1000 });
+
+            // the shell materializes first, dark and mostly still
+            tl.to(sphereRef.current, { opacity: 1, duration: 1.3, ease: "sine.out" }, 0)
+                .to(particlesRef.current, { opacity: 1, duration: 1.6, ease: "sine.out" }, 0.15)
+                .to(frameRef.current, { opacity: 1, duration: 1.0, ease: "sine.out" }, 0.35)
+                // power-on flicker, then the eyes hold steady white
+                .to(eyesRef.current, { opacity: 1, duration: 0.05 }, 1.1)
+                .to(eyesRef.current, { opacity: 0.1, duration: 0.06 }, 1.2)
+                .to(eyesRef.current, { opacity: 1, duration: 0.07 }, 1.32)
+                .to(eyesRef.current, { opacity: 0.25, duration: 0.05 }, 1.45)
+                .to(eyesRef.current, { opacity: 1, duration: 0.4, ease: "sine.out" }, 1.55)
+                .to(eyeGlowRef.current, { opacity: 1, scale: 1, duration: 0.7, ease: "sine.out" }, 1.55)
+                .call(() => onPowerOn?.(), [], 1.6)
+                // idle loops, chained in only after ignition finishes
+                .to(
+                    rootRef.current,
+                    { scale: 1.015, duration: 3.6, ease: "sine.inOut", repeat: -1, yoyo: true, transformOrigin: "50% 50%" },
+                    1.9
+                )
+                .to(eyesRef.current, { opacity: 0.55, duration: 2.2, ease: "sine.inOut", repeat: -1, yoyo: true }, 1.9)
+                .to(eyeGlowRef.current, { opacity: 0.55, duration: 2.2, ease: "sine.inOut", repeat: -1, yoyo: true }, 1.9);
+        }, rootRef);
+
+        return () => ctx.revert();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    const style = size ? { width: size, height: size } : undefined;
+
+    return (
+        <div className={`relative flex items-center justify-center select-none ${className}`} style={style}>
+            <style>{PARTICLE_STYLES}</style>
+
+            {/* ambient glow, scoped tightly to the mark, never bleeds into the page bg */}
+            <div
+                className="absolute inset-0 rounded-full pointer-events-none"
+                style={{
+                    background: "radial-gradient(circle, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0) 65%)",
+                    filter: "blur(8px)",
+                }}
+            />
+
+            <svg ref={rootRef} viewBox="0 0 200 200" className="relative w-full h-full overflow-visible">
+                <defs>
+                    <radialGradient id="igris-core" cx="50%" cy="48%" r="55%">
+                        <stop offset="0%" stopColor="rgba(255,255,255,0.05)" />
+                        <stop offset="70%" stopColor="rgba(255,255,255,0.015)" />
+                        <stop offset="100%" stopColor="rgba(255,255,255,0)" />
+                    </radialGradient>
+                    <filter id="igris-soft-blur" x="-60%" y="-60%" width="220%" height="220%">
+                        <feGaussianBlur stdDeviation="2.2" />
+                    </filter>
+                    <filter id="igris-wide-blur" x="-120%" y="-120%" width="340%" height="340%">
+                        <feGaussianBlur stdDeviation="7" />
+                    </filter>
+                    <filter id="igris-rim-blur" x="-30%" y="-30%" width="160%" height="160%">
+                        <feGaussianBlur stdDeviation="3" />
+                    </filter>
+                </defs>
+
+                {/* ---- glass energy sphere ---- */}
+                <g ref={sphereRef}>
+                    <circle cx="100" cy="100" r="92" fill="url(#igris-core)" />
+                    <circle cx="100" cy="100" r="92" fill="none" stroke="rgba(255,255,255,0.16)" strokeWidth="1" />
+                    <circle
+                        cx="100"
+                        cy="100"
+                        r="93"
+                        fill="none"
+                        stroke="rgba(255,255,255,0.28)"
+                        strokeWidth="2.5"
+                        filter="url(#igris-rim-blur)"
+                    />
+                    {/* faint refraction arcs */}
+                    <path d="M42,52 A98,98 0 0 1 42,148" fill="none" stroke="rgba(255,255,255,0.10)" strokeWidth="0.75" />
+                    <path d="M158,52 A98,98 0 0 0 158,148" fill="none" stroke="rgba(255,255,255,0.10)" strokeWidth="0.75" />
+                    {/* cracked-glass energy network reaching toward the rim */}
+                    {CRACK_LINES.map((l, i) => (
+                        <g key={i}>
+                            <line x1={l[0]} y1={l[1]} x2={l[2]} y2={l[3]} stroke="rgba(255,255,255,0.14)" strokeWidth="0.6" />
+                            <circle cx={l[2]} cy={l[3]} r="1.1" fill="rgba(255,255,255,0.4)" />
+                        </g>
+                    ))}
+                </g>
+
+                {/* ---- drifting particle field, crown-heavy, thinning toward the jaw ---- */}
+                <g ref={particlesRef}>
+                    {particles.map((p) => (
+                        <circle
+                            key={p.id}
+                            cx={p.x}
+                            cy={p.y}
+                            r={p.r}
+                            fill="#fff"
+                            className={p.drift ? "igris-particle igris-particle-drift" : "igris-particle"}
+                            style={{ "--igris-o": p.o, animationDelay: `${p.delay}s`, animationDuration: `${p.dur}s`, opacity: p.o }}
+                        />
+                    ))}
+                </g>
+
+                {/* ---- helmet frame ---- */}
+                <g ref={frameRef}>
+                    <path
+                        d={HELMET_PATH}
+                        fill="rgba(10,10,12,0.55)"
+                        stroke="rgba(255,255,255,0.34)"
+                        strokeWidth="1.4"
+                        strokeLinejoin="round"
+                    />
+                    {/* central ridge blade, broken around the brow accent */}
+                    <path d="M100,10 L100,86" stroke="rgba(255,255,255,0.22)" strokeWidth="1" />
+                    <path d="M100,110 L100,192" stroke="rgba(255,255,255,0.22)" strokeWidth="1" />
+                    <path
+                        d="M100,88 L104,94 L100,100 L96,94 Z"
+                        fill="rgba(255,255,255,0.12)"
+                        stroke="rgba(255,255,255,0.3)"
+                        strokeWidth="0.6"
+                    />
+                    {/* facet seams across the cheek plates */}
+                    <path d="M108,34 L140,100" stroke="rgba(255,255,255,0.09)" strokeWidth="0.75" />
+                    <path d="M92,34 L60,100" stroke="rgba(255,255,255,0.09)" strokeWidth="0.75" />
+                    <path d="M152,78 L122,148" stroke="rgba(255,255,255,0.09)" strokeWidth="0.75" />
+                    <path d="M48,78 L78,148" stroke="rgba(255,255,255,0.09)" strokeWidth="0.75" />
+                </g>
+
+                {/* ---- eyes: dark until ignition, then bright white with bloom ---- */}
+                <ellipse
+                    ref={eyeGlowRef}
+                    cx="100"
+                    cy="98"
+                    rx="66"
+                    ry="26"
+                    fill="rgba(255,255,255,0.35)"
+                    filter="url(#igris-wide-blur)"
+                />
+                <g ref={eyesRef}>
+                    <path d={EYE_LEFT} fill="rgba(255,255,255,0.95)" filter="url(#igris-soft-blur)" opacity="0.6" />
+                    <path d={EYE_RIGHT} fill="rgba(255,255,255,0.95)" filter="url(#igris-soft-blur)" opacity="0.6" />
+                    <path d={EYE_LEFT} fill="#ffffff" />
+                    <path d={EYE_RIGHT} fill="#ffffff" />
+                </g>
+            </svg>
+        </div>
+    );
+}
+
+const HELMET_PATH =
+    "M100,10 L108,34 L128,46 L152,78 L140,100 L146,118 L122,148 L110,172 L100,192 " +
+    "L90,172 L78,148 L54,118 L60,100 L48,78 L72,46 L92,34 Z";
+
+const EYE_LEFT = "M58,100 L80,93 L94,97 L80,104 Z";
+const EYE_RIGHT = "M142,100 L120,93 L106,97 L120,104 Z";
+
+const CRACK_LINES = [
+    [152, 78, 178, 68],
+    [48, 78, 22, 68],
+    [140, 100, 172, 106],
+    [60, 100, 28, 106],
+    [122, 148, 144, 168],
+    [78, 148, 56, 168],
+];
+
+function generateParticles(count = 50) {
+    // deterministic pseudo-random so the field looks identical on every render
+    let seed = 42;
+    const rand = () => {
+        seed = (seed * 16807) % 2147483647;
+        return (seed % 10000) / 10000;
+    };
+
+    const particles = [];
+    for (let i = 0; i < count; i++) {
+        const heightBias = Math.pow(rand(), 2.2); // skews values toward the crown
+        const y = 4 + heightBias * 172;
+        const spread = 28 + heightBias * 58;
+        const x = 100 + (rand() - 0.5) * spread * 2;
+        particles.push({
+            id: i,
+            x,
+            y,
+            r: 0.35 + rand() * 1.05,
+            o: 0.12 + (1 - heightBias) * 0.55,
+            delay: rand() * 5,
+            dur: 3 + rand() * 3,
+            drift: rand() < 0.22 && heightBias < 0.4,
+        });
+    }
+    return particles;
+}
+
+function prefersReducedMotion() {
+    if (typeof window === "undefined") return false;
+    return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+const PARTICLE_STYLES = `
+  .igris-particle { animation: igris-twinkle 4s ease-in-out infinite; }
+  .igris-particle-drift { animation: igris-drift 6s ease-in infinite; }
+  @keyframes igris-twinkle {
+    0%, 100% { opacity: var(--igris-o, 0.3); }
+    50% { opacity: calc(var(--igris-o, 0.3) * 0.25); }
+  }
+  @keyframes igris-drift {
+    0% { transform: translateY(0); opacity: 0; }
+    12% { opacity: var(--igris-o, 0.4); }
+    75% { opacity: var(--igris-o, 0.4); }
+    100% { transform: translateY(-16px); opacity: 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .igris-particle, .igris-particle-drift { animation: none; opacity: var(--igris-o, 0.3); }
+  }
+`;
+
 // ---------------------------------------------------------------------
 // Sidebar — search box + chat list. Purely presentational; animation
 // (open/close) is driven by the parent via the refs it's given.
+// History stays on the RIGHT, unchanged.
 // ---------------------------------------------------------------------
 function Sidebar({ sidebarRef, backdropRef, onClose, chats, onSelectChat, newConversation }) {
     const [query, setQuery] = useState("");
@@ -63,31 +346,26 @@ function Sidebar({ sidebarRef, backdropRef, onClose, chats, onSelectChat, newCon
             <div
                 ref={backdropRef}
                 onClick={onClose}
-                className="fixed inset-0 bg-black/60 z-40"
+                className="fixed inset-0 bg-black/70 z-40"
                 style={{ opacity: 0, pointerEvents: "none" }}
             />
 
             {/* panel */}
             <div
                 ref={sidebarRef}
-                className="fixed top-0 right-0 h-full w-[280px] max-w-[80vw] bg-[#141416] border-l border-white/10 z-50 flex flex-col will-change-transform"
+                className="fixed top-0 right-0 h-full w-[280px] max-w-[82vw] bg-[#101012] border-l border-white/[0.08] z-50 flex flex-col will-change-transform"
             >
                 {/* header */}
-                <div className="flex items-center justify-between px-4 h-14 border-b border-white/10 shrink-0">
+                <div className="flex items-center justify-between px-4 h-14 border-b border-white/[0.08] shrink-0">
                     <span className="text-zinc-200 text-sm font-medium">Chats</span>
-                    <button
-                        type="button"
-                        onClick={onClose}
-                        aria-label="Close sidebar"
-                        className="w-8 h-8 rounded-full flex items-center justify-center text-zinc-400 hover:text-zinc-200 hover:bg-white/5 transition-colors"
-                    >
+                    <IconButton label="Close sidebar" onClick={onClose}>
                         <X className="w-[18px] h-[18px]" />
-                    </button>
+                    </IconButton>
                 </div>
 
                 {/* search history */}
                 <div className="px-3 pt-3 shrink-0">
-                    <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-xl px-3 py-2 focus-within:border-white/20 transition-colors">
+                    <div className="flex items-center gap-2 bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-2 focus-within:border-white/20 transition-colors">
                         <Search className="w-4 h-4 text-zinc-500 shrink-0" />
                         <input
                             value={query}
@@ -96,8 +374,10 @@ function Sidebar({ sidebarRef, backdropRef, onClose, chats, onSelectChat, newCon
                             className="w-full bg-transparent text-sm text-zinc-200 placeholder-zinc-500 outline-none"
                         />
                     </div>
-                    <button className="w-full flex items-center justify-center mt-3 bg-white/6 rounded-2xl gap-2 px-3 py-2.5 text-sm text-zinc-200 hover:bg-white/8 transition-colors"
-                        onClick={newConversation}>
+                    <button
+                        className="w-full flex items-center justify-center mt-3 bg-white/[0.06] rounded-2xl gap-2 px-3 py-2.5 text-sm text-zinc-200 hover:bg-white/[0.09] transition-colors"
+                        onClick={newConversation}
+                    >
                         Start New Conversation
                     </button>
                 </div>
@@ -110,7 +390,7 @@ function Sidebar({ sidebarRef, backdropRef, onClose, chats, onSelectChat, newCon
                                 key={chat._id}
                                 type="button"
                                 onClick={() => onSelectChat?.(chat)}
-                                className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left text-sm text-zinc-300 hover:bg-white/5 hover:text-zinc-100 transition-colors"
+                                className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left text-sm text-zinc-300 hover:bg-white/[0.05] hover:text-zinc-100 transition-colors"
                             >
                                 <MessageSquare className="w-4 h-4 text-zinc-500 shrink-0" />
                                 <span className="truncate">{chat.title}</span>
@@ -127,8 +407,159 @@ function Sidebar({ sidebarRef, backdropRef, onClose, chats, onSelectChat, newCon
     );
 }
 
+// ---------------------------------------------------------------------
+// Composer — the message input pill (attachment chip, textarea, attach
+// menu, send button). Pulled out on its own so it's reusable and the
+// main component isn't one giant render.
+// ---------------------------------------------------------------------
+function Composer({
+    text,
+    setText,
+    attachment,
+    onRemoveAttachment,
+    onKeyDown,
+    onSend,
+    canSend,
+    isLoading,
+    formatSize,
+    menuOpen,
+    setMenuOpen,
+    menuRef,
+    clipRef,
+    textareaRef,
+    imageInputRef,
+    pdfInputRef,
+    onPickFile,
+}) {
+    return (
+        <div className={`w-full ${PANEL} rounded-[26px] shadow-2xl shadow-black/40 px-4 pt-4 pb-3 relative transition-colors duration-200 focus-within:border-white/20`}>
+            {/* attached file chip */}
+            {attachment && (
+                <div className={`mb-3 inline-flex items-center gap-2 ${SUBTLE_PANEL} rounded-2xl pl-2 pr-3 py-2 max-w-full`}>
+                    <div className="w-9 h-9 rounded-xl overflow-hidden bg-white/10 flex items-center justify-center shrink-0">
+                        {attachment.kind === "image" ? (
+                            <img
+                                src={attachment.preview}
+                                alt={attachment.name}
+                                className="w-full h-full object-cover"
+                            />
+                        ) : (
+                            <FileText className="w-4 h-4 text-zinc-300" />
+                        )}
+                    </div>
+                    <div className="min-w-0">
+                        <p className="text-sm text-zinc-200 truncate max-w-[180px] sm:max-w-[220px]">{attachment.name}</p>
+                        <p className="text-xs text-zinc-500">{formatSize(attachment.size)}</p>
+                    </div>
+                    <IconButton
+                        label="Remove attachment"
+                        onClick={onRemoveAttachment}
+                        className="w-6 h-6 sm:w-6 sm:h-6 ml-1 shrink-0"
+                    >
+                        <X className="w-4 h-4" />
+                    </IconButton>
+                </div>
+            )}
+
+            {/* text input */}
+            <textarea
+                ref={textareaRef}
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                onKeyDown={onKeyDown}
+                rows={1}
+                placeholder="Ask something..."
+                disabled={isLoading}
+                className="w-full resize-none bg-transparent text-zinc-100 placeholder-zinc-500 text-base sm:text-[15px] leading-6 outline-none max-h-[200px] disabled:opacity-60"
+            />
+
+            {/* bottom row: attach + send */}
+            <div className="flex items-center justify-between mt-2">
+                <div className="relative">
+                    <IconButton
+                        label="Attach a file"
+                        onClick={() => setMenuOpen((o) => !o)}
+                        disabled={isLoading}
+                    >
+                        <span ref={clipRef} className="flex items-center justify-center">
+                            <Paperclip className="w-[18px] h-[18px]" />
+                        </span>
+                    </IconButton>
+
+                    {menuOpen && (
+                        <div
+                            ref={menuRef}
+                            className="absolute bottom-11 left-0 w-44 bg-[#1a1a1e] border border-white/[0.08] rounded-2xl shadow-2xl overflow-hidden py-1 z-10"
+                            style={{ animation: "menuIn 160ms ease" }}
+                        >
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    imageInputRef.current?.click();
+                                    setMenuOpen(false);
+                                }}
+                                className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-zinc-200 hover:bg-white/[0.05] transition-colors"
+                            >
+                                <ImageIcon className="w-4 h-4 text-zinc-400" />
+                                Image
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    pdfInputRef.current?.click();
+                                    setMenuOpen(false);
+                                }}
+                                className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-zinc-200 hover:bg-white/[0.05] transition-colors"
+                            >
+                                <FileText className="w-4 h-4 text-zinc-400" />
+                                PDF
+                            </button>
+                        </div>
+                    )}
+                </div>
+
+                <button
+                    type="button"
+                    onClick={onSend}
+                    disabled={!canSend || isLoading}
+                    aria-label="Send message"
+                    className={`w-9 h-9 rounded-full flex items-center justify-center transition-all duration-200 ${canSend && !isLoading
+                        ? "bg-zinc-100 text-zinc-900 hover:bg-white"
+                        : "bg-white/10 text-zinc-600 cursor-not-allowed"
+                        }`}
+                >
+                    <ArrowUp className="w-[18px] h-[18px]" strokeWidth={2.5} />
+                </button>
+            </div>
+
+            {/* hidden file inputs */}
+            <input
+                ref={imageInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                    onPickFile(e.target.files?.[0], "image");
+                    e.target.value = "";
+                }}
+            />
+            <input
+                ref={pdfInputRef}
+                type="file"
+                accept="application/pdf"
+                className="hidden"
+                onChange={(e) => {
+                    onPickFile(e.target.files?.[0], "pdf");
+                    e.target.value = "";
+                }}
+            />
+        </div>
+    );
+}
+
 export default function AskIgris({ onSend } = {}) {
     // conversation state
+    const IGRIS_API_URL = `${apiUrl}/api/askigris`;
     const [messages, setMessages] = useState([]); // { id, role, text, attachment?, isError? }
     const [text, setText] = useState("");
     const [attachment, setAttachment] = useState(null); // { name, size, kind: 'image' | 'pdf', preview? }
@@ -153,40 +584,41 @@ export default function AskIgris({ onSend } = {}) {
     const currentUserId = currentUser?.id || currentUser?._id || '';
     console.log('Current user ID:', currentUserId);
 
-    // const getIgrisHistory = async () => {
-    //     const token = localStorage.getItem("token");
-    //     if (!token || !currentUserId) return;
-    //     console.log('Fetching token:', token);
-    //     try {
-    //         const response = await axios.get(`${API_URL}/history/${currentUserId}`, {
-    //             withCredentials: true,
-    //             headers: getAuthHeaders(),
-    //         });
-    //         console.log('Fetching Igris history for user:', currentUserId);
-    //         const data = response.data;
-    //         console.log("Igris history data:", data);
-    //         setIgrisHistory(data);
-    //     } catch (error) {
-    //         if (error.response?.status === 401) {
-    //             localStorage.removeItem("token");
-    //             localStorage.removeItem("user");
-    //             window.dispatchEvent(new Event("auth:user-updated"));
-    //             return;
-    //         }
-    //         console.error("Error fetching Igris history:", error);
-    //     }
-    // };
+    const getIgrisHistory = async () => {
+        const token = localStorage.getItem("token");
+        if (!token || !currentUserId) return;
+        // console.log('Fetching token:', token);
+        console.log('Fetching Igris history for user ID:', currentUserId);
+        try {
+            const response = await axios.get(`${IGRIS_API_URL}/history/${currentUserId}`, {
+                withCredentials: true,
+                headers: getAuthHeaders(),
+            });
+            console.log('Fetching Igris history for user:', currentUserId);
+            const data = response.data;
+            console.log("Igris history data:", data);
+            setIgrisHistory(data);
+        } catch (error) {
+            if (error.response?.status === 401) {
+                localStorage.removeItem("token");
+                localStorage.removeItem("user");
+                window.dispatchEvent(new Event("auth:user-updated"));
+                return;
+            }
+            console.error("Error fetching Igris history:", error);
+        }
+    };
 
-    // useEffect(() => {
-    //     getIgrisHistory();
-    // }, []);
+    useEffect(() => {
+        getIgrisHistory();
+    }, []);
 
     const openIgrisChat = async (chat) => {
         if (!chat?._id) return;
 
         console.log("IgrisHistory id:", chat._id);
         try {
-            const response = await axios.get(`${API_URL}/history/${currentUserId}/${chat._id}`, {
+            const response = await axios.get(`${IGRIS_API_URL}/history/${currentUserId}/${chat._id}`, {
                 headers: getAuthHeaders(),
             });
             const history = response.data?.chatHistory || [];
@@ -213,8 +645,8 @@ export default function AskIgris({ onSend } = {}) {
     useEffect(() => {
         const prevBody = document.body.style.backgroundColor;
         const prevHtml = document.documentElement.style.backgroundColor;
-        document.body.style.backgroundColor = "#0b0b0d";
-        document.documentElement.style.backgroundColor = "#0b0b0d";
+        document.body.style.backgroundColor = "#000000";
+        document.documentElement.style.backgroundColor = "#000000";
         return () => {
             document.body.style.backgroundColor = prevBody;
             document.documentElement.style.backgroundColor = prevHtml;
@@ -276,6 +708,33 @@ export default function AskIgris({ onSend } = {}) {
         });
     }, [hasStarted]);
 
+    // ---- opening animation: one quiet, orchestrated reveal on first paint.
+    // Header -> mark/greeting -> composer, staggered. Runs once only.
+    const introPlayedRef = useRef(false);
+    const headerRef = useRef(null);
+    const heroRef = useRef(null);
+
+    useLayoutEffect(() => {
+        if (introPlayedRef.current) return;
+        introPlayedRef.current = true;
+        if (prefersReducedMotion()) return;
+
+        const targets = [headerRef.current, heroRef.current, composerWrapRef.current].filter(Boolean);
+        if (!targets.length) return;
+
+        const ctx = gsap.context(() => {
+            gsap.set(targets, { opacity: 0, y: 14 });
+            gsap.to(targets, {
+                opacity: 1,
+                y: 0,
+                duration: 0.6,
+                ease: "power3.out",
+                stagger: 0.12,
+            });
+        });
+        return () => ctx.revert();
+    }, []);
+
     const formatSize = (bytes) => {
         if (bytes < 1024) return `${bytes} B`;
         if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
@@ -302,22 +761,16 @@ export default function AskIgris({ onSend } = {}) {
 
     const canSend = text.trim().length > 0 || !!attachment;
 
+    // ===================== REACT FRONTEND: handleSend =====================
     const handleSend = useCallback(async () => {
         const question = text.trim();
         if (!question && !attachment) return;
         if (isLoading) return;
 
-        // capture the composer's current position right before the layout
-        // shifts (idle -> chat), so the FLIP effect can animate the delta
         if (!hasStarted && composerWrapRef.current) {
             prevRectRef.current = composerWrapRef.current.getBoundingClientRect();
         }
 
-        // Give the outgoing message its OWN blob URL. removeAttachment() below
-        // revokes the composer's preview URL, which would otherwise break the
-        // image shown in the chat bubble (blob:... ERR_FILE_NOT_FOUND).
-        // NOTE: "previewUrl" must match whatever field your attachment object
-        // uses for its preview (e.g. url / preview / src).
         const outgoingAttachment = attachment
             ? {
                 ...attachment,
@@ -360,16 +813,13 @@ export default function AskIgris({ onSend } = {}) {
 
                 const token = localStorage.getItem("token");
 
-                // axios already parses JSON into `.data` and throws on non-2xx,
-                // so there is no .ok / .json() here. Don't set Content-Type:
-                // the browser adds the multipart boundary itself.
-                const res = await axios.post(`${API_URL}/describe_image`, requestBody, {
+                const res = await axios.post(`${IGRIS_API_URL}/describe_image`, requestBody, {
                     headers: { Authorization: `Bearer ${token}` },
                 });
                 data = res.data;
             } else {
                 // ---- text branch: JSON via fetch ----
-                const res = await fetch(`${API_URL}/askPrompt`, {
+                const res = await fetch(`${IGRIS_API_URL}/askPrompt`, {
                     method: "POST",
                     credentials: "include",
                     headers: {
@@ -378,6 +828,8 @@ export default function AskIgris({ onSend } = {}) {
                     },
                     body: JSON.stringify({
                         question,
+                        title: question.slice(0, 60) || "New Conversation",
+                        conversationId: activeConversationId, // <-- the fix: continue same chat
                         source: null,
                     }),
                 });
@@ -427,7 +879,7 @@ export default function AskIgris({ onSend } = {}) {
         }
     };
 
-    // ---- NEW: sidebar state + GSAP open/close animation ----
+    // ---- sidebar state + GSAP open/close animation (right side, unchanged) ----
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const sidebarRef = useRef(null);
     const backdropRef = useRef(null);
@@ -475,13 +927,10 @@ export default function AskIgris({ onSend } = {}) {
         window.addEventListener("keydown", onKey);
         return () => window.removeEventListener("keydown", onKey);
     }, []);
+
     return (
-        <div className="relative w-full h-screen min-h-screen bg-[#0b0b0d] flex flex-col overflow-hidden">
+        <div className="relative w-full h-screen min-h-screen bg-black flex flex-col overflow-hidden">
             <style>{`
-                @keyframes bubbleIn {
-                    from { opacity: 0; transform: translateY(8px); }
-                    to { opacity: 1; transform: translateY(0); }
-                }
                 @keyframes dotBounce {
                     0%, 80%, 100% { transform: translateY(0); opacity: .35; }
                     40% { transform: translateY(-4px); opacity: 1; }
@@ -495,22 +944,25 @@ export default function AskIgris({ onSend } = {}) {
                     from { opacity: 0; transform: translateY(4px) scale(0.98); }
                     to { opacity: 1; transform: translateY(0) scale(1); }
                 }
+                @keyframes menuIn {
+                    from { opacity: 0; transform: translateY(6px); }
+                    to { opacity: 1; transform: translateY(0); }
+                }
                 @media (prefers-reduced-motion: reduce) {
                     * { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
                 }
             `}</style>
 
-            {/* NEW: sidebar open/close button, always reachable top-right */}
-            <button
-                type="button"
+            {/* sidebar open/close button — always reachable, top-right */}
+            <IconButton
+                label="Toggle sidebar"
                 onClick={() => setSidebarOpen((o) => !o)}
-                aria-label="Toggle sidebar"
-                className="fixed top-4 right-4 z-50 w-9 h-9 rounded-full bg-[#17171a] border border-white/10 flex items-center justify-center text-zinc-300 hover:bg-white/5 hover:text-zinc-100 transition-colors"
+                className="fixed top-3 right-3 sm:top-4 sm:right-4 z-50 w-9 h-9 bg-[#131316] border border-white/[0.08] hover:bg-white/[0.06]"
             >
                 <Menu className="w-[18px] h-[18px]" />
-            </button>
+            </IconButton>
 
-            {/* NEW: sidebar */}
+            {/* sidebar — history, kept on the right */}
             <Sidebar
                 sidebarRef={sidebarRef}
                 backdropRef={backdropRef}
@@ -526,14 +978,25 @@ export default function AskIgris({ onSend } = {}) {
                     setSidebarOpen(false);
                 }}
             />
-            <div className="text-2xl font-bold text-zinc-200 mt-3 mb-6">
-                <h1 className="ml-6 text-left">Ask Igris</h1>
-                <h1 className="text-center">Title</h1>
-            </div>
+
+            {/* top bar */}
+            <header
+                ref={headerRef}
+                className="relative z-10 shrink-0 flex items-center h-14 sm:h-16 px-4 sm:px-6 pr-14 sm:pr-16 border-b border-white/[0.06]"
+            >
+                <h1 className="flex items-center gap-2 text-sm sm:text-base font-semibold tracking-tight text-zinc-200 shrink-0">
+                    <span className="w-1.5 h-1.5 rounded-full bg-zinc-300/70" />
+                    Ask Igris
+                </h1>
+                <h1 className="flex-1 text-center text-sm sm:text-base font-medium text-zinc-500 truncate px-3">
+                    Title
+                </h1>
+            </header>
+
             {/* message list */}
             {hasStarted && (
                 <div className="flex-1 overflow-y-auto scroll-smooth">
-                    <div className="max-w-2xl mt-25 mx-auto w-full px-4 sm:px-6 pt-8 pb-4 flex flex-col gap-5">
+                    <div className="max-w-2xl mx-auto w-full px-4 sm:px-6 pt-6 sm:pt-8 pb-4 flex flex-col gap-4 sm:gap-5">
                         {messages.map((m) => (
                             <MessageBubble key={m.id} message={m} formatSize={formatSize} />
                         ))}
@@ -546,139 +1009,37 @@ export default function AskIgris({ onSend } = {}) {
             <div className={`w-full flex ${hasStarted ? "" : "flex-1"} items-center justify-center px-4`}>
                 <div
                     ref={composerWrapRef}
-                    className="w-full max-w-xl flex flex-col items-stretch gap-3 pt-2"
+                    className="w-full max-w-[min(94vw,34rem)] flex flex-col items-stretch gap-4 pt-2"
                     style={{ paddingBottom: hasStarted ? "max(1rem, env(safe-area-inset-bottom))" : "0.5rem" }}
                 >
                     {!hasStarted && (
-                        <h1 className="text-center text-zinc-200 text-2xl sm:text-3xl font-medium tracking-tight mb-1 select-none">
-                            {greeting}
-                        </h1>
+                        <div ref={heroRef} className="flex flex-col items-center gap-5 mb-1">
+                            <IgrisMark className="w-[clamp(5rem,20vw,8rem)] h-[clamp(5rem,20vw,8rem)]" />
+                            <h2 className="text-center text-zinc-100 font-medium tracking-tight text-[clamp(1.25rem,3.4vw,1.875rem)] select-none px-2">
+                                {greeting}
+                            </h2>
+                        </div>
                     )}
 
-                    <div className="w-full bg-[#17171a] border border-white/10 focus-within:border-white/20 rounded-[28px] shadow-2xl px-4 pt-4 pb-3 relative transition-colors duration-200">
-                        {/* attached file chip */}
-                        {attachment && (
-                            <div className="mb-3 inline-flex items-center gap-2 bg-white/5 border border-white/10 rounded-2xl pl-2 pr-3 py-2 max-w-full">
-                                <div className="w-9 h-9 rounded-xl overflow-hidden bg-white/10 flex items-center justify-center shrink-0">
-                                    {attachment.kind === "image" ? (
-                                        <img
-                                            src={attachment.preview}
-                                            alt={attachment.name}
-                                            className="w-full h-full object-cover"
-                                        />
-                                    ) : (
-                                        <FileText className="w-4 h-4 text-zinc-300" />
-                                    )}
-                                </div>
-                                <div className="min-w-0">
-                                    <p className="text-sm text-zinc-200 truncate max-w-[220px]">{attachment.name}</p>
-                                    <p className="text-xs text-zinc-500">{formatSize(attachment.size)}</p>
-                                </div>
-                                <button
-                                    type="button"
-                                    onClick={removeAttachment}
-                                    aria-label="Remove attachment"
-                                    className="ml-1 text-zinc-500 hover:text-zinc-200 transition-colors shrink-0"
-                                >
-                                    <X className="w-4 h-4" />
-                                </button>
-                            </div>
-                        )}
-
-                        {/* text input */}
-                        <textarea
-                            ref={textareaRef}
-                            value={text}
-                            onChange={(e) => setText(e.target.value)}
-                            onKeyDown={handleKeyDown}
-                            rows={1}
-                            placeholder="Ask something..."
-                            disabled={isLoading}
-                            className="w-full resize-none bg-transparent text-zinc-100 placeholder-zinc-500 text-[15px] leading-6 outline-none max-h-[200px] disabled:opacity-60"
-                        />
-
-                        {/* bottom row: attach + send */}
-                        <div className="flex items-center justify-between mt-2">
-                            <div className="relative">
-                                <button
-                                    ref={clipRef}
-                                    type="button"
-                                    onClick={() => setMenuOpen((o) => !o)}
-                                    aria-label="Attach a file"
-                                    disabled={isLoading}
-                                    className="w-8 h-8 rounded-full flex items-center justify-center text-zinc-400 hover:text-zinc-200 hover:bg-white/5 transition-colors disabled:opacity-50"
-                                >
-                                    <Paperclip className="w-[18px] h-[18px]" />
-                                </button>
-
-                                {menuOpen && (
-                                    <div
-                                        ref={menuRef}
-                                        className="absolute bottom-11 left-0 w-44 bg-[#1f1f23] border border-white/10 rounded-2xl shadow-2xl overflow-hidden py-1 z-10"
-                                        style={{ animation: "bubbleIn 160ms ease" }}
-                                    >
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                imageInputRef.current?.click();
-                                                setMenuOpen(false);
-                                            }}
-                                            className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-zinc-200 hover:bg-white/5 transition-colors"
-                                        >
-                                            <ImageIcon className="w-4 h-4 text-zinc-400" />
-                                            Image
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                pdfInputRef.current?.click();
-                                                setMenuOpen(false);
-                                            }}
-                                            className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-zinc-200 hover:bg-white/5 transition-colors"
-                                        >
-                                            <FileText className="w-4 h-4 text-zinc-400" />
-                                            PDF
-                                        </button>
-                                    </div>
-                                )}
-                            </div>
-
-                            <button
-                                type="button"
-                                onClick={handleSend}
-                                disabled={!canSend || isLoading}
-                                aria-label="Send message"
-                                className={`w-9 h-9 rounded-full flex items-center justify-center transition-all duration-200 ${canSend && !isLoading
-                                    ? "bg-zinc-100 text-zinc-900 hover:bg-white"
-                                    : "bg-white/10 text-zinc-600 cursor-not-allowed"
-                                    }`}
-                            >
-                                <ArrowUp className="w-[18px] h-[18px]" strokeWidth={2.5} />
-                            </button>
-                        </div>
-
-                        {/* hidden file inputs */}
-                        <input
-                            ref={imageInputRef}
-                            type="file"
-                            accept="image/*"
-                            className="hidden"
-                            onChange={(e) => {
-                                handleFile(e.target.files?.[0], "image");
-                                e.target.value = "";
-                            }}
-                        />
-                        <input
-                            ref={pdfInputRef}
-                            type="file"
-                            accept="application/pdf"
-                            className="hidden"
-                            onChange={(e) => {
-                                handleFile(e.target.files?.[0], "pdf");
-                                e.target.value = "";
-                            }}
-                        />
-                    </div>
+                    <Composer
+                        text={text}
+                        setText={setText}
+                        attachment={attachment}
+                        onRemoveAttachment={removeAttachment}
+                        onKeyDown={handleKeyDown}
+                        onSend={handleSend}
+                        canSend={canSend}
+                        isLoading={isLoading}
+                        formatSize={formatSize}
+                        menuOpen={menuOpen}
+                        setMenuOpen={setMenuOpen}
+                        menuRef={menuRef}
+                        clipRef={clipRef}
+                        textareaRef={textareaRef}
+                        imageInputRef={imageInputRef}
+                        pdfInputRef={pdfInputRef}
+                        onPickFile={handleFile}
+                    />
                 </div>
             </div>
 
@@ -686,7 +1047,7 @@ export default function AskIgris({ onSend } = {}) {
             {isLoading && (
                 <div className="pointer-events-none fixed inset-0 flex items-center justify-center px-4">
                     <div
-                        className="bg-[#17171a]/95 border border-white/10 backdrop-blur-sm rounded-2xl px-5 py-3.5 shadow-2xl flex items-center gap-2.5"
+                        className="bg-[#131316]/95 border border-white/[0.08] backdrop-blur-sm rounded-2xl px-5 py-3.5 shadow-2xl flex items-center gap-2.5"
                         style={{ animation: "overlayIn 220ms cubic-bezier(0.22, 1, 0.36, 1)" }}
                     >
                         <span className="text-lg" style={{ display: "inline-block", animation: "waveHand 1.1s ease-in-out infinite" }}>
@@ -735,6 +1096,34 @@ function MessageText({ text }) {
 function MessageBubble({ message, formatSize }) {
     const isUser = message.role === "user";
     const [copied, setCopied] = useState(false);
+    const bubbleRef = useRef(null);
+
+    // chat animation — new bubbles animate in once on mount. Sent (user)
+    // messages settle in from the bottom-right; received (assistant)
+    // messages settle in from slightly lower with a soft pop, so sending
+    // and receiving read as distinct little moments.
+    useLayoutEffect(() => {
+        if (!bubbleRef.current || prefersReducedMotion()) return;
+        const ctx = gsap.context(() => {
+            gsap.fromTo(
+                bubbleRef.current,
+                {
+                    opacity: 0,
+                    y: isUser ? 10 : 16,
+                    scale: isUser ? 0.98 : 0.96,
+                },
+                {
+                    opacity: 1,
+                    y: 0,
+                    scale: 1,
+                    duration: isUser ? 0.35 : 0.45,
+                    ease: "power3.out",
+                }
+            );
+        });
+        return () => ctx.revert();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const handleCopy = async () => {
         if (!message.text) return;
@@ -749,16 +1138,13 @@ function MessageBubble({ message, formatSize }) {
     };
 
     return (
-        <div
-            className={`flex ${isUser ? "justify-end" : "justify-start"}`}
-            style={{ animation: "bubbleIn 320ms cubic-bezier(0.22, 1, 0.36, 1)" }}
-        >
+        <div ref={bubbleRef} className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
             <div
-                className={`group relative max-w-[85%] sm:max-w-[75%] rounded-2xl px-4 py-2.5 text-[15px] leading-6 whitespace-pre-wrap break-words ${isUser
+                className={`group relative max-w-[88%] sm:max-w-[78%] md:max-w-[70%] rounded-2xl px-4 py-2.5 text-[15px] leading-6 whitespace-pre-wrap break-words ${isUser
                     ? "bg-zinc-100 text-zinc-900 rounded-br-md"
                     : message.isError
                         ? "bg-red-950/40 text-red-300 border border-red-900/40 rounded-bl-md"
-                        : "bg-[#17171a] text-zinc-100 border border-white/5 rounded-bl-md"
+                        : "bg-[#131316] text-zinc-100 border border-white/[0.06] rounded-bl-md"
                     }`}
             >
                 {message.attachment && (

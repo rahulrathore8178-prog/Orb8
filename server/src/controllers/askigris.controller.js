@@ -5,73 +5,59 @@ const User = require('../models/user.model');
 
 // PYTHON SCRIPT EXECUTION
 
-const runPython = (data) => {
-    return new Promise((resolve, reject) => {
-        const scriptPath = path.resolve(__dirname, '../../RAG/server.py');
-        const pythonExecutable = process.env.PYTHON_EXECUTABLE || 'python';
+const PY_URL = process.env.PY_URL || "http://localhost:8000";
 
-        const pythonProcess = spawn(pythonExecutable, [scriptPath], {
-            cwd: path.dirname(scriptPath),
-            windowsHide: true,
-        });
-
-        let output = '';
-        let errorOutput = '';
-
-        pythonProcess.stdout.on('data', (data) => {
-            output += data.toString();
-        });
-
-        pythonProcess.stderr.on('data', (data) => {
-            errorOutput += data.toString();
-        });
-
-        pythonProcess.on('error', (error) => {
-            reject(new Error(`Failed to start Python: ${error.message}`));
-        });
-
-        pythonProcess.on('close', (code) => {
-            if (code !== 0) {
-                const error = new Error(`Python script exited with code ${code}: ${errorOutput}`);
-                const statusMatch = errorOutput.match(/HTTPException:\s+(\d+):/);
-                error.statusCode = statusMatch ? Number(statusMatch[1]) : 500;
-                return reject(error);
-            }
-            try {
-                resolve(JSON.parse(output));
-            } catch (error) {
-                reject(new Error(`Failed to parse Python output: ${error.message}`));
-            }
-        });
-
-        pythonProcess.stdin.write(JSON.stringify(data));
-        pythonProcess.stdin.end();
+// ---------- 1. Helper: call the Python server over HTTP ----------
+const callPython = async (path, { json, form, timeoutMs = 120000 } = {}) => {
+    const res = await fetch(`${PY_URL}${path}`, {
+        method: "POST",
+        // for FormData, do NOT set Content-Type; fetch adds the multipart boundary
+        headers: json ? { "Content-Type": "application/json" } : undefined,
+        body: json ? JSON.stringify(json) : form,
+        signal: AbortSignal.timeout(timeoutMs),
     });
+
+    if (!res.ok) {
+        const detail = await res.text();
+        const error = new Error(`Python server error ${res.status}: ${detail}`);
+        error.statusCode = res.status;
+        throw error;
+    }
+    return res.json();
 };
 
-const askIgris = (data) => runPython({ action: 'ask', ...data });
+// ---------- 2. Python calls ----------
+const askIgris = ({ prompt, history = [] }) =>
+    callPython("/askPrompt", {
+        json: {
+            question: prompt,
+            source: null,
+            history,
+        },
+    });
 
-const rememberIgris = ({ prompt, file }) => runPython({
-    action: 'remember',
-    prompt,
-    file: {
-        filename: file.originalname,
-        contentType: file.mimetype,
-        data: file.buffer.toString('base64'),
-    },
-});
+const describeImageIgris = ({ prompt, systemprompt, file }) => {
+    const form = new FormData();
+    form.append("prompt", prompt || "");
+    form.append("systemprompt", systemprompt || "Describe the image.");
+    form.append(
+        "file",
+        new Blob([file.buffer], { type: file.mimetype }),
+        file.originalname
+    );
+    return callPython("/describe_image", { form });
+};
 
+// ---------- 3. Save conversation to Mongo (your existing function, unchanged) ----------
 const saveIgrisConversation = async ({ userId, prompt, result, title, conversationId }) => {
-    const user = await User.findById(userId).select('username').lean();
-    if (!user) {
-        throw new Error('Authenticated user not found');
-    }
+    const user = await User.findById(userId).select("username").lean();
+    if (!user) throw new Error("Authenticated user not found");
 
-    const answer = result?.answer || result?.message || '';
+    const answer = result?.answer || result?.message || "";
     const historyEntries = [
-        { role: 'user', content: prompt || 'Uploaded file' },
+        { role: "user", content: prompt || "Uploaded file" },
         ...(answer
-            ? [{ role: 'assistant', content: answer, sources: result?.sources || [] }]
+            ? [{ role: "assistant", content: answer, sources: result?.sources || [] }]
             : []),
     ];
 
@@ -88,14 +74,94 @@ const saveIgrisConversation = async ({ userId, prompt, result, title, conversati
         conversation = await AskIgris.create({
             userId,
             username: user.username,
-            question: prompt || 'Uploaded file',
-            title: title || prompt.slice(0, 60) || 'New Conversation',
+            question: prompt || "Uploaded file",
+            title: title || (prompt || "").slice(0, 60) || "New Conversation",
             response: answer,
             chatHistory: historyEntries,
         });
     }
 
     return { conversation, result };
+};
+
+// ---------- 4. Controller: text chat  (POST /askPrompt) ----------
+const askPrompt = async (req, res) => {
+    try {
+        const { question, conversationId, title } = req.body;
+        const userId = req.user.id; // however your auth middleware sets it
+
+        if (!question || !question.trim()) {
+            return res.status(400).json({ error: "question is required" });
+        }
+
+        // load last 10 messages so Python stays stateless
+        let history = [];
+        if (conversationId) {
+            // Find the conversation by ID and user ID
+            const convo = await AskIgris.findOne({ _id: conversationId, userId }).lean();
+            history = (convo?.chatHistory || [])
+                .slice(-10)
+                .map(({ role, content }) => ({ role, content }));
+        }
+
+        // Node -> Python -> Node
+        const result = await askIgris({ prompt: question, history });
+
+        // save to Mongo
+        const { conversation } = await saveIgrisConversation({
+            userId,
+            prompt: question,
+            result,
+            title,
+            conversationId,
+        });
+
+        // Node -> Frontend
+        res.json({
+            answer: result.answer,
+            sources: result.sources || [],
+            conversation,
+        });
+    } catch (err) {
+        console.error("askPrompt failed:", err);
+        res.status(err.statusCode || 500).json({ error: err.message });
+    }
+};
+
+// ---------- 5. Controller: image chat  (POST /describe_image) ----------
+// route needs multer: upload.single("file")  (memoryStorage, since you use file.buffer)
+const describeImage = async (req, res) => {
+    try {
+        const { question, title, systemprompt, conversationId } = req.body;
+        const userId = req.user.id;
+
+        if (!req.file) {
+            return res.status(400).json({ error: "image file is required" });
+        }
+
+        const result = await describeImageIgris({
+            prompt: question,
+            systemprompt,
+            file: req.file,
+        });
+
+        const { conversation } = await saveIgrisConversation({
+            userId,
+            prompt: question || "Uploaded image",
+            result,
+            title,
+            conversationId,
+        });
+
+        res.json({
+            answer: result.answer,
+            sources: result.sources || [],
+            conversation,
+        });
+    } catch (err) {
+        console.error("describeImage failed:", err);
+        res.status(err.statusCode || 500).json({ error: err.message });
+    }
 };
 
 const processIgrisConversation = async (req, res) => {
@@ -149,6 +215,7 @@ const getIgrisHistoryById = async (req, res) => {
     try {
         const AskIgris = require('../models/askIgris.model');
         const history = await AskIgris.findOne({ _id: req.params.id, userId: req.params.userId }).sort({ createdAt: -1 });
+        console.log('Retrieved history for conversation ID:', req.params.id, 'result:', history);
         res.json(history);
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -162,7 +229,9 @@ const newIgrisConversation = async (req, res) => {
 
 module.exports = {
     askIgris,
-    rememberIgris,
+    askPrompt,
+    describeImage,
+    saveIgrisConversation,
     getIgrisHistory,
     getIgrisHistoryById,
     newIgrisConversation,
