@@ -27,7 +27,7 @@ Schema:
   "language": string,       // ISO 639-1 code of the main spoken/written language, "none" if no language
   "format": string,         // one of: tutorial, demo, meme, skit, news, opinion, vlog, showcase, promo, other
   "topics": { string: number },   // topic -> relevance
-  "attributes": { "educational": number, "entertainment": number, "motivational": number, "emotional": number },
+  "attributes": { "educational": number, "entertainment": number, "motivational": number, "emotional": number , "technology": number},
   "keywords": [string],     // 5-10 specific lowercase terms (tools, concepts, entities), no generic words
   "safety": { "nsfw": number, "violence": number, "hate": number }
 }

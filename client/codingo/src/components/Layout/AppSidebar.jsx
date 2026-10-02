@@ -28,14 +28,15 @@ import axios from 'axios';
 import { apiUrl, getAuthHeaders } from '../../utilites/DashboardHelper';
 import { setCurrentUser } from '../../redux/slices/dashboardSlice';
 import { registerPushNotifications } from '../../notifications/registerPushNotifications';
-import { ChevronRight, Settings } from 'lucide-react';
+import { ChevronRight, Settings, Users2Icon } from 'lucide-react';
 
 const communityNavItems = [
   { key: 'home', label: 'Home', icon: FaHome, to: '/community', match: ['/community'] },
   { key: 'messages', label: 'Messages', icon: FaFacebookMessenger, to: '/messages', match: ['/messages'] },
   { key: 'askIgris', label: 'Ask Igris', icon: FaBrain, to: '/askIgris', match: ['/askIgris'] },
   { key: 'rememberIgris', label: 'Remember Igris', icon: FaBook, to: '/rememberIgris', match: ['/rememberIgris'] },
-  { key: 'friends', label: 'Search', icon: FaSearch, to: '/friends', match: ['/friends'] },
+  { key: 'friends', label: 'Friends', icon: Users2Icon, to: '/friends', match: ['/friends'] },
+  { key: 'search', label: 'Search', icon: FaSearch, to: '/search', match: ['/search'] },
   { key: 'discover', label: 'Discover', icon: FaUserFriends, to: '/discover', match: ['/discover'] },
   { key: 'socialprofile', label: 'Social Profile', icon: FaUser, to: '/socialprofile', match: ['/socialprofile'] },
 ];
@@ -267,11 +268,11 @@ export default function AppSidebar() {
   return (
     <>
       {/* ───────────────────────── Desktop ───────────────────────── */}
-      <aside className="hidden z-10 max-h-screen lg:block shrink-0">
+      <aside className="hidden z-10 bg-black max-h-screen lg:block shrink-0">
         <div
           onMouseEnter={() => dispatch(setDesktopCollapsed(false))}
           onMouseLeave={() => { dispatch(setDesktopCollapsed(true)); setIsOpen(false); }}
-          className={`sticky top-0 flex flex-col justify-between h-screen bg-[#2B2B2B] border-r border-white/10 py-4 transition-[width,padding] duration-200 ease-in-out will-change-[width] ${isDesktopCollapsed ? 'w-20 px-2' : 'w-45 px-2'
+          className={`sticky z-10 top-0 flex flex-col h-[95vh] mt-5 justify-between bg-[#2B2B2B] border-r border-white/10 py-4 rounded-2xl ml-4 transition-[width,padding] duration-200 ease-in-out will-change-[width] ${isDesktopCollapsed ? 'w-20  px-2' : 'w-45 px-2'
             }`}
         >
           <nav className="space-y-1">

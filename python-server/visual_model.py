@@ -37,7 +37,7 @@ def prepare_image(image_bytes: bytes) -> tuple[bytes, str]:
 
 
 
-def describe_image(image_bytes: bytes, analysis_prompt: str, mime_type: str = "image/jpeg") -> str:
+def describe_image(image_bytes: bytes, prompt: str, mime_type: str = "image/jpeg") -> str:
     image_bytes, mime_type = prepare_image(image_bytes)  # resize/compress step from before
     data_uri = f"data:{mime_type};base64,{base64.b64encode(image_bytes).decode()}"
 
@@ -50,7 +50,7 @@ def describe_image(image_bytes: bytes, analysis_prompt: str, mime_type: str = "i
         {
             "role": "user",
             "content": [
-                {"type": "text", "text": analysis_prompt},
+                {"type": "text", "text": prompt},
                 {"type": "image_url", "image_url": {"url": data_uri}},
             ],
         }

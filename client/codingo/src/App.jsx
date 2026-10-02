@@ -32,6 +32,7 @@ import AskIgris from './pages/askIgris.jsx';
 import RememberIgris from './pages/rememberIgris.jsx';
 import { onMessage } from './firebase';
 import { registerPushNotifications } from './notifications/registerPushNotifications';
+import SearchPage from './pages/SearchPage.jsx';
 
 function ProtectedRoute({ children }) {
   const [isChecking, setIsChecking] = useState(true);
@@ -295,6 +296,14 @@ function AppShell() {
               element={(
                 <ProtectedRoute>
                   <Messages />
+                </ProtectedRoute>
+              )}
+            />
+            <Route
+              path="/search"
+              element={(
+                <ProtectedRoute>
+                  <SearchPage />
                 </ProtectedRoute>
               )}
             />
