@@ -4,6 +4,7 @@ import { setNearbyUsers } from '../redux/slices/discoverSlice';
 import { apiUrl, getAuthHeaders } from '../utilites/communityHelper';
 import gsap from 'gsap';
 import { RotateCw, Radar, ChevronRight } from "lucide-react";
+import { glassRow } from '../utilites/cssUtility';
 // import { useNavigate } from "react-router-dom"; // uncomment if you use react-router
 
 function usePrefersReducedMotion() {
@@ -222,7 +223,7 @@ const DiscoverPage = () => {
               <li key={u._id} data-row>
                 <button
                   onClick={() => handleUserClick(u)}
-                  className="group flex w-full items-center gap-3 rounded-xl py-3.5 text-left transition-colors hover:bg-zinc-900/40 active:bg-zinc-900/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8c93f0]/50 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b0b0d]"
+                  className={`group flex w-full mt-2 items-center gap-3 rounded-2xl p-2.5 pr-3 transition duration-300 hover:border-white/15 hover:from-white/[0.15] sm:gap-4 sm:p-3 ${glassRow}`}
                 >
                   <Avatar
                     username={u.username}
