@@ -35,6 +35,7 @@ export const searchUsers = createAsyncThunk('friends/searchUsers', async (query,
       withCredentials: true,
       headers: getAuthHeaders()
     });
+    console.log('Search response:', response?.data?.users);
     return response.data.users;
   } catch (err) {
     return rejectWithValue(err.response?.data?.message || 'Search failed');
@@ -65,18 +66,25 @@ export function FriendsPage() {
   }, [activeTab, dispatch]);
 
   // Search users with debounce
-  useEffect(() => {
-    if (activeTab !== 'search') return;
+useEffect(() => {
+  if (activeTab !== 'search') return;
 
-    const debounce = setTimeout(() => {
-      if (searchQuery.trim()) {
-        dispatch(searchUsers(searchQuery));
-      } else {
-        dispatch(setSearchResults([]));
-      }
-    }, 300);
-    return () => clearTimeout(debounce);
-  }, [searchQuery, activeTab, dispatch]);
+  const q = searchQuery.trim();
+  if (!q) {
+    dispatch(setSearchResults([]));
+    return;
+  }
+
+  let request;
+  const timer = setTimeout(() => {
+    request = dispatch(searchUsers(q));
+  }, 200); // 200-300ms is fine
+
+  return () => {
+    clearTimeout(timer);   // cancels a request that hasn't started
+    request?.abort();      // cancels one that's already in flight
+  };
+}, [searchQuery, activeTab, dispatch]);
 
   const handleSendRequest = async (userId) => {
     try {

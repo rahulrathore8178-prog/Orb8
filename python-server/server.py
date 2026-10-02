@@ -8,7 +8,7 @@ import chromadb
 from fastapi import FastAPI, Form, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from groq import Groq
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import json
 import sys
 import asyncio
@@ -150,6 +150,7 @@ Rules:
 class AskRequest(BaseModel):
     question: str
     source: str | None = None
+    history: list[dict[str, str]] = Field(default_factory=list)
 print("AskRequest initialized", {AskRequest})
 # ---------------------------------------------------------------------------
 # 3. The endpoint — LLM decides whether to call the tool, we execute it if so
@@ -161,7 +162,7 @@ async def ask_prompt(req: AskRequest):
     source = req.source
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": question},
+        {"role": "user", "content": req.question},
     ]
 
     all_sources: list[str] = []

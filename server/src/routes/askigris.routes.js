@@ -1,6 +1,6 @@
 const express = require('express');
 const multer = require('multer');
-const { processIgrisConversation, getIgrisHistory, getIgrisHistoryById, newIgrisConversation } = require('../controllers/askigris.controller');
+const { processIgrisConversation, getIgrisHistory, getIgrisHistoryById, newIgrisConversation, askPrompt, describeImage } =    require('../controllers/askigris.controller');
 const { protect } = require('../middlewares/auth.middleware');
 
 const router = express.Router();
@@ -10,6 +10,8 @@ const upload = multer({
 });
 
 router.post('/', protect, upload.single('file'), processIgrisConversation);
+router.post("/askPrompt", protect, askPrompt);
+router.post("/describe_image", protect, upload.single("file"), describeImage);
 router.get('/history/:userId', protect, getIgrisHistory);
 router.get('/history/:userId/:id', protect, getIgrisHistoryById);
 router.post('/newConversation', protect, upload.single('file'), newIgrisConversation);

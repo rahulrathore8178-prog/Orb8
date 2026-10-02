@@ -170,7 +170,7 @@ export default function CommunityPage() {
   const [composerPreview, setComposerPreview] = useState(null);
   const [showCapsules, setShowCapsules] = useState(true);
   const lastScrollPos = useRef(0);
-  
+
   // Crossfading ambient backdrop
   const [bgA, setBgA] = useState('');
   const [bgB, setBgB] = useState('');
@@ -182,6 +182,18 @@ export default function CommunityPage() {
   useEffect(() => { dispatch(fetchPosts(1)); }, [dispatch]);
 
   const [showAddCapsule, setShowAddCapsule] = useState(false);
+
+  const registerView = async () => {
+    const post = posts[activeIndex];
+    if (!post) return;
+    const res = await axios.post(`${apiUrl}/api/community/posts/${currentUserId}/${post?.id}/views`, {}, {
+    headers: { Authorization: `Bearer ${getAuthHeaders()}` },
+    withCredentials: true,
+    });
+    console.log('registerView response:', res?.data);
+    // Simulate a view event
+    console.log('Registering view for post:', post.id);
+  };
 
   // Update crossfading backdrop when active post changes
   useEffect(() => {
@@ -203,7 +215,7 @@ export default function CommunityPage() {
     if (!el) return;
     const SCROLL_THRESHOLD = 200;
     let raf = 0;
-
+    const post = posts[activeIndex];
     const pickActive = () => {
       raf = 0;
       const count = posts.length;
@@ -231,6 +243,9 @@ export default function CommunityPage() {
         setActiveIndex(next);
       }
     };
+    console.log('activeIndex', activeIndex, 'post', post?.id);
+    console.log('activeIndex changed, registering view for post:', post?.id);
+    registerView(post?.id);
 
     const schedule = () => { if (!raf) raf = requestAnimationFrame(pickActive); };
 
@@ -255,7 +270,7 @@ export default function CommunityPage() {
       el.removeEventListener('scroll', onScroll);
       window.removeEventListener('resize', schedule);
     };
-  }, [posts]);
+  }, [posts, activeIndex]);
 
   // Arrow-key navigation
   useEffect(() => {
@@ -418,17 +433,49 @@ export default function CommunityPage() {
 
         {/* Right: sticky sidebar */}
         <div className="hidden lg:flex flex-col h-full overflow-y-auto px-4 py-5 gap-3 [scrollbar-width:thin] [scrollbar-color:#333_transparent]">
-          <div className="bg-black/40 backdrop-blur-md border border-white/[0.08] rounded-[16px] px-[18px] py-[16px]">
-            <div className="font-['Syne'] font-bold text-[13px] text-[#e8f0fe] mb-[14px] tracking-[0.3px]">📡 Community</div>
-            <div className="flex flex-col gap-[10px]">
+          <div className="relative bg-gradient-to-b from-white/[0.06] to-white/[0.015] backdrop-blur-xl border border-white/[0.08] rounded-[18px] px-[18px] py-[16px] shadow-[0_10px_30px_rgba(0,0,0,0.45),inset_0_1px_0_rgba(255,255,255,0.07),inset_0_-1px_0_rgba(0,0,0,0.35)] overflow-hidden">
+
+            {/* glass edge highlight */}
+            <div className="absolute top-0 left-[10%] right-[10%] h-px bg-gradient-to-r from-transparent via-white/25 to-transparent" />
+
+            {/* header */}
+            <div className="flex items-center gap-[9px] mb-[14px]">
+              <div className="w-[26px] h-[26px] flex items-center justify-center rounded-[8px] bg-white/[0.04] shadow-[inset_1px_1px_3px_rgba(0,0,0,0.5),inset_-1px_-1px_2px_rgba(255,255,255,0.06)] text-[13px]">
+                📡
+              </div>
+              <span className="font-['Syne'] font-bold text-[13px] text-[#e8f0fe] tracking-[0.3px]">
+                Community
+              </span>
+            </div>
+
+            <div className="flex flex-col gap-[9px]">
               {[
-                { label: 'Posts today', val: posts.length, icon: '📝' },
-                { label: 'Active devs', val: '—', icon: '👥' },
-                { label: 'Your posts', val: posts.filter((p) => p.author.id === currentUserId).length, icon: '✍️' },
+                { label: 'Posts today', val: posts.length, icon: '📝', live: false },
+                { label: 'Active devs', val: '—', icon: '👥', live: true },
+                { label: 'Your posts', val: posts.filter((p) => p.author.id === currentUserId).length, icon: '✍️', accent: true },
               ].map((row) => (
-                <div key={row.label} className="flex justify-between items-center px-[12px] py-[8px] bg-white/[0.05] rounded-[10px]">
-                  <span className="text-[12px] text-[#aaaaaa]">{row.icon} {row.label}</span>
-                  <span className="text-[14px] font-bold font-['DM_Mono'] text-[#aaaaaa]">{row.val}</span>
+                <div
+                  key={row.label}
+                  className={`group flex justify-between items-center px-[12px] py-[9px] rounded-[12px] border transition-colors duration-200 ${row.accent
+                    ? 'bg-white/[0.05] border-white/[0.10] shadow-[inset_1px_1px_3px_rgba(0,0,0,0.4),inset_-1px_-1px_2px_rgba(255,255,255,0.05)]'
+                    : 'bg-black/20 border-white/[0.04] shadow-[inset_1px_1px_3px_rgba(0,0,0,0.5),inset_-1px_-1px_2px_rgba(255,255,255,0.03)] hover:bg-white/[0.03] hover:border-white/[0.08]'
+                    }`}
+                >
+                  <span className="flex items-center gap-[8px] text-[12px] text-[#aaaaaa]">
+                    <span className="w-[20px] h-[20px] flex items-center justify-center rounded-[6px] bg-white/[0.05] text-[10px] shadow-[0_1px_2px_rgba(0,0,0,0.35)]">
+                      {row.icon}
+                    </span>
+                    {row.label}
+                    {row.live && (
+                      <span className="w-[5px] h-[5px] rounded-full bg-emerald-400/80 shadow-[0_0_6px_rgba(52,211,153,0.7)] animate-pulse" />
+                    )}
+                  </span>
+                  <span
+                    className={`text-[14px] font-bold font-['DM_Mono'] ${row.accent ? 'text-[#e8f0fe]' : 'text-[#aaaaaa]'
+                      }`}
+                  >
+                    {row.val}
+                  </span>
                 </div>
               ))}
             </div>

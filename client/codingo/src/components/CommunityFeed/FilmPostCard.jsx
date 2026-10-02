@@ -8,6 +8,7 @@ import { FaHeart, FaHeartBroken, FaPlay, FaVolumeMute, FaVolumeUp, FaTrash } fro
 import { FiMessageCircle, FiSend } from 'react-icons/fi';
 import Comments from '../../pages/CommentsModal';
 import { AvatarInitial } from '../../pages/CommunityPage';
+import { BarChart3 } from 'lucide-react';
 
 
 export default function FilmPostCard({ post, cardRef, textGradient, isOwn, isActive, onLike, onDelete }) {
@@ -430,7 +431,7 @@ export default function FilmPostCard({ post, cardRef, textGradient, isOwn, isAct
                                 {post.content}
                             </p>
                             <button type="button" className="mt-0.5 shrink-0 text-white/80 transition-colors hover:text-white" aria-label="Share">
-                                <FiSend size={14} />
+                                <FiSend size={20} />
                             </button>
                         </div>
                     )}
@@ -462,9 +463,13 @@ export default function FilmPostCard({ post, cardRef, textGradient, isOwn, isAct
                             <span className="text-[12.5px]" style={{ fontFamily: "'DM Mono'" }}>{post.commentsCount}</span>
                         </button>
                         {showModal && <Comments post={post} />}
+                        <div className="flex items-center gap-1.5 rounded-full text-white/90 transition-colors hover:text-white focus-visible:outline-none">
+                        <span><BarChart3 size={20} /></span>
+                        <span>Views: {post?.views}</span>
+                        </div>
                         {!hasMedia && (
                             <button type="button" className="ml-auto text-white/80 transition-colors hover:text-white" aria-label="Share">
-                                <FiSend size={16} />
+                                <FiSend size={20} />
                             </button>
                         )}
                     </div>
