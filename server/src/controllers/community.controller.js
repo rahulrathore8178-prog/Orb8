@@ -861,8 +861,11 @@ const discoverNearbyPeople = async (req, res) => {
 const registerPostView = async (req, res) => {
   try {
     const { userId, postId } = req.params;
-    console.log('Registering view for post ID:', postId);
-    console.log('User ID:', userId);
+
+    const post = await Post.findById(postId).select('_id');
+    if (!post) {
+      return res.status(404).json({ message: 'Post not found' });
+    }
 
     const result = await Post.updateOne(
       { _id: postId, viewedBy: { $ne: userId } },
@@ -872,13 +875,11 @@ const registerPostView = async (req, res) => {
       }
     );
 
-    if (result.matchedCount === 0) {
-      return res.status(404).json({ message: 'Post not found' });
-    }
-
-    return res.status(200).json({ counted: result.modifiedCount === 1 });
-  } catch (err) {
-    console.error(err);
+    return res.status(200).json({
+      counted: result.modifiedCount === 1,
+    });
+  } catch (error) {
+    console.error('Failed to register view:', error);
     return res.status(500).json({ message: 'Failed to register view' });
   }
 };

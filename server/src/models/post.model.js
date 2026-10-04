@@ -92,10 +92,17 @@ const postSchema = new mongoose.Schema({
     default: true
   },
   views: { type: Number, default: 0 },
-  viewedBy: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }]
-}, {
-  timestamps: true
-});
+  viewedBy: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  orbital: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: "Orbital",
+  default: null,
+  index: true,
+},
+},
+  {
+    timestamps: true
+  });
 
 // Indexes for performance
 postSchema.index({ createdAt: -1 });
