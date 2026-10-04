@@ -123,11 +123,11 @@ export default function SocialProfileSection() {
     const isOwnProfile = !userId || userId === storedUser?.id;
     const [currentUser, setCurrentUser] = useState(isOwnProfile ? storedUser : null);
     const userFriends = currentUser?.friends;
-    console.log('currentUser', currentUser?.preferences?.content);
+    console.log('currentUser', currentUser?.friends);
     // console.log('currentUser friends', currentUser?.friends);
     const reduxfriends = useSelector((state) => state.friends);
     const friends = useSelector(state => state.friends.friends);
-    // console.log('friends', friends);
+    console.log('friends', friends);
     // console.log('redux friends', reduxfriends);
     const friendsCount = currentUser?.friends?.length || 0;
     // console.log('friendsCount', friendsCount);

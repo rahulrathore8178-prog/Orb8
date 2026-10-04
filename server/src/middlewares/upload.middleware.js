@@ -102,10 +102,12 @@ function handleUpload(multerInstance, fieldName) {
 
 const profileImageUpload = handleUpload(profileImageMulter, 'profilePic');
 const postMediaUpload = handleUpload(postMediaMulter, 'media');
+const orbitalImageUpload = handleUpload(postMediaMulter, 'media');
 
 module.exports = {
   MAX_IMAGE_UPLOAD_BYTES,
   MAX_VIDEO_UPLOAD_BYTES,
   profileImageUpload,
-  postMediaUpload
+  postMediaUpload,
+  orbitalImageUpload
 };
