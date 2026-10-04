@@ -35,7 +35,6 @@ const communityNavItems = [
   { key: 'messages', label: 'Messages', icon: FaFacebookMessenger, to: '/messages', match: ['/messages'] },
   { key: 'askIgris', label: 'Ask Igris', icon: FaBrain, to: '/askIgris', match: ['/askIgris'] },
   { key: 'rememberIgris', label: 'Remember Igris', icon: FaBook, to: '/rememberIgris', match: ['/rememberIgris'] },
-  { key: 'friends', label: 'Friends', icon: Users2Icon, to: '/friends', match: ['/friends'] },
   { key: 'search', label: 'Search', icon: FaSearch, to: '/search', match: ['/search'] },
   { key: 'discover', label: 'Discover', icon: FaUserFriends, to: '/discover', match: ['/discover'] },
   { key: 'socialprofile', label: 'Social Profile', icon: FaUser, to: '/socialprofile', match: ['/socialprofile'] },
@@ -350,7 +349,7 @@ export default function AppSidebar() {
 
       {/* ─────────────────────── Mobile icon rail ─────────────────────── */}
       <aside className="fixed inset-y-0 left-0 z-30 w-10 lg:hidden bg-[#2B2B2B] border-r border-white/10">
-        <div className="h-full py-3 px-1 flex flex-col gap-2 items-center">
+        <div className="h-full min-h-screen py-3 px-1 flex flex-col gap-2 items-center">
           <button
             type="button"
             onClick={() => dispatch(setMobileMenuOpen(true))}

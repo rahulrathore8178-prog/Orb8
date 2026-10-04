@@ -14,7 +14,10 @@ import {
   FaVideo,
   FaPlay,
   FaVolumeMute,
-  FaVolumeUp
+  FaVolumeUp,
+  FaUsers,
+  FaLock,
+  FaGlobe
 } from 'react-icons/fa';
 import { useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
@@ -39,6 +42,7 @@ import CapsulePostModal from '../components/Comments/CapsulePostModal';
 import { Plus } from 'lucide-react';
 import ComposerCard from '../components/CommunityFeed/ComposerCard';
 import FilmPostCard from '../components/CommunityFeed/FilmPostCard';
+import CreateOrbitalModal from '../components/Orbital/CreateOrbitalModal';
 /* ─── Constants ───────────────────────────────────────────────── */
 
 // Cycled per card — colored ambient glow
@@ -153,7 +157,7 @@ export default function CommunityPage() {
   const isLoading = useSelector((state) => state.feed.isLoading);
   const error = useSelector((state) => state.feed.error);
   // console.log('localstorage:', localStorage)
-  console.log('posts:', posts);
+  // console.log('posts:', posts);
 
   const observerRef = useRef(null);
   const loadingRef = useRef(null);
@@ -163,12 +167,15 @@ export default function CommunityPage() {
   const [activeIndex, setActiveIndex] = useState(0);
   const apiUrl = import.meta.env.VITE_API_URL || '';
   const currentUser = getStoredUser();
-  console.log('currentUser', currentUser);
+  // console.log('currentUser', currentUser);
   const currentUserId = currentUser?.id || currentUser?._id || '';
+  // console.log('currentUserId', currentUserId);
   const [showComposer, setShowComposer] = useState(false);
   const [composerFile, setComposerFile] = useState(null);
   const [composerPreview, setComposerPreview] = useState(null);
   const [showCapsules, setShowCapsules] = useState(true);
+  const [showCreateOrbitalModal, setShowCreateOrbitalModal] = useState(false);
+  const [trendingOrbitals, setTrendingOrbitals] = useState([]);
   const lastScrollPos = useRef(0);
 
   // Crossfading ambient backdrop
@@ -187,12 +194,12 @@ export default function CommunityPage() {
     const post = posts[activeIndex];
     if (!post) return;
     const res = await axios.post(`${apiUrl}/api/community/posts/${currentUserId}/${post?.id}/views`, {}, {
-    headers: { Authorization: `Bearer ${getAuthHeaders()}` },
-    withCredentials: true,
+      headers: { Authorization: `Bearer ${getAuthHeaders()}` },
+      withCredentials: true,
     });
-    console.log('registerView response:', res?.data);
+    // console.log('registerView response:', res?.data);
     // Simulate a view event
-    console.log('Registering view for post:', post.id);
+    // console.log('Registering view for post:', post.id);
   };
 
   // Update crossfading backdrop when active post changes
@@ -243,8 +250,8 @@ export default function CommunityPage() {
         setActiveIndex(next);
       }
     };
-    console.log('activeIndex', activeIndex, 'post', post?.id);
-    console.log('activeIndex changed, registering view for post:', post?.id);
+    // console.log('activeIndex', activeIndex, 'post', post?.id);
+    // console.log('activeIndex changed, registering view for post:', post?.id);
     registerView(post?.id);
 
     const schedule = () => { if (!raf) raf = requestAnimationFrame(pickActive); };
@@ -342,6 +349,31 @@ export default function CommunityPage() {
       throw error;
     }
   };
+
+  const getMyOrbital = async () => {
+    // console.log('Fetching my orbital...');
+    try {
+      const res = await axios.get(`${apiUrl}/api/orbital/mine`, {
+        withCredentials: true,
+        headers: getAuthHeaders(),
+      });
+      console.log('My orbital data:', res.data?.orbitals);
+      setTrendingOrbitals(res.data?.orbitals || []);
+      return res.data;
+    } catch (error) {
+      console.error('Error fetching my orbital:', error);
+      throw error;
+    }
+  };
+
+  useEffect(() => {
+    getMyOrbital()
+  }, []);
+
+  const showCreateOrbital = () => {
+    // console.log('createOrbital clicked');
+    setShowCreateOrbitalModal(true);
+  }
 
   return (
     <div className="relative h-screen overflow-hidden bg-black">
@@ -444,19 +476,22 @@ export default function CommunityPage() {
                 📡
               </div>
               <span className="font-['Syne'] font-bold text-[13px] text-[#e8f0fe] tracking-[0.3px]">
-                Community
+                Orbital
               </span>
             </div>
 
             <div className="flex flex-col gap-[9px]">
               {[
                 { label: 'Posts today', val: posts.length, icon: '📝', live: false },
-                { label: 'Active devs', val: '—', icon: '👥', live: true },
                 { label: 'Your posts', val: posts.filter((p) => p.author.id === currentUserId).length, icon: '✍️', accent: true },
+                { label: 'Create your own orbital', val: '—', icon: <Plus />, live: false, onClick: () => showCreateOrbital() },
               ].map((row) => (
                 <div
                   key={row.label}
-                  className={`group flex justify-between items-center px-[12px] py-[9px] rounded-[12px] border transition-colors duration-200 ${row.accent
+                  onClick={row.onClick}
+                  role={row.onClick ? 'button' : undefined}
+                  tabIndex={row.onClick ? 0 : undefined}
+                  className={`group cursor-pointer flex justify-between items-center px-[12px] py-[9px] rounded-[12px] border transition-colors duration-200 ${row.accent
                     ? 'bg-white/[0.05] border-white/[0.10] shadow-[inset_1px_1px_3px_rgba(0,0,0,0.4),inset_-1px_-1px_2px_rgba(255,255,255,0.05)]'
                     : 'bg-black/20 border-white/[0.04] shadow-[inset_1px_1px_3px_rgba(0,0,0,0.5),inset_-1px_-1px_2px_rgba(255,255,255,0.03)] hover:bg-white/[0.03] hover:border-white/[0.08]'
                     }`}
@@ -483,16 +518,57 @@ export default function CommunityPage() {
 
           {/* <TrendingTopics /> */}
 
-          <div className="bg-black/40 backdrop-blur-md border border-white/[0.08] rounded-[16px] px-[18px] py-[16px]">
-            <div className="font-['Syne'] font-bold text-[13px] text-[#e8f0fe] mb-[12px] tracking-[0.3px] flex items-center">
-              <FaCode className="text-[#aaaaaa] text-[13px] mr-[7px]" /> Dev Code
+          {/* Trending Orbitals */}
+          <div className="bg-white/[0.04] backdrop-blur-xl border border-white/[0.08] rounded-[20px] px-[18px] py-[16px] shadow-[0_8px_32px_rgba(0,0,0,0.45)]">
+            <div className="font-['Syne'] font-bold text-[13px] text-[#e8f0fe] mb-[14px] tracking-[0.3px] flex items-center">
+              <FaUsers className="text-[#aaaaaa] text-[13px] mr-[7px]" /> Trending Orbitals
             </div>
-            {["Share what you're building", 'Help each other debug', 'Celebrate small wins', 'Keep it constructive'].map((rule, i) => (
-              <div key={i} className="flex gap-[8px] items-start mb-[8px] text-[12px] text-[#aaaaaa] leading-[1.5]">
-                <span className="text-[#aaaaaa] font-['DM_Mono'] mt-[1px]">{String(i + 1).padStart(2, '0')}</span>
-                {rule}
-              </div>
-            ))}
+
+            <div className="flex flex-col gap-[10px]">
+              {trendingOrbitals.length === 0 && (
+                <div className="text-[12px] text-[#777777] text-center py-[12px]">
+                  No trending orbitals yet
+                </div>
+              )}
+
+              {trendingOrbitals.map((orbital, i) => (
+                <div
+                  key={orbital._id}
+                  className="flex items-center gap-[10px] bg-white/[0.03] backdrop-blur-md border border-white/[0.06] rounded-[14px] px-[12px] py-[10px] transition-colors duration-200 hover:bg-white/[0.06]"
+                >
+                  <span className="text-[#777777] font-['DM_Mono'] text-[12px] w-[18px] shrink-0">
+                    {String(i + 1).padStart(2, '0')}
+                  </span>
+
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[13px] font-semibold text-[#e8f0fe] truncate">
+                      {orbital.name}
+                    </div>
+                    <div className="flex items-center gap-[8px] text-[11px] text-[#aaaaaa] mt-[2px]">
+                      <span className="flex items-center gap-[4px]">
+                        <FaUsers className="text-[10px]" />
+                        {orbital.memberCount}
+                      </span>
+                      <span className="flex items-center gap-[4px]">
+                        {orbital.visibility === 'private' ? (
+                          <FaLock className="text-[9px]" />
+                        ) : (
+                          <FaGlobe className="text-[9px]" />
+                        )}
+                        {orbital.visibility}
+                      </span>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="shrink-0 px-[14px] py-[6px] rounded-[10px] text-[11px] font-semibold text-[#e8f0fe] bg-[#161616] shadow-[5px_5px_10px_rgba(0,0,0,0.65),-3px_-3px_8px_rgba(255,255,255,0.05)] transition-all duration-150 hover:text-white active:shadow-[inset_3px_3px_6px_rgba(0,0,0,0.7),inset_-2px_-2px_5px_rgba(255,255,255,0.04)]"
+                  >
+                    {orbital.visibility === 'private' ? 'Request' : 'Join'}
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>
@@ -508,6 +584,18 @@ export default function CommunityPage() {
         <Plus size={26} strokeWidth={2.5} />
       </button>
 
+      {showCreateOrbitalModal && (
+        <CreateOrbitalModal
+          isOpen={showCreateOrbitalModal}
+          creatorId={currentUserId}
+          onClose={() => setShowCreateOrbitalModal(false)}
+          onSubmit={async (data) => {
+            console.log('Create orbital data:', data);
+            // call your API here
+          }}
+        />
+      )}
+
       {/* Capsule modals */}
       {showAddCapsule && (
         <CapsulePostModal
@@ -520,6 +608,7 @@ export default function CommunityPage() {
           }}
           onClose={() => setShowAddCapsule(false)}
           onAddCapsule={handleCapsulePost}
+          creatorId={currentUserId}
         />
       )}
     </div>
