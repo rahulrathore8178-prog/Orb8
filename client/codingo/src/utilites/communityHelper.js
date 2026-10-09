@@ -1,5 +1,6 @@
 import axios from "axios";
 import { createAsyncThunk } from "@reduxjs/toolkit";
+import { useSelector } from "react-redux";
 // import { setError, setImage, setImagePreview } from "../redux/slices/postSlice";
 
 export const apiUrl = import.meta.env.VITE_API_URL || '';
@@ -31,24 +32,31 @@ export const formatTimeAgo = (date) => {
   return new Date(date).toLocaleDateString();
 }
 
+
 export const fetchPosts = createAsyncThunk(
   'feed/fetchPosts',
-  async (pageNum, { rejectWithValue }) => {
-    try {
-      const res = await axios.get(`${apiUrl}/api/community/feed?page=${pageNum}&limit=10`, {
-        withCredentials: true,
-        headers: getAuthHeaders(),
-      });
+  async (pageNum, { rejectWithValue, getState }) => {
+    const activeFeedType = getState().feed.activeFeedType;
+    const type = activeFeedType === 'orbital' ? 'orbital' : 'feed';
 
-      const newPosts = res.data.posts || [];
+    try {
+      const res = await axios.get(
+        `${apiUrl}/api/community/feed?page=${pageNum}&limit=10&type=${type}`,
+        {
+          withCredentials: true,
+          headers: getAuthHeaders(),
+        }
+      );
 
       return {
-        posts: newPosts,
+        posts: res.data.posts || [],
         pageNum,
         hasMore: res.data.pagination?.hasMore || false,
       };
     } catch (err) {
-      return rejectWithValue(err.response?.data?.message || 'Failed to load posts');
+      return rejectWithValue(
+        err.response?.data?.message || 'Failed to load posts'
+      );
     }
   }
 );

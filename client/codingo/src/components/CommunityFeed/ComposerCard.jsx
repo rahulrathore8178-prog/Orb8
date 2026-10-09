@@ -2,11 +2,13 @@ import React, { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
 import { useSelector } from 'react-redux';
 import { setContent, setIsPosting, setError, setImagePreview } from '../../redux/slices/postSlice';
-import { Mic, Pause, Play, RefreshCw, StopCircle, Trash2 } from 'lucide-react';
+import { ChevronDownIcon, Mic, Pause, Play, RefreshCw, StopCircle, Trash2 } from 'lucide-react';
 import { getAuthHeaders, getStoredUser } from '../../utilites/communityHelper';
 import { useDispatch } from 'react-redux';
 import { AvatarInitial } from '../../pages/CommunityPage';
 import { API_URL } from '../../pages/askIgris';
+import gsap from 'gsap';
+import OrbitalPicker from '../Orbital/selectOrbitalModal';
 
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg', 'image/heic', 'image/heif'];
 const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime', 'video/mov'];
@@ -14,6 +16,12 @@ const MAX_IMAGE_SIZE = 8 * 1024 * 1024;   // 8MB
 const MAX_VIDEO_SIZE = 50 * 1024 * 1024;  // 50MB — match your multer limit
 const MAX_AUDIO_SIZE = 15 * 1024 * 1024;  // 15MB — for voice notes
 const MAX_RECORDING_SECONDS = 120; // hard stop at 2 minutes — adjust as you like
+
+const POST_TYPES = [
+    { value: 'feed', label: 'Feed' },
+    { value: 'orbital', label: 'Orbital' },
+    { value: 'both', label: 'Both' },
+];
 
 const analysis_prompt = `You are the content-understanding engine of a social media recommendation system.
 Input: a post's media (image, or frames sampled from a video) plus optional caption,
@@ -65,6 +73,8 @@ export default function ComposerCard({
     const recordingTimerRef = useRef(null);
     const recordingStartRef = useRef(null);
     const previewAudioRef = useRef(null);
+    const tabsRef = useRef({});
+    const underlineRef = useRef(null);
     const posts = useSelector((state) => state.feed.posts);
 
     const [isRecording, setIsRecording] = useState(false);
@@ -75,6 +85,39 @@ export default function ComposerCard({
     console.log('recordedDuration:', recordedDuration);
     const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
     const [postData, setPostData] = useState();
+    const [activePostType, setActivePostType] = useState('feed');
+    const [selectedOrbitals, setSelectedOrbitals] = useState([]);
+
+    useEffect(() => {
+        const activeTab = tabsRef.current[activePostType];
+        const underline = underlineRef.current;
+
+        if (!activeTab || !underline) return;
+
+        gsap.to(underline, {
+            x: activeTab.offsetLeft,
+            width: activeTab.offsetWidth,
+            duration: 0.35,
+            ease: 'power3.out',
+        });
+    }, [activePostType]);
+
+    const handleTabClick = (tab) => {
+        if (tab === activePostType) return;
+
+        // const underline = tabsRef.current.querySelector(`[data-tab="${activePostType}"] span.underline-bar`);
+
+        // gsap.to(contentRef.current, {
+        //     opacity: 0,
+        //     y: 10,
+        //     duration: 0.18,
+        //     ease: "power2.in",
+        //     onComplete: () => {
+        //         // gsap.set(contentRef.current, { opacity: 1, y: 0 });
+        //     },
+        // });
+        setActivePostType(tab);
+    };
 
 
     const isRecordingSupported =
@@ -233,6 +276,7 @@ export default function ComposerCard({
         if (imageInputRef.current) imageInputRef.current.value = '';
         if (videoInputRef.current) videoInputRef.current.value = '';
     };
+    console.log('Active post type:', activePostType);
 
     const handlePost = async () => {
         const trimmedContent = content.trim();
@@ -242,6 +286,11 @@ export default function ComposerCard({
             videoInputRef.current?.files?.[0] ||
             null;
         const hasAudio = Boolean(recordedBlob);
+        const orbitalId = selectedOrbitals[0]?._id;
+
+        if (activePostType === 'orbital' && !orbitalId) {
+            return dispatch(setError('Select an orbital first'));
+        }
 
         if (!trimmedContent && !fileToSend && !hasAudio) {
             return dispatch(setError('Write something or attach an image, video, or voice note'));
@@ -265,10 +314,19 @@ export default function ComposerCard({
             console.log('FormData prepared for post:', fileToSend);
 
             // Post to backend DB
-            const res = await axios.post(`${apiUrl}/api/community/posts`, formData, {
-                withCredentials: true,
-                headers: { ...getAuthHeaders() },
-            });
+            if (activePostType === 'feed') {
+                const feedRes = await axios.post(`${apiUrl}/api/community/posts`, formData, {
+                    withCredentials: true,
+                    headers: { ...getAuthHeaders() },
+                });
+            } else if (activePostType === 'orbital') {
+                console.log('Posting to orbital:', orbitalId, 'with formData:', formData);
+                const orbitalRes = await axios.post(`${apiUrl}/api/orbital/${orbitalId}/posts`, formData, {
+                    withCredentials: true,
+                    headers: getAuthHeaders(),
+                });
+                console.log('Orbital post response:', orbitalRes?.data);
+            }
             if (onClose) onClose();
 
             // Only images can go to the VLM describe endpoint.
@@ -280,7 +338,9 @@ export default function ComposerCard({
                     describeForm.append('file', fileToSend, fileToSend.name || 'upload.jpg');
                     describeForm.append('type', fileToSend.type)
                     describeForm.append('prompt', analysis_prompt);
-                    describeForm.append('post_id', String(res?.data?.post?.id)); // only if you need it, see below
+                    if (activePostType === 'feed') describeForm.append('post_id', String(feedRes?.data?.post?.id));
+                    if (activePostType === 'orbital') describeForm.append('post_id', String(orbitalRes?.data?.post?.id));
+                    // describeForm.append('post_id', String(feedRes?.data?.post?.id)); // only if you need it, see below
 
                     const postDataRes = await axios.post(`${API_URL}/postdata`, describeForm, {
                         withCredentials: true,
@@ -301,7 +361,7 @@ export default function ComposerCard({
             if (videoInputRef.current) videoInputRef.current.value = '';
             removeAudio();
 
-            if (onPostCreated) onPostCreated(res.data.post);
+            if (onPostCreated) onPostCreated(feedRes.data.post);
         } catch (err) {
             dispatch(setError(err?.response?.data?.message || 'Post failed'));
         } finally {
@@ -333,86 +393,175 @@ export default function ComposerCard({
                 }}
             >
                 {/* Header with avatar, username, and action buttons */}
-                <div className="relative z-10 flex items-center gap-3 px-5 pt-5 pb-4 flex-shrink-0">
-                    <div className="flex-shrink-0">
-                        {currentUser?.profilePic ? (
-                            <img
-                                src={currentUser.profilePic}
-                                alt=""
-                                className="h-9 w-9 rounded-full object-cover ring-2 ring-white/50"
-                            />
-                        ) : (
-                            <AvatarInitial name={currentUser?.username} size={36} />
-                        )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                        <span
-                            className="text-[14px] font-semibold text-white block truncate [text-shadow:0_1px_3px_rgba(0,0,0,0.35)]"
-                            style={{ fontFamily: "'Syne'" }}
-                        >
-                            {currentUser?.username || 'You'}
-                        </span>
-                        <span className="text-[11px] text-white/70" style={{ fontFamily: "'DM Mono'" }}>
-                            just now
-                        </span>
+                <div className="relative z-10 px-5 pt-5 pb-4">
+                    <div className="flex items-center gap-3">
+                        <div className="flex-shrink-0">
+                            {currentUser?.profilePic ? (
+                                <img
+                                    src={currentUser.profilePic}
+                                    alt=""
+                                    className="h-9 w-9 rounded-full object-cover ring-2 ring-white/50"
+                                />
+                            ) : (
+                                <AvatarInitial name={currentUser?.username} size={36} />
+                            )}
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+                            <span className="block truncate text-[14px] font-semibold text-white">
+                                {currentUser?.username || 'You'}
+                            </span>
+                        </div>
+
+                        {/* Action buttons: close, add/change, remove */}
+                        <div className="flex gap-1 flex-shrink-0">
+                            {composerPreview && (
+                                <>
+                                    <button
+                                        type="button"
+                                        onClick={() => imageInputRef.current?.click() || videoInputRef.current?.click()}
+                                        className="w-8 h-8 rounded-full bg-white/15 text-white hover:bg-white/25 transition-colors flex items-center justify-center"
+                                        title="Change media"
+                                        aria-label="Change media"
+                                    >
+                                        <RefreshCw size={12} />
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={removeMedia}
+                                        className="w-8 h-8 rounded-full bg-white/15 text-white hover:bg-white/25 transition-colors flex items-center justify-center"
+                                        title="Remove media"
+                                        aria-label="Remove media"
+                                    >
+                                        <Trash2 size={12} />
+                                    </button>
+                                </>
+                            )}
+                            {!composerPreview && (
+                                <button
+                                    type="button"
+                                    onClick={() => imageInputRef.current?.click()}
+                                    className="w-8 h-8 rounded-full bg-white/15 text-white hover:bg-white/25 transition-colors flex items-center justify-center"
+                                    title="Add image"
+                                    aria-label="Add image"
+                                >
+                                    🖼
+                                </button>
+                            )}
+                            {!composerPreview && (
+                                <button
+                                    type="button"
+                                    onClick={() => videoInputRef.current?.click()}
+                                    className="w-8 h-8 rounded-full bg-white/15 text-white hover:bg-white/25 transition-colors flex items-center justify-center"
+                                    title="Add video"
+                                    aria-label="Add video"
+                                >
+                                    🎥
+                                </button>
+                            )}
+                            {isRecordingSupported && (
+                                <div className="flex items-center gap-2">
+                                    {!isRecording && !recordedBlob && (
+                                        <button
+                                            type="button"
+                                            onClick={startRecording}
+                                            disabled={isPosting}
+                                            className="w-8 h-8 rounded-full bg-white/15 text-white hover:bg-white/25 transition-colors flex items-center justify-center"
+                                            aria-label="Record voice note"
+                                        >
+                                            <Mic size={14} />
+                                        </button>
+                                    )}
+
+                                    {isRecording && (
+                                        <button
+                                            type="button"
+                                            onClick={stopRecording}
+                                            className="flex h-9 items-center gap-2 rounded-full border border-red-500/30 bg-red-500/10 px-3 text-[13px] font-medium text-red-300"
+                                        >
+                                            <span className="h-2 w-2 animate-pulse rounded-full bg-red-400" />
+                                            {formatDuration(recordingSeconds)}
+                                            <StopCircle size={11} />
+                                        </button>
+                                    )}
+
+                                    {recordedBlob && !isRecording && (
+                                        <div className="flex h-9 items-center gap-2 rounded-full border border-white/10 bg-[#0D1117] px-3">
+                                            <button
+                                                type="button"
+                                                onClick={togglePreviewPlayback}
+                                                className="text-[#E7EAEF]"
+                                                aria-label={isPreviewPlaying ? 'Pause preview' : 'Play preview'}
+                                            >
+                                                {isPreviewPlaying ? <Pause size={12} /> : <Play size={12} />}
+                                            </button>
+                                            <span className="text-[12px] text-[#8891A0] tabular-nums">{formatDuration(recordedDuration)}</span>
+                                            <button type="button" onClick={removeAudio} className="text-[#8891A0] hover:text-red-300" aria-label="Remove voice note">
+                                                <Trash2 size={11} />
+                                            </button>
+                                            <audio
+                                                ref={previewAudioRef}
+                                                src={recordedPreviewUrl}
+                                                onPlay={() => setIsPreviewPlaying(true)}
+                                                onPause={() => setIsPreviewPlaying(false)}
+                                                onEnded={() => setIsPreviewPlaying(false)}
+                                                className="hidden"
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                            <button
+                                type="button"
+                                onClick={onClose}
+                                className="w-8 h-8 rounded-full bg-white/15 text-white hover:bg-[#f87171] transition-colors flex items-center justify-center"
+                                title="Close"
+                                aria-label="Close composer"
+                            >
+                                ✕
+                            </button>
+                        </div>
                     </div>
 
-                    {/* Action buttons: close, add/change, remove */}
-                    <div className="flex gap-1 flex-shrink-0">
-                        {composerPreview && (
-                            <>
+                    <nav className="relative mt-4 flex gap-6 border-b border-white/10">
+                        {POST_TYPES.map((tab) => {
+                            const active = tab.value === activePostType;
+
+                            return (
                                 <button
+                                    key={tab.value}
+                                    ref={(element) => {
+                                        tabsRef.current[tab.value] = element;
+                                    }}
                                     type="button"
-                                    onClick={() => imageInputRef.current?.click() || videoInputRef.current?.click()}
-                                    className="w-8 h-8 rounded-full bg-white/15 text-white hover:bg-white/25 transition-colors flex items-center justify-center"
-                                    title="Change media"
-                                    aria-label="Change media"
+                                    onClick={() => setActivePostType(tab.value)}
+                                    className={`relative pb-3 text-sm font-medium transition-colors ${active
+                                        ? 'font-bold text-white'
+                                        : 'text-neutral-500 hover:text-neutral-300'
+                                        }`}
                                 >
-                                    <RefreshCw size={12} />
+                                    {tab.label}
                                 </button>
-                                <button
-                                    type="button"
-                                    onClick={removeMedia}
-                                    className="w-8 h-8 rounded-full bg-white/15 text-white hover:bg-white/25 transition-colors flex items-center justify-center"
-                                    title="Remove media"
-                                    aria-label="Remove media"
-                                >
-                                    <Trash2 size={12} />
-                                </button>
-                            </>
-                        )}
-                        {!composerPreview && (
+                            );
+                        })}
+
+                        <span
+                            ref={underlineRef}
+                            className="absolute bottom-0 left-0 h-0.5 bg-white"
+                        />
+                        {activePostType === 'orbital' && (
                             <button
                                 type="button"
-                                onClick={() => imageInputRef.current?.click()}
-                                className="w-8 h-8 rounded-full bg-white/15 text-white hover:bg-white/25 transition-colors flex items-center justify-center"
-                                title="Add image"
-                                aria-label="Add image"
+                                onClick={() => setActivePostType('orbital')}
+                            // className="pb-3 p-2"
                             >
-                                🖼
+                                <OrbitalPicker
+                                    value={selectedOrbitals}
+                                    onChange={setSelectedOrbitals}
+                                />
                             </button>
                         )}
-                        {!composerPreview && (
-                            <button
-                                type="button"
-                                onClick={() => videoInputRef.current?.click()}
-                                className="w-8 h-8 rounded-full bg-white/15 text-white hover:bg-white/25 transition-colors flex items-center justify-center"
-                                title="Add video"
-                                aria-label="Add video"
-                            >
-                                🎥
-                            </button>
-                        )}
-                        <button
-                            type="button"
-                            onClick={onClose}
-                            className="w-8 h-8 rounded-full bg-white/15 text-white hover:bg-[#f87171] transition-colors flex items-center justify-center"
-                            title="Close"
-                            aria-label="Close composer"
-                        >
-                            ✕
-                        </button>
-                    </div>
+                    </nav>
                 </div>
 
                 {/* Media preview or placeholder */}
@@ -434,57 +583,6 @@ export default function ComposerCard({
                                 alt="Preview"
                                 className="relative block h-auto max-h-[50vh] w-auto max-w-full rounded-[1.75rem] object-contain"
                             />
-                        )}
-                    </div>
-                ) : isRecordingSupported ? (
-                    <div className="flex items-center gap-2">
-                        {!isRecording && !recordedBlob && (
-                            <button
-                                type="button"
-                                onClick={startRecording}
-                                disabled={isPosting}
-                                className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-[#0D1117] text-[#8891A0] transition-colors hover:border-white/20 hover:text-[#E7EAEF] disabled:cursor-not-allowed disabled:opacity-50"
-                                aria-label="Record voice note"
-                            >
-                                <Mic size={14} />
-                            </button>
-                        )}
-
-                        {isRecording && (
-                            <button
-                                type="button"
-                                onClick={stopRecording}
-                                className="flex h-9 items-center gap-2 rounded-full border border-red-500/30 bg-red-500/10 px-3 text-[13px] font-medium text-red-300"
-                            >
-                                <span className="h-2 w-2 animate-pulse rounded-full bg-red-400" />
-                                {formatDuration(recordingSeconds)}
-                                <StopCircle size={11} />
-                            </button>
-                        )}
-
-                        {recordedBlob && !isRecording && (
-                            <div className="flex h-9 items-center gap-2 rounded-full border border-white/10 bg-[#0D1117] px-3">
-                                <button
-                                    type="button"
-                                    onClick={togglePreviewPlayback}
-                                    className="text-[#E7EAEF]"
-                                    aria-label={isPreviewPlaying ? 'Pause preview' : 'Play preview'}
-                                >
-                                    {isPreviewPlaying ? <Pause size={12} /> : <Play size={12} />}
-                                </button>
-                                <span className="text-[12px] text-[#8891A0] tabular-nums">{formatDuration(recordedDuration)}</span>
-                                <button type="button" onClick={removeAudio} className="text-[#8891A0] hover:text-red-300" aria-label="Remove voice note">
-                                    <Trash2 size={11} />
-                                </button>
-                                <audio
-                                    ref={previewAudioRef}
-                                    src={recordedPreviewUrl}
-                                    onPlay={() => setIsPreviewPlaying(true)}
-                                    onPause={() => setIsPreviewPlaying(false)}
-                                    onEnded={() => setIsPreviewPlaying(false)}
-                                    className="hidden"
-                                />
-                            </div>
                         )}
                     </div>
                 ) : null}
@@ -547,6 +645,6 @@ export default function ComposerCard({
                 className="hidden"
                 id={videoInputId.current}
             />
-        </div>
+        </div >
     );
 }

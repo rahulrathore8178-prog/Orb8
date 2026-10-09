@@ -1,7 +1,7 @@
 // models/orbitalMember.model.js
 const mongoose = require("mongoose");
 
-const ROLE = Object.freeze({ ADMIN: "admin", MEMBER: "member" });
+const ROLE = Object.freeze({ CREATOR: "creator", ADMIN: "admin", MEMBER: "member" });
 const STATUS = Object.freeze({ ACTIVE: "active", PENDING: "pending" });
 
 const orbitalMemberSchema = new mongoose.Schema(

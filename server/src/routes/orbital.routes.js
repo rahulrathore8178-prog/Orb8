@@ -3,7 +3,7 @@ const orbital = require("../controllers/orbital.controller");
 const membership = require("../controllers/orbitalMemeber.controller");
 const requests = require("../controllers/orbitalMemeber.controller");
 const posts = require("../controllers/orbitalPosts.controller");
-const { orbitalImageUpload } = require("../middlewares/upload.middleware");
+const { orbitalImageUpload, postMediaUpload } = require("../middlewares/upload.middleware");
 const { protect } = require("../middlewares/auth.middleware");
 const {
     loadOrbital,
@@ -12,16 +12,21 @@ const {
 } = require("../middlewares/orbital.middleware");
 
 const router = Router();
+
+// Drive image proxy: <img> requests cannot attach the frontend Bearer token.
+router.get("/image/:fileId", orbital.streamOrbitalImage);
+
 router.use(protect);
 
 router.post("/new", orbitalImageUpload, orbital.createOrbital);
 router.get("/mine", orbital.getMyOrbitals); // must stay above "/:orbitalId"
+router.get("/all", orbital.getAllOrbitals); // must stay above "/:orbitalId"
 
+router.delete("/deleteorbital/:orbitalId", loadOrbital, requireAdmin, orbital.deleteOrbital);
 // Everything below loads the orbital first
 router.use("/:orbitalId", loadOrbital);
 router.get("/:orbitalId", orbital.getOrbital);
 router.patch("/:orbitalId", requireAdmin, orbital.updateOrbital);
-router.delete("/:orbitalId", requireAdmin, orbital.deleteOrbital);
 
 // membership
 router.post("/:orbitalId/join", membership.joinOrbital);
@@ -36,7 +41,7 @@ router.patch("/:orbitalId/requests/:userId/approve", requireAdmin, requests.appr
 router.delete("/:orbitalId/requests/:userId", requireAdmin, requests.rejectJoinRequest);
 
 // posts (members only)
-router.post("/:orbitalId/posts", requireMember, posts.createOrbitalPost);
+router.post("/:orbitalId/posts", requireMember, postMediaUpload, posts.createOrbitalPost);
 router.get("/:orbitalId/posts", requireMember, posts.getOrbitalPosts);
 router.delete("/:orbitalId/posts/:postId", requireMember, posts.deleteOrbitalPost);
 

@@ -2,10 +2,21 @@ const Orbital = require("../models/orbital.model.js");
 const { VISIBILITY } = require("../models/orbital.model.js");
 const OrbitalMember = require("../models/orbitalMember.model.js");
 const { ROLE, STATUS } = require("../models/orbitalMember.model.js");
-const Post = require("../models/post.model.js");
+const {Post} = require("../models/post.model.js");
 const { asyncHandler } = require("../utils/asyncHandler.js");
+const { uploadBufferToDrive, streamFileFromDrive } = require("../utils/driveUpload.js");
+const sharp = require('sharp');
 
 const isDuplicateKey = (err) => err?.code === 11000;
+
+const streamOrbitalImage = asyncHandler(async (req, res) => {
+    const fileId = String(req.params.fileId || '').trim();
+    if (!/^[A-Za-z0-9_-]+$/.test(fileId)) {
+        return res.status(400).json({ message: 'Invalid orbital image id' });
+    }
+
+    await streamFileFromDrive(fileId, res, req);
+});
 
 const createOrbital = asyncHandler(async (req, res) => {
     console.log('createOrbital called with body:', req.body);
@@ -19,11 +30,30 @@ const createOrbital = asyncHandler(async (req, res) => {
     }
 
     let orbital;
+    let imageUrl = '';
+    if (req.file) {
+        let processedImageBuffer;
+        try {
+            processedImageBuffer = await sharp(req.file.buffer)
+                .resize({ width: 800, height: 800, fit: 'inside' })
+                .webp({ quality: 85 })
+                .toBuffer();
+        } catch (err) {
+            console.error('[ORBITAL IMAGE] Sharp error:', err);
+            return res.status(500).json({ message: 'Image transform failed' });
+        }
+
+        const timestamp = Date.now();
+        const fileName = `orbital-${req.user.id}-${timestamp}.webp`;
+        const uploadedImage = await uploadBufferToDrive(processedImageBuffer, fileName, 'image/webp');
+        imageUrl = uploadedImage.publicUrl;
+    }
     try {
         orbital = await Orbital.create({
             name,
             description,
             visibility,
+            image: imageUrl,
             creator: req.user._id,
             memberCount: 1,
         });
@@ -38,7 +68,7 @@ const createOrbital = asyncHandler(async (req, res) => {
         await OrbitalMember.create({
             orbital: orbital._id,
             user: req.user._id,
-            role: ROLE.ADMIN,
+            role: ROLE.CREATOR,
             status: STATUS.ACTIVE,
         });
     } catch (err) {
@@ -56,9 +86,13 @@ const getOrbital = asyncHandler(async (req, res) => {
         user: req.user._id,
     }).lean();
 
+    const orbital = await Orbital.findById(req.orbital._id)
+        .populate("creator", "username fullName profilePic image")
+        .lean();
+
     res.json({
         success: true,
-        orbital: req.orbital,
+        orbital,
         viewer: {
             status: membership?.status ?? "none", // "none" | "pending" | "active"
             role: membership?.role ?? null,
@@ -71,7 +105,7 @@ const getMyOrbitals = asyncHandler(async (req, res) => {
         user: req.user._id,
         status: STATUS.ACTIVE,
     })
-        .populate("orbital", "name description visibility memberCount")
+        .populate("orbital", "name description visibility memberCount image")
         .sort({ createdAt: -1 })
         .lean();
 
@@ -79,6 +113,17 @@ const getMyOrbitals = asyncHandler(async (req, res) => {
         success: true,
         orbitals: memberships.map((m) => ({ ...m.orbital, role: m.role })),
     });
+});
+
+const getAllOrbitals = asyncHandler(async (req, res) => {
+    const orbitals = await Orbital.find({})
+        .select("name description visibility memberCount creator image")
+        .populate("creator", "username fullName profilePic")
+        .sort({ memberCount: -1, createdAt: -1 })
+        .limit(10)
+        .lean();
+
+    res.json({ success: true, orbitals });
 });
 
 const updateOrbital = asyncHandler(async (req, res) => {
@@ -105,6 +150,7 @@ const updateOrbital = asyncHandler(async (req, res) => {
 });
 
 const deleteOrbital = asyncHandler(async (req, res) => {
+    console.log('deleteOrbital called for orbitalId:', req.orbital._id);
     const orbitalId = req.orbital._id;
 
     await Promise.all([
@@ -117,9 +163,11 @@ const deleteOrbital = asyncHandler(async (req, res) => {
 });
 
 module.exports = {
+    streamOrbitalImage,
     createOrbital,
     getOrbital,
     getMyOrbitals,
+    getAllOrbitals,
     updateOrbital,
     deleteOrbital,
 };
