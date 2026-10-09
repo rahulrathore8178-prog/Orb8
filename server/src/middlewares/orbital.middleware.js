@@ -9,10 +9,12 @@ const { ROLE, STATUS } = require("../models/orbitalMember.model.js");
 // Attaches req.orbital
 const loadOrbital = asyncHandler(async (req, res, next) => {
     const { orbitalId } = req.params;
+    console.log('loadOrbital called with orbitalId:', orbitalId);
     if (!mongoose.isValidObjectId(orbitalId)) {
         return res.status(400).json({ success: false, message: "Invalid orbital id" });
     }
-    const orbital = await Orbital.findById(orbitalId);
+    const orbital = await Orbital.findById(orbitalId)
+        .populate("creator", "username fullName profilePic");
     if (!orbital) {
         return res.status(404).json({ success: false, message: "Orbital not found" });
     }
@@ -38,9 +40,18 @@ const requireMember = asyncHandler(async (req, res, next) => {
 const requireAdmin = [
     requireMember,
     (req, res, next) => {
-        if (req.membership.role !== ROLE.ADMIN) {
-            return res.status(403).json({ success: false, message: "Admin access required" });
+        const canManageOrbital = [
+            ROLE.CREATOR,
+            ROLE.ADMIN,
+        ].includes(req.membership.role);
+
+        if (!canManageOrbital) {
+            return res.status(403).json({
+                success: false,
+                message: "Admin access required",
+            });
         }
+
         next();
     },
 ];

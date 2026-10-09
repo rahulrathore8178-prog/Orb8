@@ -267,7 +267,7 @@ export default function AppSidebar() {
   return (
     <>
       {/* ───────────────────────── Desktop ───────────────────────── */}
-      <aside className="hidden z-10 bg-black max-h-screen lg:block shrink-0">
+      <aside className="hidden z-10 bg-black min-h-screen lg:block shrink-0">
         <div
           onMouseEnter={() => dispatch(setDesktopCollapsed(false))}
           onMouseLeave={() => { dispatch(setDesktopCollapsed(true)); setIsOpen(false); }}

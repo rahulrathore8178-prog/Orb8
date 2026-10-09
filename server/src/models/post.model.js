@@ -93,6 +93,11 @@ const postSchema = new mongoose.Schema({
   },
   views: { type: Number, default: 0 },
   viewedBy: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  postType: {
+    type: String,
+    enum: ['feed', 'orbital'],
+    default: 'feed'
+  },
   orbital: {
   type: mongoose.Schema.Types.ObjectId,
   ref: "Orbital",

@@ -30,6 +30,7 @@ import {
   setPage,
   setPosts,
   addPostToTop,
+  setActiveFeedType,
 } from '../redux/slices/feedSlice';
 import {
   fetchPosts,
@@ -43,6 +44,7 @@ import { Plus } from 'lucide-react';
 import ComposerCard from '../components/CommunityFeed/ComposerCard';
 import FilmPostCard from '../components/CommunityFeed/FilmPostCard';
 import CreateOrbitalModal from '../components/Orbital/CreateOrbitalModal';
+import gsap from 'gsap';
 /* ─── Constants ───────────────────────────────────────────────── */
 
 // Cycled per card — colored ambient glow
@@ -69,6 +71,11 @@ const AVATAR_PALETTE = [
   ['#fb923c', '#3a1a00'],
   ['#34d399', '#003020'],
   ['#f472b6', '#40001a'],
+];
+
+const FEED_TYPES = [
+  { value: 'feed', label: 'Your Feed' },
+  { value: 'orbital', label: 'Orbital' },
 ];
 
 export function AvatarInitial({ name, size = 44 }) {
@@ -157,7 +164,7 @@ export default function CommunityPage() {
   const isLoading = useSelector((state) => state.feed.isLoading);
   const error = useSelector((state) => state.feed.error);
   // console.log('localstorage:', localStorage)
-  // console.log('posts:', posts);
+  console.log('posts:', posts);
 
   const observerRef = useRef(null);
   const loadingRef = useRef(null);
@@ -176,7 +183,13 @@ export default function CommunityPage() {
   const [showCapsules, setShowCapsules] = useState(true);
   const [showCreateOrbitalModal, setShowCreateOrbitalModal] = useState(false);
   const [trendingOrbitals, setTrendingOrbitals] = useState([]);
+  const [myOrbitals, setMyOrbitals] = useState([]);
+  // const [activeFeedType, setActiveFeedType] = useState('feed');
+  const activeFeedType = useSelector((state) => state.feed.activeFeedType);
+  const tabsRef = useRef({});
+  const underlineRef = useRef(null);
   const lastScrollPos = useRef(0);
+  const navigate = useNavigate();
 
   // Crossfading ambient backdrop
   const [bgA, setBgA] = useState('');
@@ -186,21 +199,40 @@ export default function CommunityPage() {
   activeIndexRef.current = activeIndex;
 
   const dispatch = useDispatch();
-  useEffect(() => { dispatch(fetchPosts(1)); }, [dispatch]);
+  useEffect(() => {
+    dispatch(setPage(1));
+    dispatch(fetchPosts(1));
+  }, [dispatch, activeFeedType]);
 
   const [showAddCapsule, setShowAddCapsule] = useState(false);
 
   const registerView = async () => {
-    const post = posts[activeIndex];
-    if (!post) return;
-    const res = await axios.post(`${apiUrl}/api/community/posts/${currentUserId}/${post?.id}/views`, {}, {
-      headers: { Authorization: `Bearer ${getAuthHeaders()}` },
-      withCredentials: true,
-    });
-    // console.log('registerView response:', res?.data);
-    // Simulate a view event
-    // console.log('Registering view for post:', post.id);
+    try {
+      const post = posts[activeIndex];
+      if (!post) return;
+      const res = await axios.post(`${apiUrl}/api/community/posts/${currentUserId}/${post?.id}/views`, {}, {
+        headers: { Authorization: `Bearer ${getAuthHeaders()}` },
+        withCredentials: true,
+      });
+    }
+    catch (error) {
+      console.error('Error registering view:', error);
+    }
   };
+
+  useEffect(() => {
+    const activeTab = tabsRef.current[activeFeedType];
+    const underline = underlineRef.current;
+
+    if (!activeTab || !underline) return;
+
+    gsap.to(underline, {
+      x: activeTab.offsetLeft,
+      width: activeTab.offsetWidth,
+      duration: 0.35,
+      ease: 'power3.out',
+    });
+  }, [activeFeedType]);
 
   // Update crossfading backdrop when active post changes
   useEffect(() => {
@@ -350,16 +382,22 @@ export default function CommunityPage() {
     }
   };
 
-  const getMyOrbital = async () => {
+  const getOrbitals = async () => {
     // console.log('Fetching my orbital...');
     try {
-      const res = await axios.get(`${apiUrl}/api/orbital/mine`, {
+      const resAll = await axios.get(`${apiUrl}/api/orbital/all`, {
         withCredentials: true,
         headers: getAuthHeaders(),
       });
-      console.log('My orbital data:', res.data?.orbitals);
-      setTrendingOrbitals(res.data?.orbitals || []);
-      return res.data;
+      const resMy = await axios.get(`${apiUrl}/api/orbital/mine`, {
+        withCredentials: true,
+        headers: getAuthHeaders(),
+      });
+      console.log('All orbital data:', resAll.data?.orbitals?.creator?.username);
+      console.log('My orbital data:', resMy.data?.orbitals);
+      setTrendingOrbitals(resAll.data?.orbitals || []);
+      setMyOrbitals(resMy.data?.orbitals || []);
+      return { my: resMy.data, all: resAll.data };
     } catch (error) {
       console.error('Error fetching my orbital:', error);
       throw error;
@@ -367,13 +405,19 @@ export default function CommunityPage() {
   };
 
   useEffect(() => {
-    getMyOrbital()
+    getOrbitals()
   }, []);
 
   const showCreateOrbital = () => {
     // console.log('createOrbital clicked');
     setShowCreateOrbitalModal(true);
-  }
+  };
+
+  const openOrbital = (orbitalId) => {
+    // console.log('openOrbital clicked', orbitalId);
+    navigate(`/orbital/${orbitalId}`);
+    console.log('openOrbital clicked', orbitalId);
+  };
 
   return (
     <div className="relative h-screen overflow-hidden bg-black">
@@ -421,6 +465,32 @@ export default function CommunityPage() {
               setComposerPreview={setComposerPreview}
             />
           )}
+          <div className="relative flex justify-around px-24 pt-4 pb-2 bg-black/50 border-b border-white/[0.06] transition-all duration-300 ease-out overflow-hidden">
+            {FEED_TYPES.map((tab) => {
+              const active = tab.value === activeFeedType;
+
+              return (
+                <button
+                  key={tab.value}
+                  ref={(element) => {
+                    tabsRef.current[tab.value] = element;
+                  }}
+                  type="button"
+                  onClick={() => dispatch(setActiveFeedType(tab.value))}
+                  className={`relative pb-3 text-lg font-medium transition-colors ${active
+                    ? 'font-bold text-white'
+                    : 'text-neutral-500 hover:text-neutral-300'
+                    }`}
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
+            <span
+              ref={underlineRef}
+              className="absolute bottom-0 left-0 h-0.5 bg-white"
+            />
+          </div>
 
           <div
             ref={scrollRef}
@@ -482,8 +552,8 @@ export default function CommunityPage() {
 
             <div className="flex flex-col gap-[9px]">
               {[
-                { label: 'Posts today', val: posts.length, icon: '📝', live: false },
-                { label: 'Your posts', val: posts.filter((p) => p.author.id === currentUserId).length, icon: '✍️', accent: true },
+                // { label: 'Posts today', val: posts.length, icon: '📝', live: false },
+                { label: 'Your Orbitals', val: myOrbitals.length, icon: '✍️', accent: true },
                 { label: 'Create your own orbital', val: '—', icon: <Plus />, live: false, onClick: () => showCreateOrbital() },
               ].map((row) => (
                 <div
@@ -519,7 +589,7 @@ export default function CommunityPage() {
           {/* <TrendingTopics /> */}
 
           {/* Trending Orbitals */}
-          <div className="bg-white/[0.04] backdrop-blur-xl border border-white/[0.08] rounded-[20px] px-[18px] py-[16px] shadow-[0_8px_32px_rgba(0,0,0,0.45)]">
+          <div className="bg-white/[0.04] overflow-auto backdrop-blur-xl border border-white/[0.08] rounded-[20px] px-[18px] py-[16px] shadow-[0_8px_32px_rgba(0,0,0,0.45)]">
             <div className="font-['Syne'] font-bold text-[13px] text-[#e8f0fe] mb-[14px] tracking-[0.3px] flex items-center">
               <FaUsers className="text-[#aaaaaa] text-[13px] mr-[7px]" /> Trending Orbitals
             </div>
@@ -534,7 +604,63 @@ export default function CommunityPage() {
               {trendingOrbitals.map((orbital, i) => (
                 <div
                   key={orbital._id}
-                  className="flex items-center gap-[10px] bg-white/[0.03] backdrop-blur-md border border-white/[0.06] rounded-[14px] px-[12px] py-[10px] transition-colors duration-200 hover:bg-white/[0.06]"
+                  onClick={() => openOrbital(orbital._id)}
+                  className="flex items-center gap-[10px] bg-white/[0.03] backdrop-blur-md border border-white/[0.06] rounded-[14px] px-[12px] py-[10px] cursor-pointer transition-colors duration-200 hover:bg-white/[0.06]"
+                >
+                  <span className="text-[#777777] font-['DM_Mono'] text-[12px] w-[18px] shrink-0">
+                    {String(i + 1).padStart(2, '0')}
+                  </span>
+
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[13px] font-semibold text-[#e8f0fe] truncate">
+                      {orbital.name}
+                    </div>
+                    <div className="flex items-center gap-[8px] text-[11px] text-[#aaaaaa] mt-[2px]">
+                      <span className="flex items-center gap-[4px]">
+                        <FaUsers className="text-[10px]" />
+                        {orbital.memberCount}
+                      </span>
+                      <span className="flex items-center gap-[4px]">
+                        {orbital.visibility === 'private' ? (
+                          <FaLock className="text-[9px]" />
+                        ) : (
+                          <FaGlobe className="text-[9px]" />
+                        )}
+                        {orbital.visibility}
+                      </span>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="shrink-0 px-[14px] py-[6px] rounded-[10px] text-[11px] font-semibold text-[#e8f0fe] bg-[#161616] shadow-[5px_5px_10px_rgba(0,0,0,0.65),-3px_-3px_8px_rgba(255,255,255,0.05)] transition-all duration-150 hover:text-white active:shadow-[inset_3px_3px_6px_rgba(0,0,0,0.7),inset_-2px_-2px_5px_rgba(255,255,255,0.04)]"
+                  >
+                    {orbital.visibility === 'private' ? 'Request' : 'Join'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+
+          {/* My Orbitals */}
+          <div className="bg-white/[0.04] overflow-auto backdrop-blur-xl border border-white/[0.08] rounded-[20px] px-[18px] py-[16px] shadow-[0_8px_32px_rgba(0,0,0,0.45)]">
+            <div className="font-['Syne'] font-bold text-[13px] text-[#e8f0fe] mb-[14px] tracking-[0.3px] flex items-center">
+              <FaUsers className="text-[#aaaaaa] text-[13px] mr-[7px]" /> My Orbitals
+            </div>
+
+            <div className="flex flex-col gap-[10px]">
+              {myOrbitals.length === 0 && (
+                <div className="text-[12px] text-[#777777] text-center py-[12px]">
+                  No trending orbitals yet
+                </div>
+              )}
+
+              {myOrbitals.map((orbital, i) => (
+                <div
+                  key={orbital._id}
+                  onClick={() => openOrbital(orbital._id)}
+                  className="flex items-center gap-[10px] bg-white/[0.03] backdrop-blur-md border border-white/[0.06] rounded-[14px] px-[12px] py-[10px] cursor-pointer transition-colors duration-200 hover:bg-white/[0.06]"
                 >
                   <span className="text-[#777777] font-['DM_Mono'] text-[12px] w-[18px] shrink-0">
                     {String(i + 1).padStart(2, '0')}

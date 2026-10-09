@@ -103,6 +103,7 @@ export default function CreateOrbitalModal({
     const [description, setDescription] = useState("");
     const [visibility, setVisibility] = useState(VISIBILITY.OPEN); // open by default
     const [imageFile, setImageFile] = useState(null);
+    // console.log('image file', imageFile);
     const [imagePreview, setImagePreview] = useState("");
     const [invitees, setInvitees] = useState([]);
 
@@ -191,6 +192,7 @@ export default function CreateOrbitalModal({
         if (file.size > IMAGE_MAX_MB * 1024 * 1024) return setImageError(`Image must be under ${IMAGE_MAX_MB} MB.`);
         setImageError("");
         setImageFile(file);
+        // console.log("Selected image file:", file);
     };
 
     /* ------------------------------- User search ------------------------------- */
@@ -258,7 +260,10 @@ export default function CreateOrbitalModal({
             formData.append("name", trimmed);
             formData.append("description", description.trim());
             formData.append("visibility", visibility);
-            if (imageFile) formData.append("image", imageFile);
+            if (imageFile) {
+                formData.append("media", imageFile, imageFile.name);
+            } console.log('image file', imageFile);
+            console.log('formData', formData);
 
             const response = await axios.post(`${apiUrl}/api/orbital/new`, formData, {
                 withCredentials: true,
