@@ -1,23 +1,55 @@
-const Post = require("../models/post.model.js");
+const { Post } = require("../models/post.model.js");
 const { asyncHandler } = require("../utils/asyncHandler.js");
 const { ROLE } = require("../models/orbitalMember.model.js");
+const sharp = require("sharp");
+const { uploadBufferToDrive } = require("../utils/driveUpload.js");
 
 const createOrbitalPost = asyncHandler(async (req, res) => {
     const { content, hashtags } = req.body;
 
     if (!content?.trim()) {
-        return res.status(400).json({ success: false, message: "Post content is required" });
+        return res.status(400).json({
+            success: false,
+            message: "Post content is required",
+        });
     }
 
-    // `orbital` is set from the URL, never from the body, so it can't be spoofed
+    let image = "";
+
+    if (req.file) {
+        if (!req.file.mimetype.startsWith("image/")) {
+            return res.status(400).json({
+                success: false,
+                message: "Only image uploads are supported for orbital posts",
+            });
+        }
+
+        const processedImageBuffer = await sharp(req.file.buffer)
+            .resize({ width: 800, height: 800, fit: "inside" })
+            .webp({ quality: 85 })
+            .toBuffer();
+
+        const fileName = `orbital-post-${req.user._id}-${Date.now()}.webp`;
+        const { fileId } = await uploadBufferToDrive(
+            processedImageBuffer,
+            fileName,
+            "image/webp"
+        );
+
+        image = `/api/community/posts/image/${fileId}`;
+    }
+
     const post = await Post.create({
         author: req.user._id,
-        content,
+        content: content.trim(),
         hashtags,
+        image,
         orbital: req.orbital._id,
+        postType: 'orbital'
     });
 
-    await post.populate("author", "username fullName avatar");
+    await post.populate("author", "username fullName avatar profilePic");
+
     res.status(201).json({ success: true, post });
 });
 
@@ -31,7 +63,7 @@ const getOrbitalPosts = asyncHandler(async (req, res) => {
 
     const [posts, total] = await Promise.all([
         Post.find(filter)
-            .populate("author", "username fullName avatar")
+            .populate("author", "username fullName avatar profilePic orbital")
             .sort({ createdAt: -1 })
             .skip((page - 1) * limit)
             .limit(limit)

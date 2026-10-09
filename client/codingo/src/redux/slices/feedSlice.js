@@ -34,6 +34,7 @@ const feedSlice = createSlice({
     hasMore: true,
     isLoading: false,
     selectedPost: null,
+    activeFeedType: 'feed',
     commentLiked: {},
     error: '',
   },
@@ -123,6 +124,9 @@ const feedSlice = createSlice({
         state.posts = action.payload;
       }
     },
+    setActiveFeedType: (state, action) => {
+      state.activeFeedType = action.payload;
+    },
     setPage: (state, action) => {
       state.page = action.payload;
     },
@@ -196,5 +200,5 @@ const feedSlice = createSlice({
   },
 });
 
-export const { setShowComments, setCommentText, setIsCommenting, toggleLike, toggleComments, setLiked, setLikeCount, setHeartAnim, setShowModal, initPost, setPosts, setPage, setHasMore, setIsLoading, setError, setSelectedPost, setCommentReplying, setCommentLiked, setCommentLikedCount, setIsSubmittingReply, setReplyText, setRepliesOpen, setIsCommentLiked, setLocalCommentReplies, addPostToTop } = feedSlice.actions;
+export const { setShowComments, setCommentText, setIsCommenting, toggleLike, toggleComments, setLiked, setLikeCount, setHeartAnim, setShowModal, initPost, setPosts, setPage, setHasMore, setIsLoading, setError, setSelectedPost, setCommentReplying, setCommentLiked, setCommentLikedCount, setIsSubmittingReply, setReplyText, setRepliesOpen, setIsCommentLiked, setLocalCommentReplies, addPostToTop, setActiveFeedType } = feedSlice.actions;
 export default feedSlice.reducer;
