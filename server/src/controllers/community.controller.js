@@ -60,12 +60,16 @@ async function createPost(req, res) {
   try {
     const { content } = req.body;
 
-    if (!content || content.trim().length === 0) {
-      return res.status(400).json({ message: 'Post content is required' });
-    }
+    // if (!content || content.trim().length === 0) {
+    //   return res.status(400).json({ message: 'Post content is required' });
+    // }
 
-    if (content.length > 2000) {
-      return res.status(400).json({ message: 'Post content exceeds 2000 characters' });
+    if (!content || content.trim().length === 0) return;
+
+    if (content.length) {
+      if (content.length > 2000) {
+        return res.status(400).json({ message: 'Post content exceeds 2000 characters' });
+      }
     }
 
     // --- hashtags: parse + normalize what the client sent ---
@@ -85,13 +89,17 @@ async function createPost(req, res) {
         .map((t) => t.trim().toLowerCase().replace(/[^a-z0-9_]/g, ''))
         .filter(Boolean)
     )].slice(0, 30);
+    console.log('[POST DEBUG] normalized hashtags:', hashtags);
+    console.log('[POST DEBUG] orbital:', req.body.orbital);
 
     const postData = {
       author: req.user.id,
-      content: content.trim(),
+      content: content.trim() || '',
       hashtags,
       image: '',
       video: '',
+      postType: req.body.postType || 'feed',
+      orbital: req.body.orbital || null,
       // driveFileId: '',
       voiceNote: '',
       voiceNoteFileId: '',
@@ -180,7 +188,7 @@ async function createPost(req, res) {
     const file = req.file
     if (file && file.mimetype.startsWith("image/")) {
       console.log('data:', file.buffer, file.originalname, file.mimetype, post._id.toString())
-      analyzeImage(file.buffer, file.originalname, file.mimetype, analysis_prompt)
+      await analyzeImage(file.buffer, file.originalname, file.mimetype, analysis_prompt)
         .then(async (analysis) => {
           console.log('analysis ready', analysis)
           await Post.findByIdAndUpdate(post._id, { analysis, status: "ready" });
@@ -265,15 +273,24 @@ async function getFeed(req, res) {
     const limit = Math.min(20, Math.max(1, parseInt(req.query.limit, 10) || 10));
     const skip = (page - 1) * limit;
 
-    const filter = { isActive: true };
+    const filter = {
+      isActive: true,
+    };
+
+    if (req.query.type === 'orbital') {
+      filter.orbital = { $ne: null };
+    } else {
+      filter.orbital = null;
+    }
 
     const total = await Post.countDocuments(filter);
     const totalPages = Math.ceil(total / limit);
 
     const posts = await Post.find(filter)
-      .populate("author", "username profilePic league level totalXp")
+      .populate("author", "username profilePic league level totalXp orbital")
       .populate("comments.author", "username profilePic")
       .populate("comments.replies.author", "username profilePic")
+      .populate("orbital", "name description visibility image")
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
@@ -336,6 +353,8 @@ async function getFeed(req, res) {
           post.likes?.some((id) => String(id) === currentUserId) ?? false,
         createdAt: post.createdAt,
         updatedAt: post.updatedAt,
+        orbital: post.orbital || null,
+        postType: post.postType || "feed",
       }));
 
     return res.status(200).json({

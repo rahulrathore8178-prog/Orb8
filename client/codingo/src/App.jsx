@@ -33,6 +33,7 @@ import RememberIgris from './pages/rememberIgris.jsx';
 import { onMessage } from './firebase';
 import { registerPushNotifications } from './notifications/registerPushNotifications';
 import SearchPage from './pages/SearchPage.jsx';
+import OrbitalPage from './pages/OrbitalPage.jsx';
 
 function ProtectedRoute({ children }) {
   const [isChecking, setIsChecking] = useState(true);
@@ -304,6 +305,14 @@ function AppShell() {
               element={(
                 <ProtectedRoute>
                   <SearchPage />
+                </ProtectedRoute>
+              )}
+            />
+            <Route
+              path="/orbital/:orbitalId"
+              element={(
+                <ProtectedRoute>
+                  <OrbitalPage />
                 </ProtectedRoute>
               )}
             />

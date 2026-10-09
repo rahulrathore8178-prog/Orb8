@@ -12,6 +12,14 @@ import { BarChart3 } from 'lucide-react';
 
 
 export default function FilmPostCard({ post, cardRef, textGradient, isOwn, isActive, onLike, onDelete }) {
+        function getDisplayImageUrl(imageUrl) {
+        if (!imageUrl) return '';
+        const match = imageUrl.match(/[?&]id=([^&]+)/);
+        if (match && imageUrl.includes('uc?id=')) {
+            return `https://drive.google.com/thumbnail?id=${match[1]}&sz=w1000`;
+        }
+        return imageUrl;
+    }
     const navigate = useNavigate();
     const dispatch = useDispatch();
     const apiUrl = import.meta.env.VITE_API_URL || '';
@@ -26,7 +34,7 @@ export default function FilmPostCard({ post, cardRef, textGradient, isOwn, isAct
     const sourceNodeRef = useRef(null);
     const canvasRef = useRef(null);
     const animationFrameRef = useRef(null);
-    const imageUrl = post.image?.startsWith('/') ? `${apiUrl}${post.image}` : getDisplayImageUrl(post.image);
+    const imageUrl = post.image?.startsWith('/') ? `${apiUrl}${post?.image}` : getDisplayImageUrl(post?.image);
     const videoUrl = post.video?.startsWith('/') ? `${apiUrl}${post.video}` : post.video;
     const audioUrl = post.voiceNote?.startsWith('/') ? `${apiUrl}${post.voiceNote}` : post.voiceNote;
 
@@ -171,15 +179,6 @@ export default function FilmPostCard({ post, cardRef, textGradient, isOwn, isAct
     const likeCount = useSelector((state) => state.feed.likeCounts[post.id] ?? post.likesCount ?? 0);
     const heartAnim = useSelector((state) => state.feed.heartAnim[post.id] ?? false);
     const showModal = useSelector((state) => state.feed.showModal[post.id] ?? false);
-
-    function getDisplayImageUrl(imageUrl) {
-        if (!imageUrl) return '';
-        const match = imageUrl.match(/[?&]id=([^&]+)/);
-        if (match && imageUrl.includes('uc?id=')) {
-            return `https://drive.google.com/thumbnail?id=${match[1]}&sz=w1000`;
-        }
-        return imageUrl;
-    }
 
     // Autoplay when the video scrolls into view, pause when it leaves
     useEffect(() => {
