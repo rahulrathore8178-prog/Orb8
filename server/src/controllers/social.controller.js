@@ -6,6 +6,201 @@ const User = require('../models/user.model');
  */
 const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+const includesId = (values, id) => (values || []).some(value => value.toString() === id.toString());
+
+const getUsersForRelationship = async (currentUserId, targetUserId) => {
+  if (currentUserId.toString() === targetUserId.toString()) {
+    return { error: { status: 400, message: 'You cannot perform this action on yourself' } };
+  }
+
+  const [currentUser, targetUser] = await Promise.all([
+    User.findById(currentUserId),
+    User.findById(targetUserId),
+  ]);
+
+  if (!currentUser || !targetUser) {
+    return { error: { status: 404, message: 'User not found' } };
+  }
+
+  return { currentUser, targetUser };
+};
+
+exports.followUser = async (req, res) => {
+  try {
+    const { currentUser, targetUser, error } = await getUsersForRelationship(req.user.id, req.params.userId);
+    if (error) return res.status(error.status).json({ message: error.message });
+
+    if (includesId(currentUser.blockedUsers, targetUser._id) || includesId(targetUser.blockedUsers, currentUser._id)) {
+      return res.status(403).json({ message: 'This relationship is unavailable' });
+    }
+
+    if (includesId(currentUser.following, targetUser._id)) {
+      return res.json({ status: 'following' });
+    }
+
+    if (targetUser.isPrivate) {
+      if (!includesId(targetUser.followRequests, currentUser._id)) {
+        targetUser.followRequests.push(currentUser._id);
+        await targetUser.save();
+      }
+      return res.json({ status: 'requested' });
+    }
+
+    currentUser.following.addToSet(targetUser._id);
+    targetUser.followers.addToSet(currentUser._id);
+    await Promise.all([currentUser.save(), targetUser.save()]);
+    return res.json({ status: 'following' });
+  } catch (error) {
+    console.error('Follow user error:', error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+exports.unfollowUser = async (req, res) => {
+  try {
+    const currentUserId = req.user.id;
+    const targetUserId = req.params.userId;
+    await Promise.all([
+      User.updateOne({ _id: currentUserId }, { $pull: { following: targetUserId } }),
+      User.updateOne(
+        { _id: targetUserId },
+        { $pull: { followers: currentUserId, followRequests: currentUserId } },
+      ),
+    ]);
+    return res.json({ status: 'none' });
+  } catch (error) {
+    console.error('Unfollow user error:', error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+exports.getFollowRequests = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id)
+      .populate('followRequests', 'username profilePic bio')
+      .select('followRequests')
+      .lean();
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    return res.json({ requests: user.followRequests || [] });
+  } catch (error) {
+    console.error('Get follow requests error:', error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+exports.resolveFollowRequest = async (req, res) => {
+  try {
+    const { currentUser, targetUser: requester, error } = await getUsersForRelationship(req.user.id, req.params.userId);
+    if (error) return res.status(error.status).json({ message: error.message });
+    if (!includesId(currentUser.followRequests, requester._id)) {
+      return res.status(404).json({ message: 'Follow request not found' });
+    }
+
+    currentUser.followRequests.pull(requester._id);
+    if (req.body.accept === true) {
+      currentUser.followers.addToSet(requester._id);
+      requester.following.addToSet(currentUser._id);
+    }
+    await Promise.all([currentUser.save(), requester.save()]);
+    return res.json({ status: req.body.accept === true ? 'following' : 'none' });
+  } catch (error) {
+    console.error('Resolve follow request error:', error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+exports.updatePrivacy = async (req, res) => {
+  if (typeof req.body.isPrivate !== 'boolean') {
+    return res.status(400).json({ message: 'isPrivate must be a boolean' });
+  }
+  try {
+    const user = await User.findByIdAndUpdate(
+      req.user.id,
+      { $set: { isPrivate: req.body.isPrivate } },
+      { new: true },
+    ).select('isPrivate');
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    return res.json({ isPrivate: user.isPrivate });
+  } catch (error) {
+    console.error('Update privacy error:', error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+exports.blockUser = async (req, res) => {
+  try {
+    const { currentUser, targetUser, error } = await getUsersForRelationship(req.user.id, req.params.userId);
+    if (error) return res.status(error.status).json({ message: error.message });
+
+    currentUser.blockedUsers.addToSet(targetUser._id);
+    currentUser.followers.pull(targetUser._id);
+    currentUser.following.pull(targetUser._id);
+    currentUser.followRequests.pull(targetUser._id);
+    currentUser.friends.pull(targetUser._id);
+    targetUser.followers.pull(currentUser._id);
+    targetUser.following.pull(currentUser._id);
+    targetUser.followRequests.pull(currentUser._id);
+    targetUser.friends.pull(currentUser._id);
+    targetUser.friendRequests = targetUser.friendRequests.filter(request => request.from.toString() !== currentUser._id.toString());
+    currentUser.friendRequests = currentUser.friendRequests.filter(request => request.from.toString() !== targetUser._id.toString());
+    await Promise.all([currentUser.save(), targetUser.save()]);
+    return res.json({ status: 'blocked' });
+  } catch (error) {
+    console.error('Block user error:', error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+exports.unblockUser = async (req, res) => {
+  try {
+    await User.updateOne({ _id: req.user.id }, { $pull: { blockedUsers: req.params.userId } });
+    return res.json({ status: 'none' });
+  } catch (error) {
+    console.error('Unblock user error:', error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+exports.updateProfileGrid = async (req, res) => {
+  const layout = req.body.layout;
+  const allowedSizes = new Set([
+    '1x1', '2x1', '3x1',
+    '1x2', '2x2', '3x2',
+    '1x3', '2x3', '3x3',
+  ]);
+  if (!Array.isArray(layout) || layout.length > 100) {
+    return res.status(400).json({ message: 'layout must be an array of at most 100 posts' });
+  }
+
+  const postIds = layout.map(item => item?.post);
+  if (postIds.some(id => !id) || new Set(postIds.map(String)).size !== postIds.length
+    || layout.some(item => !allowedSizes.has(item.gridSize))) {
+    return res.status(400).json({ message: 'Each post must be unique and use a supported grid size' });
+  }
+
+  try {
+    const ownedPostCount = await require('../models/post.model').Post.countDocuments({
+      _id: { $in: postIds },
+      author: req.user.id,
+      isActive: true,
+    });
+    if (ownedPostCount !== postIds.length) {
+      return res.status(403).json({ message: 'The grid can only contain your posts' });
+    }
+    const user = await User.findByIdAndUpdate(
+      req.user.id,
+      { $set: { profileGridLayout: layout } },
+      { new: true, runValidators: true },
+    ).select('profileGridLayout');
+    if (!user) {
+      return res.status(404).json({ message: 'Profile not found' });
+    }
+    return res.json({ layout: user.profileGridLayout });
+  } catch (error) {
+    console.error('Update profile grid error:', error);
+    return res.status(500).json({ message: 'Failed to update profile grid' });
+  }
+};
 exports.searchUsers = async (req, res) => {
   try {
     const { q } = req.query;
@@ -378,7 +573,7 @@ exports.cancelFriendRequest = async (req, res) => {
 // DELETE /friends/:userId  (unfriend, removes both sides)
 exports.removeFriend = async (req, res) => {
   try {
-    const { userId } = req.params;
+    const userId = req.params.friendId;
     const currentUserId = req.user.id;
 
     await Promise.all([

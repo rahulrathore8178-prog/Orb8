@@ -56,7 +56,7 @@ const AvatarInitial = ({ name = "?", size = 36 }) => {
                 width: size,
                 height: size,
                 fontSize: size * 0.42,
-                background: "linear-gradient(135deg,#8b5cf6,#ec4899)",
+                background: "linear-gradient(135deg,#3b82f6,#1e3a5f)",
             }}
         >
             {displayName.charAt(0).toUpperCase()}
@@ -145,7 +145,6 @@ export default function PostPreview({ posts, initialIndex = 0, isOpen, onClose }
 
     const backdropRef = useRef(null);
     const cardRef = useRef(null);
-    const glowRef = useRef(null);
     const slideRef = useRef(null); // animated on prev/next
     const videoRef = useRef(null);
 
@@ -155,13 +154,6 @@ export default function PostPreview({ posts, initialIndex = 0, isOpen, onClose }
     const hasImage = !!imageUrl;
     const hasVideo = !!videoUrl;
     const hasMedia = hasImage || hasVideo;
-
-    // Keep the requested index in sync if the caller opens the modal on a different post
-    useEffect(() => {
-        if (isOpen) setIndex(initialIndex);
-    }, [isOpen, initialIndex]);
-
-    useEffect(() => setMediaLoaded(false), [index]);
 
     /* ---------------- open animation ---------------- */
     useLayoutEffect(() => {
@@ -205,6 +197,7 @@ export default function PostPreview({ posts, initialIndex = 0, isOpen, onClose }
             if (nextIndex < 0 || nextIndex >= previewPosts.length || nextIndex === index) return;
             const reduced = prefersReducedMotion();
             setIsPlaying(false);
+            setMediaLoaded(false);
             const el = slideRef.current;
             const outX = direction === 1 ? -36 : 36;
             const inX = direction === 1 ? 36 : -36;
@@ -216,13 +209,6 @@ export default function PostPreview({ posts, initialIndex = 0, isOpen, onClose }
                 gsap.to(el, { x: 0, opacity: 1, duration: reduced ? 0.01 : 0.35, ease: "power3.out" });
             });
 
-            // subtle glow re-tint per post, just for visual variety
-            const palette = ["#8b5cf6", "#ec4899", "#22d3ee", "#f59e0b"];
-            gsap.to(glowRef.current, {
-                backgroundColor: palette[nextIndex % palette.length],
-                duration: 0.6,
-                ease: "power2.out",
-            });
         },
         [index, previewPosts.length]
     );
@@ -254,29 +240,18 @@ export default function PostPreview({ posts, initialIndex = 0, isOpen, onClose }
         <div
             ref={backdropRef}
             onClick={handleClose}
-            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-0 backdrop-blur-md sm:p-4"
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-0 backdrop-blur-sm sm:p-4"
         >
-            {/* ambient glow behind the card */}
-            <div
-                ref={glowRef}
-                aria-hidden="true"
-                className="pointer-events-none absolute -z-10 h-[40%] w-[55%] rounded-full opacity-40 blur-[110px]"
-                style={{ backgroundColor: "#8b5cf6" }}
-            />
-
             {/* card */}
             <div
                 ref={cardRef}
                 onClick={(e) => e.stopPropagation()}
-                className="relative flex h-[92vh] w-[90vw] left-5 flex-col overflow-hidden rounded-[1.75rem]
-                    sm:h-[85vh] sm:w-[80vw] sm:rounded-[2.25rem]
-                    lg:h-[80vh] lg:w-[60vw] lg:flex-row lg:rounded-[2.5rem]"
+                className="relative flex h-full w-full flex-col overflow-hidden bg-[#0b0d11]
+                    sm:h-[88vh] sm:w-[92vw] sm:rounded-lg
+                    lg:max-w-5xl lg:flex-row"
                 style={{
-                    background: "linear-gradient(160deg, rgba(255,255,255,0.14) 0%, rgba(255,255,255,0.04) 100%)",
-                    backdropFilter: "blur(28px) saturate(160%)",
-                    WebkitBackdropFilter: "blur(28px) saturate(160%)",
-                    border: "1px solid rgba(255,255,255,0.25)",
-                    boxShadow: "0 30px 90px rgba(0,0,0,0.5), inset 0 1px 1px rgba(255,255,255,0.4)",
+                    border: "1px solid rgba(255,255,255,0.1)",
+                    boxShadow: "0 24px 80px rgba(0,0,0,0.65)",
                 }}
             >
                 {/* close */}
@@ -367,7 +342,7 @@ export default function PostPreview({ posts, initialIndex = 0, isOpen, onClose }
                                             key={post.id}
                                             ref={videoRef}
                                             src={videoUrl}
-                                            className="relative block h-auto max-h-[58vh] w-auto max-w-full cursor-pointer rounded-[clamp(1rem,3vw,1.5rem)] object-contain"
+                                            className="relative block h-auto max-h-[58vh] w-auto max-w-full cursor-pointer rounded-md object-contain"
                                             playsInline
                                             loop
                                             muted={isMuted}
@@ -398,7 +373,7 @@ export default function PostPreview({ posts, initialIndex = 0, isOpen, onClose }
                                         key={post.id}
                                         src={imageUrl}
                                         alt=""
-                                        className="relative block h-auto max-h-[58vh] w-auto max-w-full rounded-[clamp(1rem,3vw,1.5rem)] object-contain"
+                                        className="relative block h-auto max-h-[58vh] w-auto max-w-full rounded-md object-contain"
                                         onLoad={() => setMediaLoaded(true)}
                                     />
                                 )}

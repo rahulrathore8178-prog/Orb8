@@ -192,20 +192,6 @@ export default function CommunityPage() {
 
   const [showAddCapsule, setShowAddCapsule] = useState(false);
 
-  const registerView = async () => {
-    try {
-      const post = posts[activeIndex];
-      if (!post) return;
-      const res = await axios.post(`${apiUrl}/api/community/posts/${currentUserId}/${post?.id}/views`, {}, {
-        headers: { Authorization: `Bearer ${getAuthHeaders()}` },
-        withCredentials: true,
-      });
-    }
-    catch (error) {
-      console.error('Error registering view:', error);
-    }
-  };
-
   useEffect(() => {
     const activeTab = tabsRef.current[activeFeedType];
     const underline = underlineRef.current;
@@ -240,7 +226,6 @@ export default function CommunityPage() {
     if (!el) return;
     const SCROLL_THRESHOLD = 200;
     let raf = 0;
-    const post = posts[activeIndex];
     const pickActive = () => {
       raf = 0;
       const count = posts.length;
@@ -268,10 +253,6 @@ export default function CommunityPage() {
         setActiveIndex(next);
       }
     };
-    // console.log('activeIndex', activeIndex, 'post', post?.id);
-    // console.log('activeIndex changed, registering view for post:', post?.id);
-    registerView(post?.id);
-
     const schedule = () => { if (!raf) raf = requestAnimationFrame(pickActive); };
 
     const onScroll = () => {

@@ -261,13 +261,11 @@
 
 
 
-import React, { useEffect, useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { User, Mic, FileText, Check, CheckCheck } from "lucide-react";
 import { dateDividerLabel, dateKey, timeLabel } from "../../utilites/ChatHelper";
-import { addMessage } from "../../redux/slices/chatSlice";
-import { useDispatch, useSelector } from "react-redux";
-import { getAuthHeaders } from "../../utilites/communityHelper";
-import axios from "axios";
+import { useSelector } from "react-redux";
+import PostPreview from "../SocialProfile/postPreview";
 
 function DateDivider({ label }) {
   return (
@@ -322,6 +320,11 @@ function VoiceBubble({ msg, mine }) {
 }
 
 function MessageBubble({ msg, mine, gsapReady }) {
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const sharedPost = msg.sharedPost
+    ? { ...msg.sharedPost, id: msg.sharedPost.id || msg.sharedPost._id }
+    : null;
+
   return (
     <div
       data-bubble-id={msg.id}
@@ -350,8 +353,28 @@ function MessageBubble({ msg, mine, gsapReady }) {
         ) : (
           msg.text && <span className="whitespace-pre-wrap wrap-break-word">{msg.text}</span>
         )}
+        {sharedPost && (
+          <button
+            type="button"
+            onClick={() => setViewerOpen(true)}
+            className={`mt-1 overflow-hidden rounded-md border text-left ${mine ? 'border-white/25 bg-black/15' : 'border-slate-700 bg-slate-900'}`}
+          >
+            {(sharedPost.image || sharedPost.video) && (
+              sharedPost.image
+                ? <img src={sharedPost.image} alt="" className="h-32 w-full object-cover" />
+                : <video src={sharedPost.video} muted className="h-32 w-full object-cover" />
+            )}
+            <div className="p-2.5">
+              <span className="block text-[11px] opacity-65">{sharedPost.author?.username || 'Shared post'}</span>
+              <span className="mt-1 block line-clamp-2 text-sm">{sharedPost.content || 'Open post'}</span>
+            </div>
+          </button>
+        )}
         <span className="self-end text-[10.5px] opacity-65">{timeLabel(msg.time)}</span>
       </div>
+      {viewerOpen && sharedPost && (
+        <PostPreview posts={[sharedPost]} initialIndex={0} isOpen onClose={() => setViewerOpen(false)} />
+      )}
     </div>
   );
 }
@@ -376,53 +399,9 @@ export function ChatArea({
   typingRef,
 }) {
 
-  const apiUrl = import.meta.env.VITE_API_URL || "";
-
-  const dispatch = useDispatch();
-
-  const currentUser = useSelector((s) => s.dashboard.currentUser);
   const { activeContactId, messages } = useSelector((s) => s.chat ?? null);
-  console.log("activeContactId", activeContactId, "messages", messages);
 
   const msgs = useMemo(() => (messages && messages[activeContactId]) || [], [messages, activeContactId]);
-  
-  useEffect(() => {
-    if (!activeContactId || !currentUser?.id) return;
-
-    const fetchHistory = async () => {
-        try {
-          const res = await axios.get(`${apiUrl}/api/chat/${activeContactId}`, {
-            withCredentials: true,
-            headers: getAuthHeaders(),
-          });
-  
-          if (res.data.success && res.data.messages) {
-            res.data.messages.forEach((msg) => {
-              const senderId = String(msg.senderId);
-              const recipientId = String(msg.recipientId);
-              const isMine = senderId === String(currentUser.id);
-              dispatch(
-                addMessage({
-                  contactId: isMine ? recipientId : senderId,
-                  message: {
-                    id: msg._id,
-                    senderId,
-                    recipientId,
-                    text: msg.content,
-                    time: new Date(msg.timestamp),
-                    from: isMine ? "me" : "them",
-                  },
-                })
-              );
-            });
-          }
-        } catch (error) {
-          console.log("failed to fetch msg", error);
-        }
-      };
-
-    fetchHistory();
-  }, [activeContactId, currentUser?.id, dispatch, apiUrl]);
 
     return (
       <div ref={messagesRef} className="flex-1 min-h-0 overflow-y-auto overscroll-contain msgs-scroll px-4 md:px-6 py-5">
