@@ -291,7 +291,7 @@ export default function MessagesApp() {
      RENDER
      ============================================================ */
   return (
-    <div className="h-screen w-full flex bg-slate-950 text-slate-100 overflow-hidden font-sans antialiased">
+    <div className="h-screen w-full flex bg-black text-slate-100 overflow-hidden font-sans antialiased">
       <style>{`
         .msgs-scroll::-webkit-scrollbar, .contacts-scroll::-webkit-scrollbar { width: 8px; }
         .msgs-scroll::-webkit-scrollbar-thumb, .contacts-scroll::-webkit-scrollbar-thumb { background: #334155; border-radius: 8px; }
@@ -319,7 +319,7 @@ export default function MessagesApp() {
       />
 
       {/* ================= CHAT PANE ================= */}
-      <main className="flex-1 min-w-0 flex flex-col bg-slate-950">
+      <main className="flex-1 min-w-0 flex flex-col bg-black">
         <ChatHeader
           isMobile={isMobile}
           sidebarOpen={sidebarOpen}
@@ -387,7 +387,7 @@ export default function MessagesApp() {
         {toasts.map((t) => (
           <div
             key={t.id}
-            className="bg-slate-800 border border-slate-700 text-slate-100 px-4 py-2.5 rounded-xl text-sm shadow-2xl popover-anim"
+            className="bg-black border border-slate-700 text-slate-100 px-4 py-2.5 rounded-xl text-sm shadow-2xl popover-anim"
           >
             {t.text}
           </div>

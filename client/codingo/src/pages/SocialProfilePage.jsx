@@ -123,7 +123,7 @@ export default function SocialProfileSection() {
     const isOwnProfile = !userId || userId === storedUser?.id;
     const [currentUser, setCurrentUser] = useState(isOwnProfile ? storedUser : null);
     const userFriends = currentUser?.friends;
-    console.log('currentUser', currentUser?.friends);
+    console.log('currentUser', currentUser);
     // console.log('currentUser friends', currentUser?.friends);
     const reduxfriends = useSelector((state) => state.friends);
     const friends = useSelector(state => state.friends.friends);
@@ -474,6 +474,13 @@ export default function SocialProfileSection() {
         setShowPostPreview(true);
     };
 
+    const API_BASE = (import.meta.env.VITE_API_URL || "http://localhost:5000")
+        .replace(/^ws/, "http")
+        .replace(/\/$/, "");
+
+    const resolveImg = (p) =>
+        !p ? p : /^https?:\/\//.test(p) ? p : `${API_BASE}${p}`;
+
 
     return (
         <div
@@ -501,7 +508,7 @@ export default function SocialProfileSection() {
                             {/* Profile Pic (guarded) */}
                             {currentUser?.profilePic ? (
                                 <img
-                                    src={currentUser.profilePic}
+                                    src={resolveImg(currentUser?.profilePic)}
                                     alt={currentUser?.username || 'Profile'}
                                     className="cursor-pointer w-full h-full object-cover rounded-full transition-opacity duration-200 group-hover:opacity-50"
                                 />
@@ -726,17 +733,17 @@ export default function SocialProfileSection() {
                                                 <span onClick={() => handleDelete(post.id)}><Trash2 /></span>
                                             </div>
                                             <div onClick={() => showPostModal(postIndex)}>
-                                            <div className="text-white text-sm sm:text-base mb-3 line-clamp-3">{post.content}</div>
-                                            {post.image && (
-                                                <div className="overflow-hidden rounded-lg sm:rounded-xl aspect-square mb-3">
-                                                    <img src={imageUrl} alt="" className="w-full h-full object-cover" />
-                                                </div>
-                                            )}
-                                            {post.video && (
-                                                <div className="overflow-hidden rounded-lg sm:rounded-xl aspect-square mb-3">
-                                                    <video src={videoUrl} muted playsInline preload="metadata" className="w-full h-full object-cover" />
-                                                </div>
-                                            )}
+                                                <div className="text-white text-sm sm:text-base mb-3 line-clamp-3">{post.content}</div>
+                                                {post.image && (
+                                                    <div className="overflow-hidden rounded-lg sm:rounded-xl aspect-square mb-3">
+                                                        <img src={imageUrl} alt="" className="w-full h-full object-cover" />
+                                                    </div>
+                                                )}
+                                                {post.video && (
+                                                    <div className="overflow-hidden rounded-lg sm:rounded-xl aspect-square mb-3">
+                                                        <video src={videoUrl} muted playsInline preload="metadata" className="w-full h-full object-cover" />
+                                                    </div>
+                                                )}
                                             </div>
                                             <div className="flex items-center justify-between text-xs sm:text-sm text-gray-400 flex-wrap gap-2">
                                                 <div className="flex items-center gap-1">

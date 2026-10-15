@@ -138,13 +138,13 @@ export function InputBar({
 }) {
   return (
     <>
-      <footer className="flex-shrink-0 bg-slate-900 border-t border-slate-800 px-3 md:px-4 py-2.5">
+      <footer className="flex-shrink-0 bg-black border-t border-slate-800 px-3 md:px-4 py-2.5">
         {pendingAttachments.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mb-2">
             {pendingAttachments.map((f, i) => (
               <div
                 key={i}
-                className="flex items-center gap-1.5 bg-slate-800 border border-slate-700 rounded-lg pl-2.5 pr-1.5 py-1 text-xs text-slate-300"
+                className="flex items-center gap-1.5 bg-black border border-slate-700 rounded-lg pl-2.5 pr-1.5 py-1 text-xs text-slate-300"
               >
                 <FileText className="w-3.5 h-3.5 shrink-0" />
                 <span className="truncate max-w-[140px]">{f.name}</span>
@@ -162,7 +162,7 @@ export function InputBar({
 
         {recording ? (
           <div className="flex items-center gap-2">
-            <div className="flex-1 flex items-center gap-2.5 bg-slate-800 border border-slate-700 rounded-full pl-4 pr-2.5 py-2">
+            <div className="flex-1 flex items-center gap-2.5 bg-black border border-slate-700 rounded-full pl-4 pr-2.5 py-2">
               <span className="w-2.5 h-2.5 rounded-full bg-rose-500 rec-pulse shrink-0" />
               <span className="text-sm font-medium tabular-nums shrink-0">
                 {Math.floor(recordSeconds / 60)}:{String(recordSeconds % 60).padStart(2, "0")}
@@ -202,7 +202,7 @@ export function InputBar({
                 <Smile className="w-[19px] h-[19px]" />
               </button>
               {emojiOpen && (
-                <div className="popover-anim absolute left-0 bottom-[calc(100%+10px)] w-72 max-h-56 overflow-y-auto bg-slate-800 border border-slate-700 rounded-xl shadow-2xl p-2 grid grid-cols-8 gap-0.5 z-50">
+                <div className="popover-anim absolute left-0 bottom-[calc(100%+10px)] w-72 max-h-56 overflow-y-auto bg-black border border-slate-700 rounded-xl shadow-2xl p-2 grid grid-cols-8 gap-0.5 z-50">
                   {EMOJIS.map((e, i) => (
                     <button
                       key={i}
@@ -224,7 +224,7 @@ export function InputBar({
               <Paperclip className="w-[19px] h-[19px]" />
             </button>
 
-            <div className="flex-1 flex items-end gap-1.5 bg-slate-800 border border-slate-700 focus-within:border-blue-500 rounded-3xl pl-4 pr-1.5 py-1.5 transition-colors">
+            <div className="flex-1 flex items-end gap-1.5 bg-black border border-slate-700 focus-within:border-blue-500 rounded-3xl pl-4 pr-1.5 py-1.5 transition-colors">
               <textarea
                 ref={textareaRef}
                 rows={1}

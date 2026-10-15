@@ -12,6 +12,7 @@ router.get('/search', socialController.searchUsers);
 // Friend requests
 router.get('/friend-requests', socialController.getFriendRequests);
 router.post('/friend-request/:userId', socialController.sendFriendRequest);
+router.delete('/friend-request/:userId', socialController.cancelFriendRequest);
 router.post('/friend-request/:requestId/accept', socialController.acceptFriendRequest);
 router.post('/friend-request/:requestId/reject', socialController.rejectFriendRequest);
 

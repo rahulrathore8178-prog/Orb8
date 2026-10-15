@@ -107,7 +107,7 @@ export function Sidebar({
     <>
       {/* ================= SIDEBAR ================= */}
       <aside
-        className={`fixed md:static inset-0 md:inset-auto z-40 md:z-auto w-full flex-shrink-0 bg-slate-900 border-slate-800 flex flex-col overflow-hidden transition-all duration-300 ease-out
+        className={`fixed md:static inset-0 md:inset-auto z-40 md:z-auto w-full flex-shrink-0 bg-black border-slate-800 flex flex-col overflow-hidden transition-all duration-300 ease-out
           ${sidebarOpen ? "translate-x-0" : "-translate-x-full"} md:translate-x-0
           ${sidebarOpen ? "md:w-80 md:border-r" : "md:w-0 md:border-r-0"}`}
       >
