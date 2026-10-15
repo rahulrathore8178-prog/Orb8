@@ -331,7 +331,7 @@ function MessageBubble({ msg, mine, gsapReady }) {
       <div
         className={`max-w-[75%] md:max-w-[65%] px-3.5 py-2.5 text-[14.5px] leading-snug flex flex-col gap-1 ${mine
           ? "bg-linear-to-br from-blue-500 to-blue-600 text-white rounded-2xl rounded-br-md"
-          : "bg-slate-800 border border-slate-700 text-slate-100 rounded-2xl rounded-bl-md"
+          : "bg-black border border-slate-700 text-slate-100 rounded-2xl rounded-bl-md"
           }`}
       >
         {msg.attachments &&
@@ -359,7 +359,7 @@ function MessageBubble({ msg, mine, gsapReady }) {
 function TypingIndicator({ innerRef }) {
   return (
     <div ref={innerRef} className="flex justify-start my-1.5">
-      <div className="bg-slate-800 border border-slate-700 rounded-2xl rounded-bl-md px-4 py-3 flex gap-1.5">
+      <div className="bg-black border border-slate-700 rounded-2xl rounded-bl-md px-4 py-3 flex gap-1.5">
         <span className="w-1.5 h-1.5 rounded-full bg-slate-400 typing-dot" style={{ animationDelay: "0ms" }} />
         <span className="w-1.5 h-1.5 rounded-full bg-slate-400 typing-dot" style={{ animationDelay: "150ms" }} />
         <span className="w-1.5 h-1.5 rounded-full bg-slate-400 typing-dot" style={{ animationDelay: "300ms" }} />
@@ -428,7 +428,7 @@ export function ChatArea({
       <div ref={messagesRef} className="flex-1 min-h-0 overflow-y-auto overscroll-contain msgs-scroll px-4 md:px-6 py-5">
         {!activeContactId ? (
           <div className="h-full flex flex-col items-center justify-center gap-3 text-center px-8">
-            <div className="w-16 h-16 rounded-full bg-slate-800 flex items-center justify-center text-slate-600 mb-1">
+            <div className="w-16 h-16 rounded-full bg-black flex items-center justify-center text-slate-600 mb-1">
               <User className="w-7 h-7" />
             </div>
             <h3 className="font-extrabold text-slate-300 text-base">Select a conversation</h3>

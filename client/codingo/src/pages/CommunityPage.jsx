@@ -1,20 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import {
-  FaHeart,
-  FaRegHeart,
-  FaComment,
-  FaPaperPlane,
-  FaImage,
-  FaTimes,
-  FaTrash,
-  FaFire,
-  FaCode,
-  FaHeartBroken,
-  FaVideo,
-  FaPlay,
-  FaVolumeMute,
-  FaVolumeUp,
   FaUsers,
   FaLock,
   FaGlobe
@@ -393,7 +379,7 @@ export default function CommunityPage() {
         withCredentials: true,
         headers: getAuthHeaders(),
       });
-      console.log('All orbital data:', resAll.data?.orbitals?.creator?.username);
+      console.log('All orbital data:', resAll.data?.orbitals);
       console.log('My orbital data:', resMy.data?.orbitals);
       setTrendingOrbitals(resAll.data?.orbitals || []);
       setMyOrbitals(resMy.data?.orbitals || []);

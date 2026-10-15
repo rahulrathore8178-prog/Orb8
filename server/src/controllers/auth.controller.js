@@ -13,12 +13,18 @@ const post = require('../models/post.model');
 const PROFILE_PICS_DIR = path.join(__dirname, '..', '..', 'uploads', 'profile-pics');
 const MAX_PROCESSED_IMAGE_BYTES = 450 * 1024;
 
-function buildPublicImageUrl(req, fileName) {
+function buildStoredImagePath(fileName) {
+  return `/uploads/profile-pics/${fileName}`;
+}
+
+// Used when RESPONDING: add the current host
+function toPublicUrl(req, profilePic) {
+  if (!profilePic || typeof profilePic !== 'string') return profilePic;
+  const path = profilePic.replace(/^https?:\/\/[^/]+/, ''); // also fixes old localhost records
   const explicitBase = process.env.PUBLIC_API_URL;
   const protocol = req.headers['x-forwarded-proto'] || req.protocol;
-  const inferredBase = `${protocol}://${req.get('host')}`;
-  const base = (explicitBase || inferredBase).replace(/\/$/, '');
-  return `${base}/uploads/profile-pics/${fileName}`;
+  const base = (explicitBase || `${protocol}://${req.get('host')}`).replace(/\/$/, '');
+  return `${base}${path}`;
 }
 
 function getUploadedProfileImageFilePath(profilePic) {
@@ -137,7 +143,7 @@ async function getCurrentUser(req, res) {
   try {
     const user = await userModel.findById(req.user.id)
       .select('-password')
-      .populate('badges.badge');
+    // .populate('badges.badge');
     if (!user) {
       return res.status(404).json({ message: 'User not found.' });
     }
@@ -231,7 +237,7 @@ async function uploadProfileImage(req, res) {
     const existingUser = await userModel.findById(req.user.id).select('profilePic');
     const previousUploadedFile = getUploadedProfileImageFilePath(existingUser?.profilePic);
 
-    const profilePicUrl = buildPublicImageUrl(req, fileName);
+    const profilePicUrl = buildStoredImagePath(fileName);
     const updatedUser = await userModel.findByIdAndUpdate(
       req.user.id,
       { $set: { profilePic: profilePicUrl } },
@@ -336,16 +342,33 @@ async function updateStreak(req, res) {
 
 async function getPublicProfile(req, res) {
   try {
-    if (!mongoose.Types.ObjectId.isValid(req.params.userId)) {
+    const { userId } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
       return res.status(400).json({ message: 'Invalid user ID.' });
     }
 
-    const user = await userModel.findById(req.params.userId)
+    const user = await userModel.findById(userId)
       .select('username profilePic bio totalXp level league streakCount badges friends')
       .populate('badges.badge')
-      .populate('friends', 'username profilePic')
+      .populate('friends', 'username profilePic');
+
     if (!user) {
       return res.status(404).json({ message: 'User not found.' });
+    }
+
+    // Relationship between the logged-in user and the profile being viewed
+    const me = req.user.id.toString();
+    const them = userId.toString();
+
+    let friendStatus = 'none';
+    if (me === them) {
+      friendStatus = 'self';
+    } else if (await userModel.exists({ _id: me, friends: them })) {
+      friendStatus = 'friends';
+    } else if (await userModel.exists({ _id: them, 'friendRequests.from': me })) {
+      friendStatus = 'request_sent';       // I already asked them
+    } else if (await userModel.exists({ _id: me, 'friendRequests.from': them })) {
+      friendStatus = 'request_received';   // they asked me
     }
 
     return res.status(200).json({
@@ -359,10 +382,12 @@ async function getPublicProfile(req, res) {
         friends: user.friends || [],
         league: user.league || 'Bronze 1',
         streakCount: user.streakCount || 0,
-        badges: user.badges || []
-      }
+        badges: user.badges || [],
+        friendStatus,
+      },
     });
   } catch (error) {
+    console.error('getPublicProfile error:', error);
     return res.status(500).json({ message: error.message });
   }
 }
