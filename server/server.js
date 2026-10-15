@@ -62,11 +62,11 @@ const clients = new Map();
             });
 
             await notifyUser(recipientId, "New message", text, {
-                  type: "chat-message",
-                  senderId: String(senderId),
-                  recipientId: String(recipientId),
-                  messageId: String(saved._id),
-                  timestamp: saved.timestamp.toISOString()
+              type: "chat-message",
+              senderId: String(senderId),
+              recipientId: String(recipientId),
+              messageId: String(saved._id),
+              timestamp: saved.timestamp.toISOString()
             });
 
             const payload = JSON.stringify({
@@ -92,7 +92,7 @@ const clients = new Map();
       });
 
       socket.on('close', () => {
-        if (registeredUserId) {
+        if (registeredUserId && clients.get(registeredUserId) === socket) {
           clients.delete(registeredUserId);
           console.log(`🔴 User ${registeredUserId} disconnected and removed`);
           console.log(`📋 Remaining clients:`, Array.from(clients.keys()));

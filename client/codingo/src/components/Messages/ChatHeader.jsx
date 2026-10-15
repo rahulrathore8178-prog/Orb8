@@ -118,7 +118,7 @@ export function ChatHeader({
   setContacts,
 }) {
   return (
-    <header className="flex-shrink-0 min-h-[68px] flex items-center gap-1 px-3 md:px-4 bg-slate-900 border-b border-slate-800 relative z-20">
+    <header className="flex-shrink-0 min-h-[68px] flex items-center gap-1 px-3 md:px-4 bg-black border-b border-slate-800 relative z-20">
       <button
         className="w-9 h-9 rounded-full flex items-center justify-center text-slate-400 hover:bg-slate-800 hover:text-slate-100 shrink-0"
         onClick={() => setSidebarOpen((v) => !v)}
