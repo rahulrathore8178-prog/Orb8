@@ -4,17 +4,19 @@ const User = require('../models/user.model');
  * Search users by username (excluding self and already-friends)
  * GET /api/social/search?q=username
  */
+const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 exports.searchUsers = async (req, res) => {
   try {
     const { q } = req.query;
     const currentUserId = req.user.id;
 
-    if (!q || q.trim().length === 0) {
+    const query = (q || '').trim();
+    if (query.length === 0) {
       return res.json({ users: [] });
     }
-
     const currentUser = await User.findById(currentUserId).select('friends friendRequests');
-    
+
     if (!currentUser) {
       return res.status(404).json({ message: 'User not found' });
     }
@@ -27,7 +29,7 @@ exports.searchUsers = async (req, res) => {
 
     const users = await User.find({
       _id: { $ne: currentUserId },
-      username: { $regex: q, $options: 'i' }
+      username: { $regex: `^${escapeRegex(query)}`, $options: 'i' }
     })
       .select('username profilePic totalXp level league streakCount friendRequests')
       .limit(20)
@@ -35,16 +37,16 @@ exports.searchUsers = async (req, res) => {
 
     // Mark friendship & pending-request status
     const usersWithStatus = users.map(({ friendRequests: fr, ...user }) => {
-      const hasPendingRequest =
-        // current user sent them a request
-        (fr || []).some(r => r && r.from && r.from.toString() === currentUserId) ||
-        // they sent current user a request
-        pendingFromIds.includes(user._id.toString());
-      return {
-        ...user,
-        isFriend: friendIds.includes(user._id.toString()),
-        hasPendingRequest
-      };
+      const id = user._id.toString();
+      const me = currentUserId.toString();
+
+      const isFriend = friendIds.includes(id);
+      // I sent them a request (my id is in THEIR friendRequests)
+      const requestSent = (fr || []).some(r => r?.from?.toString() === me);
+      // They sent me a request (their id is in MY friendRequests)
+      const requestReceived = pendingFromIds.includes(id);
+
+      return { ...user, isFriend, requestSent, requestReceived };
     });
 
     res.json({ users: usersWithStatus });
@@ -110,7 +112,7 @@ exports.sendFriendRequest = async (req, res) => {
 
       await Promise.all([currentUser.save(), targetUser.save()]);
 
-      return res.json({ 
+      return res.json({
         message: 'Friend request accepted automatically',
         status: 'friends'
       });
@@ -273,40 +275,40 @@ exports.getFriends = async (req, res) => {
  * Remove friend
  * DELETE /api/social/friends/:friendId
  */
-exports.removeFriend = async (req, res) => {
-  try {
-    const { friendId } = req.params;
-    const currentUserId = req.user.id;
+// exports.removeFriend = async (req, res) => {
+//   try {
+//     const { friendId } = req.params;
+//     const currentUserId = req.user.id;
 
-    const [currentUser, friend] = await Promise.all([
-      User.findById(currentUserId),
-      User.findById(friendId)
-    ]);
+//     const [currentUser, friend] = await Promise.all([
+//       User.findById(currentUserId),
+//       User.findById(friendId)
+//     ]);
 
-    if (!currentUser || !friend) {
-      return res.status(404).json({ message: 'User not found' });
-    }
+//     if (!currentUser || !friend) {
+//       return res.status(404).json({ message: 'User not found' });
+//     }
 
-    // Initialize arrays if they don't exist
-    if (!currentUser.friends) currentUser.friends = [];
-    if (!friend.friends) friend.friends = [];
+//     // Initialize arrays if they don't exist
+//     if (!currentUser.friends) currentUser.friends = [];
+//     if (!friend.friends) friend.friends = [];
 
-    // Remove from both users' friends lists
-    currentUser.friends = currentUser.friends.filter(
-      id => id.toString() !== friendId
-    );
-    friend.friends = friend.friends.filter(
-      id => id.toString() !== currentUserId
-    );
+//     // Remove from both users' friends lists
+//     currentUser.friends = currentUser.friends.filter(
+//       id => id.toString() !== friendId
+//     );
+//     friend.friends = friend.friends.filter(
+//       id => id.toString() !== currentUserId
+//     );
 
-    await Promise.all([currentUser.save(), friend.save()]);
+//     await Promise.all([currentUser.save(), friend.save()]);
 
-    res.json({ message: 'Friend removed successfully' });
-  } catch (error) {
-    console.error('Remove friend error:', error);
-    res.status(500).json({ message: 'Internal server error' });
-  }
-};
+//     res.json({ message: 'Friend removed successfully' });
+//   } catch (error) {
+//     console.error('Remove friend error:', error);
+//     res.status(500).json({ message: 'Internal server error' });
+//   }
+// };
 
 /**
  * Get friend leaderboard (top friends by XP)
@@ -324,7 +326,7 @@ exports.getFriendsLeaderboard = async (req, res) => {
       })
       .lean();
 
-      console.log("current user", currentUser)
+    console.log("current user", currentUser)
 
     if (!currentUser) {
       return res.status(404).json({ message: 'User not found' });
@@ -355,3 +357,39 @@ exports.getFriendsLeaderboard = async (req, res) => {
     res.status(500).json({ message: 'Internal server error' });
   }
 };
+
+exports.cancelFriendRequest = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const currentUserId = req.user.id;
+
+    await User.updateOne(
+      { _id: userId },
+      { $pull: { friendRequests: { from: currentUserId } } }
+    );
+
+    res.json({ message: 'Friend request cancelled', status: 'none' });
+  } catch (error) {
+    console.error('Cancel friend request error:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+// DELETE /friends/:userId  (unfriend, removes both sides)
+exports.removeFriend = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const currentUserId = req.user.id;
+
+    await Promise.all([
+      User.updateOne({ _id: currentUserId }, { $pull: { friends: userId } }),
+      User.updateOne({ _id: userId }, { $pull: { friends: currentUserId } }),
+    ]);
+
+    res.json({ message: 'Friend removed', status: 'none' });
+  } catch (error) {
+    console.error('Remove friend error:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
