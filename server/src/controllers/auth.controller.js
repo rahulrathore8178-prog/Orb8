@@ -60,6 +60,13 @@ function buildUserPayload(user) {
     notifications: (user.notifications || []).slice(-10).reverse(),
     friends: user.friends || [],
     friendRequests: user.friendRequests || [],
+    isPrivate: user.isPrivate ?? true,
+    followers: user.followers || [],
+    following: user.following || [],
+    followRequests: user.followRequests || [],
+    blockedUsers: user.blockedUsers || [],
+    profileGridLayout: user.profileGridLayout || [],
+    savedCollections: user.savedCollections || [],
     preferences: user.preferences || [],
   };
 }
@@ -356,7 +363,7 @@ async function getPublicProfile(req, res) {
     }
 
     const user = await userModel.findById(userId)
-      .select('username profilePic bio totalXp level league streakCount badges friends')
+      .select('username profilePic bio totalXp level league streakCount badges friends isPrivate followers following followRequests blockedUsers profileGridLayout')
       .populate('badges.badge')
       .populate('friends', 'username profilePic');
 
@@ -367,6 +374,10 @@ async function getPublicProfile(req, res) {
     // Relationship between the logged-in user and the profile being viewed
     const me = req.user.id.toString();
     const them = userId.toString();
+    const viewer = await userModel.findById(me).select('following blockedUsers');
+    const isBlocked = user.blockedUsers.some(id => String(id) === me)
+      || viewer?.blockedUsers?.some(id => String(id) === them);
+    if (isBlocked) return res.status(404).json({ message: 'User not found.' });
 
     let friendStatus = 'none';
     if (me === them) {
@@ -392,6 +403,14 @@ async function getPublicProfile(req, res) {
         streakCount: user.streakCount || 0,
         badges: user.badges || [],
         friendStatus,
+        isPrivate: user.isPrivate,
+        followersCount: user.followers.length,
+        followingCount: user.following.length,
+        followStatus: user.followers.some(id => String(id) === me)
+          ? 'following'
+          : user.followRequests.some(id => String(id) === me) ? 'requested' : 'none',
+        canViewPosts: !user.isPrivate || user.followers.some(id => String(id) === me) || me === them,
+        profileGridLayout: user.profileGridLayout || [],
       },
     });
   } catch (error) {

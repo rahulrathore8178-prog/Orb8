@@ -91,6 +91,11 @@ const postSchema = new mongoose.Schema({
     type: Boolean,
     default: true
   },
+  isArchived: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
   views: { type: Number, default: 0 },
   viewedBy: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   postType: {

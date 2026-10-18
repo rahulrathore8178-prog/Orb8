@@ -1,14 +1,12 @@
 require('dotenv').config();
 const app = require('./src/app');
-const mongoose = require('mongoose');
 const connectDB = require('./src/db/db');
 const { startMonthlyRewardJob, startWeeklyChallengeReminder } = require('./src/jobs/scheduler');
 const { reconcileUserLeagues } = require('./src/jobs/reconciliation');
 const { ensureDefaultBadges } = require('./src/controllers/badge.controller');
-const Message = require('./src/models/messages.model');
-const { notifyUser } = require("./src/controllers/pushnotification.controller");
 const http = require('http');
 const WebSocket = require('ws');
+const jwt = require('jsonwebtoken');
 
 const PORT = process.env.PORT || 5000;
 const clients = new Map();
@@ -27,6 +25,13 @@ const clients = new Map();
     const server = http.createServer(app);
     const wss = new WebSocket.Server({ server });
 
+    app.set('publishChatMessage', (recipientId, message) => {
+      const recipientSocket = clients.get(String(recipientId));
+      if (recipientSocket?.readyState === WebSocket.OPEN) {
+        recipientSocket.send(JSON.stringify({ type: 'chat-message', message }));
+      }
+    });
+
     wss.on('connection', async (socket) => {
       console.log('New WS connection');
       let registeredUserId = null;
@@ -36,55 +41,15 @@ const clients = new Map();
           const msg = JSON.parse(rawData);
 
           if (msg.type === 'register') {
-            registeredUserId = msg.userId;
-            clients.set(msg.userId, socket);
-            console.log(`✅ Registered user ${msg.userId}`);
-            console.log(`📋 Active clients:`, Array.from(clients.keys()));
+            const decoded = jwt.verify(msg.token, process.env.JWT_SECRET);
+            registeredUserId = String(decoded.id);
+            clients.set(registeredUserId, socket);
+            console.log(`Registered user ${registeredUserId}`);
             return;
           }
 
-          // console.log('📨 Raw incoming message:', JSON.stringify(msg, null, 2));
-
           if (msg.type === 'chat-message') {
-            const { senderId, recipientId, text, time, id } = msg.message || {};
-            if (!senderId || !recipientId || !text) {
-              console.error('❌ Missing required fields:', { senderId, recipientId, text });
-              return;
-            }
-
-            const saved = await Message.create({
-              senderId: new mongoose.Types.ObjectId(senderId),
-              recipientId: new mongoose.Types.ObjectId(recipientId),
-              content: text,
-              type: 'chat_message',
-              timestamp: new Date(),
-              delivered: false
-            });
-
-            await notifyUser(recipientId, "New message", text, {
-              type: "chat-message",
-              senderId: String(senderId),
-              recipientId: String(recipientId),
-              messageId: String(saved._id),
-              timestamp: saved.timestamp.toISOString()
-            });
-
-            const payload = JSON.stringify({
-              type: 'chat-message',
-              message: { id, senderId, recipientId, text, time, timestamp: saved.timestamp }
-            });
-
-            const recipientSocket = clients.get(recipientId);
-            console.log('🔍 Looking for recipient:', recipientId);
-            console.log('📋 Active clients:', Array.from(clients.keys()));
-            console.log('🎯 Recipient socket found:', !!recipientSocket);
-
-            if (recipientSocket && recipientSocket.readyState === WebSocket.OPEN) {
-              recipientSocket.send(payload);
-              console.log('✅ Message sent to recipient:', recipientId);
-            } else {
-              console.log('❌ Recipient not connected:', recipientId);
-            }
+            socket.send(JSON.stringify({ type: 'error', message: 'Send messages through the REST API' }));
           }
         } catch (err) {
           console.error('Failed to process ws msg', err);

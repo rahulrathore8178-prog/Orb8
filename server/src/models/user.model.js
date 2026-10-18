@@ -47,6 +47,41 @@ const rewardSchema = new mongoose.Schema(
   { _id: true },
 );
 
+const profileGridItemSchema = new mongoose.Schema(
+  {
+    post: { type: mongoose.Schema.Types.ObjectId, ref: "Post", required: true },
+    gridSize: {
+      type: String,
+      enum: [
+        "1x1", "2x1", "3x1",
+        "1x2", "2x2", "3x2",
+        "1x3", "2x3", "3x3",
+      ],
+      default: "1x1",
+    },
+  },
+  { _id: false },
+);
+
+const savedPostSchema = new mongoose.Schema(
+  {
+    post: { type: mongoose.Schema.Types.ObjectId, ref: "Post", required: true },
+    savedAt: { type: Date, default: Date.now },
+  },
+  { _id: false },
+);
+
+const savedCollectionSchema = new mongoose.Schema(
+  {
+    name: { type: String, required: true, trim: true, maxlength: 80 },
+    posts: {
+      type: [{ type: mongoose.Schema.Types.ObjectId, ref: "Post" }],
+      default: [],
+    },
+  },
+  { timestamps: true },
+);
+
 const userSchema = new mongoose.Schema(
   {
     username: { type: String, required: true, unique: true, minlength: 3 },
@@ -70,6 +105,26 @@ const userSchema = new mongoose.Schema(
       type: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
       default: [],
     },
+    isPrivate: { type: Boolean, default: true },
+    followers: {
+      type: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+      default: [],
+    },
+    following: {
+      type: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+      default: [],
+    },
+    followRequests: {
+      type: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+      default: [],
+    },
+    blockedUsers: {
+      type: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+      default: [],
+    },
+    profileGridLayout: { type: [profileGridItemSchema], default: [] },
+    savedPosts: { type: [savedPostSchema], default: [] },
+    savedCollections: { type: [savedCollectionSchema], default: [] },
     friendRequests: {
       type: [
         {

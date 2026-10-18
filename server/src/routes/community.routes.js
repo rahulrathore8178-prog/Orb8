@@ -14,7 +14,14 @@ const {
   getPostVideo,
   discoverNearbyPeople,
   getPostVoiceNote,
-  registerPostView
+  registerPostView,
+  setPostArchived,
+  savePost,
+  unsavePost,
+  getSavedPosts,
+  createSavedCollection,
+  addPostToCollection,
+  getProfileInsights,
 } = require('../controllers/community.controller');
 const { protect } = require('../middlewares/auth.middleware');
 const { postMediaUpload } = require('../middlewares/upload.middleware');
@@ -41,6 +48,7 @@ router.get('/posts/:postId', protect, getPost);
 
 // Delete a post
 router.delete('/posts/:postId', protect, deletePost);
+router.patch('/posts/:postId/archive', protect, setPostArchived);
 
 // Get user's posts
 router.get('/users/:userId/posts', protect, getUserPosts);
@@ -61,7 +69,15 @@ router.post('/posts/:postId/:commentId/commentReplies', protect, commentReply);
 router.delete('/posts/:postId/comments/:commentId', protect, deleteComment);
   
 // Register a post view
-router.post('/posts/:userId/:postId/views', protect, registerPostView);
+router.post('/posts/:postId/views', protect, registerPostView);
+
+// Saved posts, collections, and owner-only insights
+router.get('/saved', protect, getSavedPosts);
+router.post('/saved/collections', protect, createSavedCollection);
+router.post('/saved/collections/:collectionId/:postId', protect, addPostToCollection);
+router.post('/saved/:postId', protect, savePost);
+router.delete('/saved/:postId', protect, unsavePost);
+router.get('/insights', protect, getProfileInsights);
 
 // Discover people nearby
 router.post('/discover/nearby', protect, discoverNearbyPeople);

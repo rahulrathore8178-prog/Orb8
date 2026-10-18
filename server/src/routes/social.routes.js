@@ -9,6 +9,16 @@ router.use(protect);
 // Search users
 router.get('/search', socialController.searchUsers);
 
+// Follow, privacy, and blocking
+router.get('/follow-requests', socialController.getFollowRequests);
+router.post('/follow/:userId', socialController.followUser);
+router.delete('/follow/:userId', socialController.unfollowUser);
+router.patch('/follow-requests/:userId', socialController.resolveFollowRequest);
+router.patch('/privacy', socialController.updatePrivacy);
+router.post('/block/:userId', socialController.blockUser);
+router.delete('/block/:userId', socialController.unblockUser);
+router.put('/profile-grid', socialController.updateProfileGrid);
+
 // Friend requests
 router.get('/friend-requests', socialController.getFriendRequests);
 router.post('/friend-request/:userId', socialController.sendFriendRequest);
