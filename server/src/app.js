@@ -50,11 +50,4 @@ app.use('/api/askigris', askIgrisRoutes);
 app.use('/api/firebase', firebaseRoutes);
 app.use('/api/orbital', orbitalRoutes);
 
-// // add this log
-// console.log('Loading community routes...');
-// const communityRoutes = require('./routes/community.routes');
-// console.log('Community routes loaded:', typeof communityRoutes);
-
-// app.use('/api/community', communityRoutes);
-
 module.exports = app;
