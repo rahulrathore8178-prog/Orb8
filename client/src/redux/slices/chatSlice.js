@@ -32,6 +32,42 @@ export const fetchContacts = createAsyncThunk('chat/fetchContacts', async (_, { 
   }
 });
 
+export const fetchConversation = createAsyncThunk('chat/fetchConversation', async (contactId, { rejectWithValue, getState }) => {
+  try {
+    const res = await axios.get(`${apiUrl}/api/chat/${contactId}`, {
+      withCredentials: true,
+      headers: getAuthHeaders()
+    });
+    const currentUserId = String(getState().dashboard.currentUser?.id || '');
+    const messages = (res.data.messages || []).map(message => ({
+      ...message,
+      senderId: String(message.senderId),
+      recipientId: String(message.recipientId),
+      time: message.timestamp,
+      from: String(message.senderId) === currentUserId ? 'me' : 'them',
+    }));
+    return { contactId, messages };
+  } catch (err) {
+    return rejectWithValue(err.response?.data?.message || 'Failed to load conversation');
+  }
+});
+
+export const sendChatMessage = createAsyncThunk(
+  'chat/sendMessage',
+  async ({ contactId, text, sharedPostId }, { rejectWithValue }) => {
+    try {
+      const res = await axios.post(
+        `${apiUrl}/api/chat/${contactId}`,
+        { text, sharedPostId },
+        { withCredentials: true, headers: getAuthHeaders() }
+      );
+      return { contactId, message: res.data.message };
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.message || 'Failed to send message');
+    }
+  }
+);
+
 const chatSlice = createSlice({
   name: 'chat',
   initialState: {
@@ -61,6 +97,19 @@ const chatSlice = createSlice({
   extraReducers: (builder) => {
     builder.addCase(fetchContacts.fulfilled, (state, action) => {
       state.contacts = action.payload;
+    });
+    builder.addCase(fetchConversation.fulfilled, (state, action) => {
+      state.messages[action.payload.contactId] = action.payload.messages;
+    });
+    builder.addCase(sendChatMessage.fulfilled, (state, action) => {
+      if (!state.messages[action.payload.contactId]) state.messages[action.payload.contactId] = [];
+      if (!state.messages[action.payload.contactId].some(message => message.id === action.payload.message.id)) {
+        state.messages[action.payload.contactId].push({
+          ...action.payload.message,
+          time: action.payload.message.timestamp,
+          from: 'me',
+        });
+      }
     });
   }
 });

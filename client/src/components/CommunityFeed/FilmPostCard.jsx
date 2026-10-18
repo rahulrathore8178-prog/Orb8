@@ -9,7 +9,12 @@ import { FiMessageCircle, FiSend } from 'react-icons/fi';
 import Comments from '../../pages/CommentsModal';
 import { AvatarInitial } from '../../pages/CommunityPage';
 import { BarChart3 } from 'lucide-react';
+import { Bookmark } from 'lucide-react';
+import axios from 'axios';
+import { getAuthHeaders } from '../../utilites/communityHelper';
+import SharePostModal from './SharePostModal';
 
+const ratioCache = new Map();
 
 export default function FilmPostCard({ post, cardRef, textGradient, isOwn, isActive, onLike, onDelete }) {
         function getDisplayImageUrl(imageUrl) {
@@ -28,12 +33,15 @@ export default function FilmPostCard({ post, cardRef, textGradient, isOwn, isAct
     const mediaContainerRef = useRef(null);
     const audioRef = useRef(null);
     const [isAudioPlaying, setIsAudioPlaying] = useState(false);
+    const [isSaved, setIsSaved] = useState(Boolean(post.isSavedByCurrentUser));
+    const [shareOpen, setShareOpen] = useState(false);
     const [audioCurrentTime, setAudioCurrentTime] = useState(0);
     const audioContextRef = useRef(null);
     const analyserRef = useRef(null);
     const sourceNodeRef = useRef(null);
     const canvasRef = useRef(null);
     const animationFrameRef = useRef(null);
+    const viewRegisteredRef = useRef(false);
     const imageUrl = post.image?.startsWith('/') ? `${apiUrl}${post?.image}` : getDisplayImageUrl(post?.image);
     const videoUrl = post.video?.startsWith('/') ? `${apiUrl}${post.video}` : post.video;
     const audioUrl = post.voiceNote?.startsWith('/') ? `${apiUrl}${post.voiceNote}` : post.voiceNote;
@@ -48,7 +56,6 @@ export default function FilmPostCard({ post, cardRef, textGradient, isOwn, isAct
     const DEFAULT_RATIO = 4 / 5;
     const CARD_MAX_HEIGHT = 'min(74dvh, 52rem)';
     const FRAME_CHROME = 168; // px used by header + caption + like row
-    const ratioCache = new Map();
     const toRatio = (w, h) =>
         w > 0 && h > 0 ? Math.min(MAX_RATIO, Math.max(MIN_RATIO, w / h)) : DEFAULT_RATIO;
 
@@ -205,6 +212,22 @@ export default function FilmPostCard({ post, cardRef, textGradient, isOwn, isAct
         return () => observer.disconnect();
     }, [hasVideo]);
 
+    useEffect(() => {
+        const node = cardRef?.current;
+        if (!node || viewRegisteredRef.current) return;
+        const observer = new IntersectionObserver(([entry]) => {
+            if (!entry.isIntersecting || entry.intersectionRatio < 0.6 || viewRegisteredRef.current) return;
+            viewRegisteredRef.current = true;
+            observer.disconnect();
+            axios.post(`${apiUrl}/api/community/posts/${post.id}/views`, {}, {
+                withCredentials: true,
+                headers: getAuthHeaders(),
+            }).catch(error => console.error('Register view error', error));
+        }, { threshold: 0.6 });
+        observer.observe(node);
+        return () => observer.disconnect();
+    }, [apiUrl, cardRef, post.id]);
+
     const toggleVideoPlay = () => {
         const vid = videoRef.current;
         if (!vid) return;
@@ -222,6 +245,22 @@ export default function FilmPostCard({ post, cardRef, textGradient, isOwn, isAct
         if (!vid) return;
         vid.muted = !vid.muted;
         setIsMuted(vid.muted);
+    };
+
+    const toggleSaved = async () => {
+        const nextSaved = !isSaved;
+        setIsSaved(nextSaved);
+        try {
+            await axios({
+                method: nextSaved ? 'post' : 'delete',
+                url: `${apiUrl}/api/community/saved/${post.id}`,
+                withCredentials: true,
+                headers: getAuthHeaders(),
+            });
+        } catch (error) {
+            setIsSaved(!nextSaved);
+            console.error('Save post error', error);
+        }
     };
 
     const handleLikeClick = () => {
@@ -429,7 +468,7 @@ export default function FilmPostCard({ post, cardRef, textGradient, isOwn, isAct
                             >
                                 {post.content}
                             </p>
-                            <button type="button" className="mt-0.5 shrink-0 text-white/80 transition-colors hover:text-white" aria-label="Share">
+                            <button type="button" onClick={() => setShareOpen(true)} className="mt-0.5 shrink-0 text-white/80 transition-colors hover:text-white" aria-label="Share">
                                 <FiSend size={20} />
                             </button>
                         </div>
@@ -466,14 +505,23 @@ export default function FilmPostCard({ post, cardRef, textGradient, isOwn, isAct
                         <span><BarChart3 size={20} /></span>
                         <span>Views: {post?.views}</span>
                         </div>
+                        <button
+                            type="button"
+                            onClick={toggleSaved}
+                            className={`ml-auto transition-colors ${isSaved ? 'text-cyan-400' : 'text-white/80 hover:text-white'}`}
+                            aria-label={isSaved ? 'Remove from saved posts' : 'Save post'}
+                        >
+                            <Bookmark size={19} fill={isSaved ? 'currentColor' : 'none'} />
+                        </button>
                         {!hasMedia && (
-                            <button type="button" className="ml-auto text-white/80 transition-colors hover:text-white" aria-label="Share">
+                            <button type="button" onClick={() => setShareOpen(true)} className="text-white/80 transition-colors hover:text-white" aria-label="Share">
                                 <FiSend size={20} />
                             </button>
                         )}
                     </div>
                 </div>
             </div>
+            {shareOpen && <SharePostModal postId={post.id} onClose={() => setShareOpen(false)} />}
         </div>
     );
 }
