@@ -237,11 +237,19 @@ async function uploadProfileImage(req, res) {
     const existingUser = await userModel.findById(req.user.id).select('profilePic');
     const previousUploadedFile = getUploadedProfileImageFilePath(existingUser?.profilePic);
 
-    const profilePicUrl = buildStoredImagePath(fileName);
-    const updatedUser = await userModel.findByIdAndUpdate(
+    const { publicUrl } = await uploadBufferToDrive(
+      optimizedBuffer,
+      fileName,
+      'image/webp'
+    );
+
+    await userModel.findByIdAndUpdate(
       req.user.id,
-      { $set: { profilePic: profilePicUrl } },
-      { new: true, runValidators: true }
+      {
+        $set: {
+          profilePic: publicUrl
+        }
+      }
     );
 
     if (previousUploadedFile && previousUploadedFile !== absoluteFilePath) {
