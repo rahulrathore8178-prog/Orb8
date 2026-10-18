@@ -18,9 +18,9 @@ router.get("/image/:fileId", orbital.streamOrbitalImage);
 
 router.use(protect);
 
-router.post("/new", orbitalImageUpload, orbital.createOrbital);
-router.get("/mine", orbital.getMyOrbitals); // must stay above "/:orbitalId"
-router.get("/all", orbital.getAllOrbitals); // must stay above "/:orbitalId"
+router.post("/new", protect, orbitalImageUpload, orbital.createOrbital);
+router.get("/mine", protect, orbital.getMyOrbitals)
+router.get("/all",protect, orbital.getAllOrbitals); 
 
 router.delete("/deleteorbital/:orbitalId", loadOrbital, requireAdmin, orbital.deleteOrbital);
 // Everything below loads the orbital first
