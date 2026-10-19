@@ -1,7 +1,13 @@
 const Orbital = require("../models/orbital.model.js");
-const OrbitalMember = require("../models/orbitalMember.model.js");
-const { STATUS } = require("../models/orbitalMember.model.js");
+const {
+    OrbitalMember,
+    STATUS,
+    ROLE,
+} = require("../models/orbitalMember.model.js");
 const { asyncHandler } = require("../utils/asyncHandler.js");
+const { VISIBILITY } = require('../models/orbital.model.js')
+// const {ROLE} = require('../models/orbitalMember.model.js')
+// const {STATUS} = require('../models/orbitalMember.model.js')
 
 const getJoinRequests = asyncHandler(async (req, res) => {
     const requests = await OrbitalMember.find({ orbital: req.orbital._id, status: STATUS.PENDING })
@@ -51,6 +57,9 @@ const joinOrbital = asyncHandler(async (req, res) => {
     }
 
     const isOpen = orbital.visibility === VISIBILITY.OPEN;
+    console.log("OrbitalMember =", OrbitalMember);
+    console.log(typeof OrbitalMember);
+    console.log(Object.keys(OrbitalMember));
 
     try {
         await OrbitalMember.create({
@@ -88,10 +97,13 @@ const cancelJoinRequest = asyncHandler(async (req, res) => {
 });
 
 const leaveOrbital = asyncHandler(async (req, res) => {
-    if (req.membership.role === ROLE.ADMIN) {
+    if (
+        req.membership.role === ROLE.ADMIN ||
+        req.membership.role === ROLE.CREATOR
+    ) {
         return res.status(400).json({
             success: false,
-            message: "Admin cannot leave. Delete the orbital instead.",
+            message: "Owner/Admin cannot leave the orbital."
         });
     }
     await req.membership.deleteOne();
