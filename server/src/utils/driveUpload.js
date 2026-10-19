@@ -38,7 +38,7 @@ async function uploadBufferToDrive(buffer, fileName, mimeType = 'image/webp') {
         requestBody: { role: 'reader', type: 'anyone' },
     });
 
-    const publicUrl = `https://drive.google.com/uc?id=${fileId}`;
+    const publicUrl = `https://lh3.googleusercontent.com/d/${fileId}`;
 
     return { fileId, publicUrl };
 };
