@@ -243,13 +243,16 @@ async function uploadProfileImage(req, res) {
       fileName,
       'image/webp'
     );
-
-    await userModel.findByIdAndUpdate(
+    const updatedUser = await userModel.findByIdAndUpdate(
       req.user.id,
       {
         $set: {
           profilePic: publicUrl
         }
+      },
+      {
+        new: true,
+        runValidators: true
       }
     );
 
