@@ -9,6 +9,7 @@ const crypto = require('crypto');
 const { checkAndAwardBadges } = require('./badge.controller');
 const { sendOtpEmail } = require('../utils/mailer');
 const post = require('../models/post.model');
+const { uploadBufferToDrive } = require('../utils/driveUpload');
 
 const PROFILE_PICS_DIR = path.join(__dirname, '..', '..', 'uploads', 'profile-pics');
 const MAX_PROCESSED_IMAGE_BYTES = 450 * 1024;
@@ -249,13 +250,16 @@ async function uploadProfileImage(req, res) {
       fileName,
       'image/webp'
     );
-
-    await userModel.findByIdAndUpdate(
+    const updatedUser = await userModel.findByIdAndUpdate(
       req.user.id,
       {
         $set: {
           profilePic: publicUrl
         }
+      },
+      {
+        new: true,
+        runValidators: true
       }
     );
 

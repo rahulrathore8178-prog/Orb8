@@ -18,8 +18,13 @@ orbitalMemberSchema.index({ orbital: 1, user: 1 }, { unique: true }); // no dupl
 orbitalMemberSchema.index({ orbital: 1, status: 1 });
 orbitalMemberSchema.index({ user: 1, status: 1 });
 
-const OrbitalMember = mongoose.model("OrbitalMember", orbitalMemberSchema);
-OrbitalMember.ROLE = ROLE;
-OrbitalMember.STATUS = STATUS;
+const OrbitalMember = mongoose.model(
+    "OrbitalMember",
+    orbitalMemberSchema
+);
 
-module.exports = OrbitalMember;
+module.exports = {
+    OrbitalMember,
+    ROLE,
+    STATUS,
+};
