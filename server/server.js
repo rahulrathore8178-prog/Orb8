@@ -27,13 +27,20 @@ const clients = new Map();
     const server = http.createServer(app);
     const wss = new WebSocket.Server({ server });
 
-    wss.on('connection', async (socket) => {
-      console.log('New WS connection');
+    wss.on('connection', async (socket, req) => {
+      console.log('✅ New WS Connection');
+      console.log('IP:', req.socket.remoteAddress);
+
+      socket.on('message', (data) => {
+        console.log('🔥 RAW MESSAGE:', data.toString());
+      });
       let registeredUserId = null;
 
       socket.on('message', async (rawData) => {
+        console.log('📨 WS Message Received:', rawData.toString());
         try {
           const msg = JSON.parse(rawData);
+          console.log('📨 Parsed Message:', msg)
 
           if (msg.type === 'register') {
             registeredUserId = msg.userId;
@@ -61,13 +68,13 @@ const clients = new Map();
               delivered: false
             });
 
-            await notifyUser(recipientId, "New message", text, {
-              type: "chat-message",
-              senderId: String(senderId),
-              recipientId: String(recipientId),
-              messageId: String(saved._id),
-              timestamp: saved.timestamp.toISOString()
-            });
+            // await notifyUser(recipientId, "New message", text, {
+            //   type: "chat-message",
+            //   senderId: String(senderId),
+            //   recipientId: String(recipientId),
+            //   messageId: String(saved._id),
+            //   timestamp: saved.timestamp.toISOString()
+            // });
 
             const payload = JSON.stringify({
               type: 'chat-message',
