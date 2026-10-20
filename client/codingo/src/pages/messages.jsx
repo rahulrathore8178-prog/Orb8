@@ -60,18 +60,41 @@ export default function MessagesApp() {
       socket.send(JSON.stringify({ type: "register", userId: currentUser.id }));
     };
     socket.onmessage = (event) => {
+      console.log("🔥 WS EVENT RECEIVED");
+      console.log("🔥 RAW EVENT:", event.data);
+
       try {
         const data = JSON.parse(event.data);
+        console.log("🔥 PARSED DATA:", data);
+
         if (data.type !== "chat-message") return;
 
         const { senderId, text, time, timestamp, id } = data.message || {};
-        if (!senderId || !text) return;
-        dispatch(addMessage({
-          contactId: senderId,
-          message: { id, senderId, text, time: new Date(timestamp || time), from: "them" },
-        }));
-      } catch (error) {
-        console.error("Chat WebSocket message error", error);
+
+        console.log("🔥 CHAT MESSAGE RECEIVED:", {
+          senderId,
+          text,
+          time,
+          timestamp,
+          id
+        });
+
+        dispatch(
+          addMessage({
+            contactId: senderId,
+            message: {
+              id,
+              senderId,
+              text,
+              time: new Date(timestamp || time),
+              from: "them",
+            },
+          })
+        );
+
+        console.log("✅ MESSAGE DISPATCHED");
+      } catch (err) {
+        console.error(err);
       }
     };
     socket.onerror = (error) => console.error("Chat WebSocket error", error);
@@ -100,7 +123,7 @@ export default function MessagesApp() {
 
     if (wsRef.current?.readyState !== WebSocket.OPEN) return;
     wsRef.current.send(JSON.stringify({ type: "chat-message", message }));
-
+    
     dispatch(addMessage({ contactId: activeContactId, message: { ...message, from: "me" } }));
     setDrafts((currentDrafts) => ({ ...currentDrafts, [activeContactId]: "" }));
   };
@@ -340,7 +363,7 @@ export default function MessagesApp() {
           moreWrapRef={moreWrapRef}
           setEmojiOpen={setEmojiOpen}
           showToast={showToast}
-          setContacts={() => {}}
+          setContacts={() => { }}
         />
 
         <ChatArea
@@ -355,30 +378,30 @@ export default function MessagesApp() {
         />
 
         {activeContactId && (
-        <InputBar
-          activeContact={activeContact}
-          activeContactId={activeContactId}
-          drafts={drafts}
-          setDrafts={setDrafts}
-          pendingAttachments={pendingAttachments}
-          removeAttachment={removeAttachment}
-          recording={recording}
-          setRecording={setRecording}
-          recordSeconds={recordSeconds}
-          setRecordSeconds={setRecordSeconds}
-          emojiOpen={emojiOpen}
-          setEmojiOpen={setEmojiOpen}
-          setSwitcherOpen={setSwitcherOpen}
-          setMoreMenuOpen={setMoreMenuOpen}
-          emojiWrapRef={emojiWrapRef}
-          textareaRef={textareaRef}
-          fileInputRef={fileInputRef}
-          insertEmoji={insertEmoji}
-          sendMessage={sendMessage}
-          stopRecordingSend={stopRecordingSend}
-          hasComposerContent={hasComposerContent}
-          handleFileChange={handleFileChange}
-        />
+          <InputBar
+            activeContact={activeContact}
+            activeContactId={activeContactId}
+            drafts={drafts}
+            setDrafts={setDrafts}
+            pendingAttachments={pendingAttachments}
+            removeAttachment={removeAttachment}
+            recording={recording}
+            setRecording={setRecording}
+            recordSeconds={recordSeconds}
+            setRecordSeconds={setRecordSeconds}
+            emojiOpen={emojiOpen}
+            setEmojiOpen={setEmojiOpen}
+            setSwitcherOpen={setSwitcherOpen}
+            setMoreMenuOpen={setMoreMenuOpen}
+            emojiWrapRef={emojiWrapRef}
+            textareaRef={textareaRef}
+            fileInputRef={fileInputRef}
+            insertEmoji={insertEmoji}
+            sendMessage={sendMessage}
+            stopRecordingSend={stopRecordingSend}
+            hasComposerContent={hasComposerContent}
+            handleFileChange={handleFileChange}
+          />
         )}
       </main>
 
