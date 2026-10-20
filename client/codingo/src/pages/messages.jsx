@@ -66,6 +66,7 @@ export default function MessagesApp() {
       try {
         const data = JSON.parse(event.data);
         console.log("🔥 PARSED DATA:", data);
+        console.log('json data', JSON.stringify(null, 2));
 
         if (data.type !== "chat-message") return;
 
@@ -76,7 +77,7 @@ export default function MessagesApp() {
           text,
           time,
           timestamp,
-          id
+          id,
         });
 
         dispatch(
@@ -123,7 +124,7 @@ export default function MessagesApp() {
 
     if (wsRef.current?.readyState !== WebSocket.OPEN) return;
     wsRef.current.send(JSON.stringify({ type: "chat-message", message }));
-    
+
     dispatch(addMessage({ contactId: activeContactId, message: { ...message, from: "me" } }));
     setDrafts((currentDrafts) => ({ ...currentDrafts, [activeContactId]: "" }));
   };
