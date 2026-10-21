@@ -7,12 +7,42 @@ import { getAuthHeaders } from "../utilites/communityHelper";
 import { useParams } from "react-router-dom";
 import axios from "axios";
 import { FaCamera, FaEdit, FaHeart, FaSave, FaTimes } from "react-icons/fa";
+import { FiMessageCircle } from "react-icons/fi";
 import PostPreview from "../components/SocialProfile/postPreview";
 import { useDispatch, useSelector } from "react-redux";
 import { FaSearch, FaUserCircle /* ...your existing icons */ } from "react-icons/fa";
 import { fetchFriendRequests, fetchFriends } from "../redux/slices/friendsSlice";
-import { Trash2, BarChart3 } from "lucide-react";
+import { Archive, BarChart3, GripVertical, Lock, Maximize2, RotateCcw, ShieldBan, Trash2 } from "lucide-react";
 import { setPosts } from "../redux/slices/feedSlice";
+import {
+    closestCenter,
+    DndContext,
+    KeyboardSensor,
+    MouseSensor,
+    TouchSensor,
+    useSensor,
+    useSensors,
+} from "@dnd-kit/core";
+import {
+    arrayMove,
+    rectSortingStrategy,
+    SortableContext,
+    sortableKeyboardCoordinates,
+    useSortable,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+
+const GRID_SIZE_CLASSES = {
+    '1x1': 'col-span-1 row-span-1',
+    '2x1': 'col-span-2 row-span-1',
+    '3x1': 'col-span-3 row-span-1',
+    '1x2': 'col-span-1 row-span-2',
+    '2x2': 'col-span-2 row-span-2',
+    '3x2': 'col-span-3 row-span-2',
+    '1x3': 'col-span-1 row-span-3',
+    '2x3': 'col-span-2 row-span-3',
+    '3x3': 'col-span-3 row-span-3',
+};
 
 
 // ---------------------------------------------------------------
@@ -122,13 +152,7 @@ export default function SocialProfileSection() {
     const storedUser = getStoredUser();
     const isOwnProfile = !userId || userId === storedUser?.id;
     const [currentUser, setCurrentUser] = useState(isOwnProfile ? storedUser : null);
-    const userFriends = currentUser?.friends;
-    console.log('currentUser', currentUser);
-    // console.log('currentUser friends', currentUser?.friends);
-    const reduxfriends = useSelector((state) => state.friends);
     const friends = useSelector(state => state.friends.friends);
-    console.log('friends', friends);
-    // console.log('redux friends', reduxfriends);
     const friendsCount = currentUser?.friends?.length || 0;
     // console.log('friendsCount', friendsCount);
     const friendRequests = currentUser?.friendRequests?.length || 0;
@@ -138,7 +162,6 @@ export default function SocialProfileSection() {
     const [isEditingBio, setIsEditingBio] = useState(false);
     const [bio, setBio] = useState('');
     const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
-    const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
     const fileInputRef = useRef(null);
     const [userPosts, setUserPosts] = useState([]);
@@ -147,19 +170,26 @@ export default function SocialProfileSection() {
     const [selectedPostIndex, setSelectedPostIndex] = useState(0);
     const [friendSearch, setFriendSearch] = useState("");
     const friendsListRef = useRef(null);
-    const [friendsList, setFriendsList] = useState([]);
-    const [friendsLoading, setFriendsLoading] = useState(false);
+    const [profileGridLayout, setProfileGridLayout] = useState([]);
+    const gridRef = useRef(null);
+    const [gridCellSize, setGridCellSize] = useState(0);
+    const [insights, setInsights] = useState(null);
+    const [followStatus, setFollowStatus] = useState('none');
+    const [canViewPosts, setCanViewPosts] = useState(true);
     const dispatch = useDispatch();
+    const sensors = useSensors(
+        useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
+        useSensor(TouchSensor, { activationConstraint: { delay: 180, tolerance: 8 } }),
+        useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+    );
     // const [postId, setPostId] = useState();
 
 
-    // Swap `friendsList`/`friendsLoading` for whatever your actual fetch state is called —
-    // I don't have that code, so these are placeholders for the array + loading flag.
     const filteredFriends = useMemo(() => {
         const term = friendSearch.trim().toLowerCase();
-        if (!term) return friendsList;
-        return friendsList.filter((f) => f.username?.toLowerCase().includes(term));
-    }, [friendsList, friendSearch]);
+        if (!term) return friends;
+        return friends.filter((friend) => friend.username?.toLowerCase().includes(term));
+    }, [friends, friendSearch]);
 
     useEffect(() => {
         if (activeTab !== 'Friends' || !friendsListRef.current) return;
@@ -171,10 +201,29 @@ export default function SocialProfileSection() {
             );
         }, friendsListRef);
         return () => ctx.revert();
-    }, [activeTab, friendsList.length]);
+    }, [activeTab, filteredFriends.length]);
+
+    useEffect(() => {
+        const grid = gridRef.current;
+        if (!grid || activeTab !== 'Posts') return;
+
+        const updateCellSize = () => {
+            const columnGap = parseFloat(getComputedStyle(grid).columnGap) || 0;
+            setGridCellSize((grid.clientWidth - (columnGap * 2)) / 3);
+        };
+        const resizeObserver = new ResizeObserver(updateCellSize);
+        updateCellSize();
+        resizeObserver.observe(grid);
+        return () => resizeObserver.disconnect();
+    }, [activeTab, postsLoading]);
 
     const TABS = [
         { label: 'Posts', count: userPosts?.length ?? 0 },
+        ...(isOwnProfile ? [
+            { label: 'Saved', count: null },
+            { label: 'Archived', count: null },
+            { label: 'Insights', count: null },
+        ] : []),
         { label: 'Friends', count: friendsCount },
         { label: 'Requests', count: friendRequests },
     ];
@@ -196,27 +245,46 @@ export default function SocialProfileSection() {
 
             setPostsLoading(true);
             try {
+                if (isOwnProfile && activeTab === 'Insights') {
+                    const insightResponse = await axios.get(`${apiUrl}/api/community/insights`, {
+                        withCredentials: true,
+                        headers: getAuthHeaders(),
+                    });
+                    setInsights(insightResponse.data.insights);
+                    return;
+                }
+
+                const endpoint = isOwnProfile && activeTab === 'Saved'
+                    ? `${apiUrl}/api/community/saved`
+                    : `${apiUrl}/api/community/users/${id}/posts?page=1&limit=20${activeTab === 'Archived' ? '&archived=true' : ''}`;
                 const res = await axios.get(
-                    `${apiUrl}/api/community/users/${id}/posts?page=1&limit=20`,
+                    endpoint,
                     {
                         withCredentials: true,
                         headers: getAuthHeaders()
                     }
                 );
-                // console.log('res', res);
-                setUserPosts(res.data.posts || []);
+                const posts = activeTab === 'Saved'
+                    ? (res.data.savedPosts || []).map(item => ({
+                        ...item.post,
+                        id: item.post.id || item.post._id,
+                        isSavedByCurrentUser: true,
+                    }))
+                    : (res.data.posts || []);
+                setUserPosts(posts);
                 // console.log('userPosts', res?.data?.id)
                 // setPostId(res?.id)
             } catch (err) {
                 console.error('Failed to fetch user posts:', err);
-                setError('Failed to load user posts.');
+                setUserPosts([]);
+                setError(err.response?.status === 403 ? 'This profile is private.' : 'Failed to load user posts.');
             } finally {
                 setPostsLoading(false);
             }
         };
 
         fetchUserPosts();
-    }, [userId, storedUser?.id]);
+    }, [activeTab, isOwnProfile, userId, storedUser?.id]);
 
 
     const getDisplayImageUrl = (imageUrl) => {
@@ -235,8 +303,9 @@ export default function SocialProfileSection() {
         }
     }
 
-    async function fetchUserProfile() {
+    async function fetchUserProfile(signal) {
         try {
+            setError(null);
             // console.log("fetch user profile");
             const url = isOwnProfile
                 ? `${apiUrl}/api/auth/user/me`
@@ -244,14 +313,22 @@ export default function SocialProfileSection() {
 
             const response = await axios.get(url, {
                 withCredentials: true,
-                headers: getAuthHeaders()
+                headers: getAuthHeaders(),
+                signal,
             });
 
             if (response.data?.user) {
                 const userData = response.data.user;
                 setCurrentUser(userData)
+                setError(null);
                 setBio(userData.bio || '');
                 setEditedUsername(userData.username || '');
+                setProfileGridLayout((userData.profileGridLayout || []).map(item => ({
+                    post: String(item.post),
+                    gridSize: item.gridSize,
+                })));
+                setFollowStatus(userData.followStatus || 'none');
+                setCanViewPosts(userData.canViewPosts !== false);
 
                 if (isOwnProfile) {
                     localStorage.setItem('user', JSON.stringify(userData));
@@ -259,14 +336,16 @@ export default function SocialProfileSection() {
             }
             // console.log('Fetched user profile:', response?.data?.user);
         } catch (err) {
+            if (axios.isCancel(err) || err.code === 'ERR_CANCELED') return;
             console.error('Failed to fetch user profile:', err);
             setError('Failed to load profile.');
-            setIsLoading(false);
         }
     };
 
     useEffect(() => {
-        fetchUserProfile();
+        const controller = new AbortController();
+        fetchUserProfile(controller.signal);
+        return () => controller.abort();
     }, [userId]);
 
     const handleAvatarUpload = async (e) => {
@@ -360,6 +439,96 @@ export default function SocialProfileSection() {
         }
     };
 
+    const updateFollow = async () => {
+        const method = followStatus === 'following' || followStatus === 'requested' ? 'delete' : 'post';
+        const response = await axios({
+            method,
+            url: `${apiUrl}/api/social/follow/${userId}`,
+            withCredentials: true,
+            headers: getAuthHeaders(),
+        });
+        setFollowStatus(response.data.status);
+    };
+
+    const blockProfile = async () => {
+        if (!confirm('Block this user? You will no longer see each other.')) return;
+        await axios.post(`${apiUrl}/api/social/block/${userId}`, {}, {
+            withCredentials: true,
+            headers: getAuthHeaders(),
+        });
+        window.location.href = '/community';
+    };
+
+    const updatePrivacy = async () => {
+        const response = await axios.patch(`${apiUrl}/api/social/privacy`, {
+            isPrivate: !currentUser?.isPrivate,
+        }, {
+            withCredentials: true,
+            headers: getAuthHeaders(),
+        });
+        setCurrentUser(user => ({ ...user, isPrivate: response.data.isPrivate }));
+    };
+
+    const persistGrid = async (layout) => {
+        setProfileGridLayout(layout);
+        const response = await axios.put(`${apiUrl}/api/social/profile-grid`, { layout }, {
+            withCredentials: true,
+            headers: getAuthHeaders(),
+        });
+        if (!Array.isArray(response.data?.layout)) {
+            throw new Error('The server did not confirm the saved grid layout.');
+        }
+        setProfileGridLayout(response.data.layout.map(item => ({
+            post: String(item.post),
+            gridSize: item.gridSize,
+        })));
+    };
+
+    const getCompleteGridLayout = () => {
+        const postIds = new Set(userPosts.map(post => post.id));
+        const savedLayout = profileGridLayout.filter(item => postIds.has(item.post));
+        const savedIds = new Set(savedLayout.map(item => item.post));
+        return [
+            ...savedLayout,
+            ...userPosts.filter(post => !savedIds.has(post.id)).map(post => ({ post: post.id, gridSize: '1x1' })),
+        ];
+    };
+
+    const reorderGrid = ({ active, over }) => {
+        if (!isOwnProfile || !over || active.id === over.id) return;
+        const layout = getCompleteGridLayout();
+        const oldIndex = layout.findIndex(item => item.post === active.id);
+        const newIndex = layout.findIndex(item => item.post === over.id);
+        if (oldIndex === -1 || newIndex === -1) return;
+        persistGrid(arrayMove(layout, oldIndex, newIndex)).catch(() => setError('Failed to save grid order.'));
+    };
+
+    const resizeGridItem = (postId, gridSize) => {
+        if (!GRID_SIZE_CLASSES[gridSize]) return;
+        const layout = getCompleteGridLayout();
+        const nextLayout = layout.map(item => item.post === postId ? { ...item, gridSize } : item);
+        if (layout.find(item => item.post === postId)?.gridSize === gridSize) return;
+        persistGrid(nextLayout).catch((error) => {
+            setProfileGridLayout(layout);
+            setError(error.response?.data?.message || error.message || 'Failed to save tile size.');
+        });
+    };
+
+    const handleArchive = async (postId, isArchived) => {
+        await axios.patch(`${apiUrl}/api/community/posts/${postId}/archive`, { isArchived }, {
+            withCredentials: true,
+            headers: getAuthHeaders(),
+        });
+        setUserPosts(posts => posts.filter(post => post.id !== postId));
+    };
+
+    const orderedPosts = useMemo(() => {
+        if (!isOwnProfile || activeTab !== 'Posts' || profileGridLayout.length === 0) return userPosts;
+        const positions = new Map(profileGridLayout.map((item, index) => [item.post, index]));
+        return [...userPosts].sort((left, right) =>
+            (positions.get(left.id) ?? Number.MAX_SAFE_INTEGER) - (positions.get(right.id) ?? Number.MAX_SAFE_INTEGER));
+    }, [activeTab, isOwnProfile, profileGridLayout, userPosts]);
+
     // delete function
     const handleDelete = async (postId) => {
         if (!confirm('Delete this post?')) return;
@@ -452,8 +621,6 @@ export default function SocialProfileSection() {
     const handleTabClick = (tab) => {
         if (tab === activeTab) return;
 
-        const underline = tabsRef.current.querySelector(`[data-tab="${activeTab}"] span.underline-bar`);
-
         gsap.to(contentRef.current, {
             opacity: 0,
             y: 10,
@@ -465,9 +632,6 @@ export default function SocialProfileSection() {
             },
         });
     };
-
-    const items = DATA_BY_TAB[activeTab];
-    const isLinks = activeTab === "Links";
 
     const showPostModal = (postIndex) => {
         setSelectedPostIndex(postIndex);
@@ -567,7 +731,7 @@ export default function SocialProfileSection() {
                             ) : (
                                 <>
                                     {(
-                                        <h1 onClick={() => setIsEditingUsername(true)} className="text-xl sm:text-2xl md:text-3xl font-bold truncate hover:text-white/80 transition">{currentUser?.username || 'Learner'}</h1>
+                                        <h1 onClick={() => isOwnProfile && setIsEditingUsername(true)} className="text-xl sm:text-2xl md:text-3xl font-bold truncate hover:text-white/80 transition">{currentUser?.username || 'Learner'}</h1>
                                     )}
                                 </>
                             )}
@@ -608,10 +772,23 @@ export default function SocialProfileSection() {
                             ) : (
                                 <div className="flex items-start justify-between">
 
-                                    {isOwnProfile && (
-                                        <p onClick={() => setIsEditingBio(true)} className="text-gray-300 text-xs sm:text-sm flex-1">{currentUser?.bio || (isOwnProfile ? 'No bio yet. Click here to add one.' : 'No bio yet.')}</p>
-                                    )}
+                                    <p onClick={() => isOwnProfile && setIsEditingBio(true)} className="text-gray-300 text-xs sm:text-sm flex-1">
+                                        {currentUser?.bio || (isOwnProfile ? 'No bio yet. Click here to add one.' : 'No bio yet.')}
+                                    </p>
                                 </div>
+                            )}
+                            <div className="mt-3 flex flex-wrap gap-4 text-xs text-white/55">
+                                <span>{currentUser?.followersCount ?? currentUser?.followers?.length ?? 0} followers</span>
+                                <span>{currentUser?.followingCount ?? currentUser?.following?.length ?? 0} following</span>
+                            </div>
+                            {isOwnProfile && (
+                                <button
+                                    type="button"
+                                    onClick={updatePrivacy}
+                                    className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-white/10 px-2.5 py-1.5 text-xs text-white/70 hover:bg-white/5 hover:text-white"
+                                >
+                                    <Lock size={13} /> {currentUser?.isPrivate ? 'Private profile' : 'Public profile'}
+                                </button>
                             )}
                         </div>
                     </div>
@@ -622,18 +799,25 @@ export default function SocialProfileSection() {
                         ref={actionsRef}
                         className="mt-6 sm:mt-8 mx-auto flex w-full max-w-xs flex-col items-stretch justify-center gap-2 px-4 sm:max-w-none sm:w-auto sm:flex-row sm:items-center sm:gap-3 sm:px-0"
                     >
-                        {friends == true ? (
-                            <button className="flex-1 rounded-lg bg-gray-600 px-4 py-2 text-xs font-semibold transition-all hover:bg-gray-700 active:scale-[0.97] sm:min-w-[140px] sm:flex-none sm:py-2.5 sm:text-sm">
-                                Friends
-                            </button>
-                        ) : (
-                            <button className="flex-1 rounded-lg bg-cyan-600 px-4 py-2 text-xs font-semibold transition-all hover:bg-cyan-700 active:scale-[0.97] sm:min-w-[140px] sm:flex-none sm:py-2.5 sm:text-sm">
-                                Add Friend
-                            </button>
-                        )}
+                        <button
+                            type="button"
+                            onClick={updateFollow}
+                            className={`flex-1 rounded-lg px-4 py-2 text-xs font-semibold transition-all active:scale-[0.97] sm:min-w-[140px] sm:flex-none sm:py-2.5 sm:text-sm ${followStatus === 'none' ? 'bg-cyan-600 hover:bg-cyan-700' : 'bg-gray-700 hover:bg-gray-600'}`}
+                        >
+                            {followStatus === 'following' ? 'Following' : followStatus === 'requested' ? 'Requested' : 'Follow'}
+                        </button>
                         <button className="flex-1 rounded-lg bg-cyan-600 px-4 py-2 text-xs font-semibold transition-all hover:bg-cyan-700 active:scale-[0.97] sm:min-w-[140px] sm:flex-none sm:py-2.5 sm:text-sm">
                             Send Message
                         </button>
+                        <button type="button" onClick={blockProfile} className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 text-white/55 hover:bg-white/5 hover:text-red-400" aria-label="Block user">
+                            <ShieldBan size={17} />
+                        </button>
+                    </div>
+                )}
+
+                {error && (
+                    <div className="mt-5 rounded-md border border-red-400/20 bg-red-400/5 px-3 py-2 text-sm text-red-300">
+                        {error}
                     </div>
                 )}
 
@@ -660,7 +844,26 @@ export default function SocialProfileSection() {
                         );
                     })}
                 </div>
-                {activeTab === 'Friends' ? (
+                {!canViewPosts && !isOwnProfile && activeTab === 'Posts' ? (
+                    <div className="mt-16 flex flex-col items-center gap-3 text-center text-white/50">
+                        <Lock size={24} />
+                        <p className="text-sm">Follow this private profile to see its posts.</p>
+                    </div>
+                ) : activeTab === 'Insights' && isOwnProfile ? (
+                    <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                        {[
+                            ['Posts', insights?.posts || 0],
+                            ['Likes', insights?.likes || 0],
+                            ['Comments', insights?.comments || 0],
+                            ['Unique views', insights?.views || 0],
+                        ].map(([label, value]) => (
+                            <div key={label} className="rounded-lg border border-white/10 bg-[#111318] p-4">
+                                <div className="text-2xl font-bold text-white">{value.toLocaleString()}</div>
+                                <div className="mt-1 text-xs text-white/45">{label}</div>
+                            </div>
+                        ))}
+                    </div>
+                ) : activeTab === 'Friends' ? (
                     <div>
                         <div className="relative mb-4 sm:mb-6 mt-5 max-w-md mx-auto sm:mx-0">
                             <FaSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500" size={13} />
@@ -673,13 +876,11 @@ export default function SocialProfileSection() {
                             />
                         </div>
 
-                        {friendsLoading ? (
-                            <div className="text-center text-gray-400 text-sm sm:text-base">Loading friends...</div>
-                        ) : friends.length === 0 ? (
+                        {friends.length === 0 ? (
                             <div className="text-center text-gray-400 text-sm sm:text-base">No friends yet.</div>
                         ) : (
                             <div ref={friendsListRef} className="flex flex-col divide-y divide-white/5 min-w-2xl mx-auto">
-                                {userFriends.map((friend) => (
+                                {filteredFriends.map((friend) => (
                                     <div
                                         key={friend.id}
                                         onClick={() => {
@@ -713,58 +914,192 @@ export default function SocialProfileSection() {
                     ) : userPosts.length === 0 ? (
                         <div className="text-center text-gray-400 text-sm sm:text-base">No posts yet.</div>
                     ) : (
-                        <div ref={contentRef} className="mt-8 sm:mt-10">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 md:gap-6 max-w-6xl mx-auto">
-                                {userPosts.map((post, postIndex) => {
-                                    const imageUrl = getDisplayImageUrl(post.image);
-                                    const videoUrl = post.video?.startsWith('/') ? `${apiUrl}${post.video}` : post.video;
-                                    return (
-                                        <div
-                                            key={post.id}
-                                            role="button"
-                                            tabIndex={0}
-                                            onKeyDown={(event) => {
-                                                if (event.key === 'Enter' || event.key === ' ') showPostModal(postIndex);
-                                            }}
-                                            className="rounded-lg sm:rounded-2xl border border-white/10 bg-[#2B2B2B] p-3 sm:p-4 transition-transform duration-300 hover:scale-105 hover:shadow-lg"
-                                        >
-                                            <div className="mb-3 flex justify-between text-xs sm:text-sm text-gray-400">
-                                                <span>{new Date(post.createdAt).toLocaleDateString()}</span>
-                                                <span onClick={() => handleDelete(post.id)}><Trash2 /></span>
-                                            </div>
-                                            <div onClick={() => showPostModal(postIndex)}>
-                                                <div className="text-white text-sm sm:text-base mb-3 line-clamp-3">{post.content}</div>
-                                                {post.image && (
-                                                    <div className="overflow-hidden rounded-lg sm:rounded-xl aspect-square mb-3">
-                                                        <img src={imageUrl} alt="" className="w-full h-full object-cover" />
-                                                    </div>
-                                                )}
-                                                {post.video && (
-                                                    <div className="overflow-hidden rounded-lg sm:rounded-xl aspect-square mb-3">
-                                                        <video src={videoUrl} muted playsInline preload="metadata" className="w-full h-full object-cover" />
-                                                    </div>
-                                                )}
-                                            </div>
-                                            <div className="flex items-center justify-between text-xs sm:text-sm text-gray-400 flex-wrap gap-2">
-                                                <div className="flex items-center gap-1">
-                                                    <span className="flex items-center justify-center"><FaHeart size={12} className="sm:w-4 sm:h-4" /></span>
-                                                    <span>{post.likesCount} likes</span>
-                                                </div>
-                                                <span>{post.commentsCount} comments</span>
-                                                <span><BarChart3 size={20} /> Views: {post?.views}</span>
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
+                        <div ref={contentRef} className="mt-5 sm:mt-7">
+                            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={reorderGrid}>
+                                <SortableContext items={orderedPosts.map(post => post.id)} strategy={rectSortingStrategy}>
+                                    <div
+                                        ref={gridRef}
+                                        className="mx-auto grid max-w-4xl grid-flow-dense grid-cols-3 gap-0.5 bg-black"
+                                        style={{ gridAutoRows: gridCellSize ? `${gridCellSize}px` : 'auto' }}
+                                    >
+                                        {orderedPosts.map((post, postIndex) => (
+                                            <SortableProfileTile
+                                                key={post.id}
+                                                post={post}
+                                                gridSize={profileGridLayout.find(item => item.post === post.id)?.gridSize || '1x1'}
+                                                imageUrl={getDisplayImageUrl(post.image)}
+                                                videoUrl={post.video?.startsWith('/') ? `${apiUrl}${post.video}` : post.video}
+                                                fallbackText={currentUser?.username?.charAt(0)?.toUpperCase()}
+                                                canArrange={isOwnProfile && activeTab === 'Posts'}
+                                                isOwnProfile={isOwnProfile}
+                                                isArchived={activeTab === 'Archived'}
+                                                onOpen={() => showPostModal(postIndex)}
+                                                onResize={resizeGridItem}
+                                                onArchive={handleArchive}
+                                                onDelete={handleDelete}
+                                            />
+                                        ))}
+                                    </div>
+                                </SortableContext>
+                            </DndContext>
                         </div>
                     )
                 )}
                 {/* ---------------- Content grid ---------------- */}
                 {showPostPreview && (
-                    <PostPreview posts={userPosts} initialIndex={selectedPostIndex} isOpen={showPostPreview} onClose={() => setShowPostPreview(false)} />
+                    <PostPreview posts={orderedPosts} initialIndex={selectedPostIndex} isOpen={showPostPreview} onClose={() => setShowPostPreview(false)} />
                 )}
             </div>
         </div>
+    );
+}
+
+function SortableProfileTile({
+    post,
+    gridSize,
+    imageUrl,
+    videoUrl,
+    fallbackText,
+    canArrange,
+    isOwnProfile,
+    isArchived,
+    onOpen,
+    onResize,
+    onArchive,
+    onDelete,
+}) {
+    const [previewSize, setPreviewSize] = useState(null);
+    const resizeStateRef = useRef(null);
+    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+        id: post.id,
+        disabled: !canArrange,
+    });
+    const activeSize = previewSize || gridSize;
+
+    const handleResizeStart = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const grid = event.currentTarget.closest('article')?.parentElement;
+        if (!grid) return;
+
+        const [columns, rows] = activeSize.split('x').map(Number);
+        const styles = getComputedStyle(grid);
+        const columnGap = parseFloat(styles.columnGap) || 0;
+        const rowGap = parseFloat(styles.rowGap) || 0;
+        const cellSize = (grid.clientWidth - (columnGap * 2)) / 3;
+        resizeStateRef.current = {
+            pointerId: event.pointerId,
+            startX: event.clientX,
+            startY: event.clientY,
+            startWidth: (columns * cellSize) + ((columns - 1) * columnGap),
+            startHeight: (rows * cellSize) + ((rows - 1) * rowGap),
+            columnStep: cellSize + columnGap,
+            rowStep: cellSize + rowGap,
+            currentSize: activeSize,
+        };
+        event.currentTarget.setPointerCapture(event.pointerId);
+    };
+
+    const handleResizeMove = (event) => {
+        const resizeState = resizeStateRef.current;
+        if (!resizeState || resizeState.pointerId !== event.pointerId) return;
+        const columns = Math.max(1, Math.min(3, Math.round(
+            (resizeState.startWidth + event.clientX - resizeState.startX) / resizeState.columnStep,
+        )));
+        const rows = Math.max(1, Math.min(3, Math.round(
+            (resizeState.startHeight + event.clientY - resizeState.startY) / resizeState.rowStep,
+        )));
+        const nextSize = `${columns}x${rows}`;
+        if (nextSize !== resizeState.currentSize) {
+            resizeState.currentSize = nextSize;
+            setPreviewSize(nextSize);
+        }
+    };
+
+    const handleResizeEnd = (event) => {
+        const resizeState = resizeStateRef.current;
+        if (!resizeState || resizeState.pointerId !== event.pointerId) return;
+        event.stopPropagation();
+        onResize(post.id, resizeState.currentSize);
+        resizeStateRef.current = null;
+        setPreviewSize(null);
+    };
+
+    const cancelResize = () => {
+        resizeStateRef.current = null;
+        setPreviewSize(null);
+    };
+
+    return (
+        <article
+            ref={setNodeRef}
+            style={{
+                transform: CSS.Transform.toString(transform),
+                transition,
+                zIndex: isDragging ? 20 : undefined,
+            }}
+            className={`group relative min-h-0 min-w-0 cursor-pointer overflow-hidden bg-[#202020] ${GRID_SIZE_CLASSES[activeSize]} ${isDragging ? 'opacity-75 shadow-2xl' : ''}`}
+            onClick={onOpen}
+            onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') onOpen();
+            }}
+            role="button"
+            tabIndex={0}
+        >
+            {post.image ? (
+                <img src={imageUrl} alt="" draggable={false} className="h-full w-full select-none object-cover" />
+            ) : post.video ? (
+                <video src={videoUrl} muted playsInline preload="metadata" className="h-full w-full object-cover" />
+            ) : (
+                <div className="flex h-full w-full items-center justify-center p-4 text-center sm:p-8">
+                    <p className="line-clamp-6 text-xs font-semibold leading-relaxed text-white sm:text-base">
+                        {post.content || fallbackText}
+                    </p>
+                </div>
+            )}
+            {(post.image || post.video) && <div className="pointer-events-none absolute inset-0 bg-linear-to-t from-black/75 via-transparent to-black/10 opacity-75" />}
+
+            {canArrange && (
+                <button
+                    type="button"
+                    className="absolute left-1.5 top-1.5 z-20 flex h-7 w-7 touch-none cursor-grab items-center justify-center bg-black/65 text-white opacity-0 transition-opacity active:cursor-grabbing group-hover:opacity-100 focus-visible:opacity-100"
+                    title="Drag to reorder"
+                    aria-label="Drag to reorder post"
+                    onClick={event => event.stopPropagation()}
+                    {...attributes}
+                    {...listeners}
+                >
+                    <GripVertical size={14} />
+                </button>
+            )}
+            {isOwnProfile && (
+                <div className="absolute right-1.5 top-1.5 z-10 flex items-center gap-0.5 bg-black/60 p-1 text-white backdrop-blur-sm">
+                    <button type="button" onClick={(event) => { event.stopPropagation(); onArchive(post.id, !isArchived); }} className="p-1 hover:text-cyan-300" aria-label={isArchived ? 'Restore post' : 'Archive post'}>
+                        {isArchived ? <RotateCcw size={13} /> : <Archive size={13} />}
+                    </button>
+                    <button type="button" onClick={(event) => { event.stopPropagation(); onDelete(post.id); }} className="p-1 hover:text-red-400" aria-label="Delete post"><Trash2 size={13} /></button>
+                </div>
+            )}
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex items-center justify-center gap-3 px-2 py-2 text-[10px] font-medium text-white sm:gap-4 sm:text-xs">
+                <span className="flex items-center gap-1"><FaHeart size={11} />{post.likesCount || 0}</span>
+                <span className="flex items-center gap-1"><FiMessageCircle size={11} />{post.commentsCount || 0}</span>
+                <span className="flex items-center gap-1"><BarChart3 size={11} />{post.views || 0}</span>
+            </div>
+            {canArrange && (
+                <button
+                    type="button"
+                    onPointerDown={handleResizeStart}
+                    onPointerMove={handleResizeMove}
+                    onPointerUp={handleResizeEnd}
+                    onPointerCancel={cancelResize}
+                    onClick={event => event.stopPropagation()}
+                    className="absolute bottom-0 right-0 z-20 flex h-10 w-10 touch-none cursor-nwse-resize items-end justify-end bg-linear-to-tl from-black/80 to-transparent p-2 text-white opacity-100 outline-none transition-colors hover:text-cyan-300 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
+                    aria-label="Drag to resize tile"
+                    title="Drag to resize"
+                >
+                    <Maximize2 size={14} />
+                </button>
+            )}
+        </article>
     );
 }
