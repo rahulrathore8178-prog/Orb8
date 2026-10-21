@@ -65,8 +65,14 @@ export default function MessagesApp() {
       socket.send(JSON.stringify({ type: "register", token: localStorage.getItem('token') }));
     };
     socket.onmessage = (event) => {
+      console.log("🔥 WS EVENT RECEIVED");
+      console.log("🔥 RAW EVENT:", event.data);
+
       try {
         const data = JSON.parse(event.data);
+        console.log("🔥 PARSED DATA:", data);
+        console.log('json data', JSON.stringify(null, 2));
+
         if (data.type !== "chat-message") return;
 
         const { senderId, text, timestamp, id, sharedPost } = data.message || {};
@@ -336,7 +342,7 @@ export default function MessagesApp() {
           moreWrapRef={moreWrapRef}
           setEmojiOpen={setEmojiOpen}
           showToast={showToast}
-          setContacts={() => {}}
+          setContacts={() => { }}
         />
 
         <ChatArea
@@ -351,30 +357,30 @@ export default function MessagesApp() {
         />
 
         {activeContactId && (
-        <InputBar
-          activeContact={activeContact}
-          activeContactId={activeContactId}
-          drafts={drafts}
-          setDrafts={setDrafts}
-          pendingAttachments={pendingAttachments}
-          removeAttachment={removeAttachment}
-          recording={recording}
-          setRecording={setRecording}
-          recordSeconds={recordSeconds}
-          setRecordSeconds={setRecordSeconds}
-          emojiOpen={emojiOpen}
-          setEmojiOpen={setEmojiOpen}
-          setSwitcherOpen={setSwitcherOpen}
-          setMoreMenuOpen={setMoreMenuOpen}
-          emojiWrapRef={emojiWrapRef}
-          textareaRef={textareaRef}
-          fileInputRef={fileInputRef}
-          insertEmoji={insertEmoji}
-          sendMessage={sendMessage}
-          stopRecordingSend={stopRecordingSend}
-          hasComposerContent={hasComposerContent}
-          handleFileChange={handleFileChange}
-        />
+          <InputBar
+            activeContact={activeContact}
+            activeContactId={activeContactId}
+            drafts={drafts}
+            setDrafts={setDrafts}
+            pendingAttachments={pendingAttachments}
+            removeAttachment={removeAttachment}
+            recording={recording}
+            setRecording={setRecording}
+            recordSeconds={recordSeconds}
+            setRecordSeconds={setRecordSeconds}
+            emojiOpen={emojiOpen}
+            setEmojiOpen={setEmojiOpen}
+            setSwitcherOpen={setSwitcherOpen}
+            setMoreMenuOpen={setMoreMenuOpen}
+            emojiWrapRef={emojiWrapRef}
+            textareaRef={textareaRef}
+            fileInputRef={fileInputRef}
+            insertEmoji={insertEmoji}
+            sendMessage={sendMessage}
+            stopRecordingSend={stopRecordingSend}
+            hasComposerContent={hasComposerContent}
+            handleFileChange={handleFileChange}
+          />
         )}
       </main>
 

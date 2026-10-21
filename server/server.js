@@ -26,6 +26,10 @@ const clients = new Map();
     const wss = new WebSocket.Server({ server });
 
     app.set('publishChatMessage', (recipientId, message) => {
+      console.log("Publishing message");
+      console.log("Recipient:", recipientId);
+      console.log("Connected clients:", [...clients.keys()]);
+
       const recipientSocket = clients.get(String(recipientId));
       if (recipientSocket?.readyState === WebSocket.OPEN) {
         recipientSocket.send(JSON.stringify({ type: 'chat-message', message }));
@@ -37,8 +41,10 @@ const clients = new Map();
       let registeredUserId = null;
 
       socket.on('message', async (rawData) => {
+        console.log('📨 WS Message Received:', rawData.toString());
         try {
           const msg = JSON.parse(rawData);
+          console.log('📨 Parsed Message:', msg)
 
           if (msg.type === 'register') {
             const decoded = jwt.verify(msg.token, process.env.JWT_SECRET);

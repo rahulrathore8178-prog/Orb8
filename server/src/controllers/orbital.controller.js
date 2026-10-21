@@ -100,6 +100,7 @@ const getOrbital = asyncHandler(async (req, res) => {
             status: membership?.status ?? "none", // "none" | "pending" | "active"
             role: membership?.role ?? null,
         },
+        
     });
 });
 
