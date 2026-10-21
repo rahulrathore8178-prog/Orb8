@@ -5,7 +5,7 @@ import { ChatArea } from "../components/Messages/ChatArea";
 import { InputBar } from "../components/Messages/ChatInput";
 import { Sidebar } from "../components/Messages/ContactList";
 import { useDispatch, useSelector } from "react-redux";
-import { addMessage, fetchContacts, setActiveContact } from "../redux/slices/chatSlice";
+import { addMessage, fetchContacts, fetchConversation, sendChatMessage, setActiveContact } from "../redux/slices/chatSlice";
 
 export default function MessagesApp() {
   const isMobile = useIsMobile();
@@ -50,14 +50,19 @@ export default function MessagesApp() {
   const wsRef = useRef(null);
 
   useEffect(() => {
+    if (activeContactId) dispatch(fetchConversation(activeContactId));
+  }, [activeContactId, dispatch]);
+
+  useEffect(() => {
     if (!currentUser?.id) return;
 
-    const socketUrl = import.meta.env.VITE_API_URL || "ws://localhost:5000";
+    const socketUrl = (import.meta.env.VITE_SOCKET_URL || import.meta.env.VITE_API_URL || "ws://localhost:5000")
+      .replace(/^http/, "ws");
     const socket = new WebSocket(socketUrl);
     wsRef.current = socket;
 
     socket.onopen = () => {
-      socket.send(JSON.stringify({ type: "register", userId: currentUser.id }));
+      socket.send(JSON.stringify({ type: "register", token: localStorage.getItem('token') }));
     };
     socket.onmessage = (event) => {
       console.log("🔥 WS EVENT RECEIVED");
@@ -70,32 +75,14 @@ export default function MessagesApp() {
 
         if (data.type !== "chat-message") return;
 
-        const { senderId, text, time, timestamp, id } = data.message || {};
-
-        console.log("🔥 CHAT MESSAGE RECEIVED:", {
-          senderId,
-          text,
-          time,
-          timestamp,
-          id,
-        });
-
-        dispatch(
-          addMessage({
-            contactId: senderId,
-            message: {
-              id,
-              senderId,
-              text,
-              time: new Date(timestamp || time),
-              from: "them",
-            },
-          })
-        );
-
-        console.log("✅ MESSAGE DISPATCHED");
-      } catch (err) {
-        console.error(err);
+        const { senderId, text, timestamp, id, sharedPost } = data.message || {};
+        if (!senderId || (!text && !sharedPost)) return;
+        dispatch(addMessage({
+          contactId: senderId,
+          message: { ...data.message, id, senderId, text, sharedPost, time: timestamp, from: "them" },
+        }));
+      } catch (error) {
+        console.error("Chat WebSocket message error", error);
       }
     };
     socket.onerror = (error) => console.error("Chat WebSocket error", error);
@@ -109,24 +96,15 @@ export default function MessagesApp() {
     };
   }, [currentUser?.id, dispatch]);
 
-  const sendMessage = () => {
+  const sendMessage = async () => {
     const inputText = (drafts[activeContactId] || "").trim();
     if (!inputText || !activeContactId || !currentUser?.id) return;
-
-    const message = {
-      id: Date.now(),
-      senderId: currentUser.id,
-      recipientId: activeContactId,
-      text: inputText.trim(),
-      time: new Date(),
-    };
-    console.log('inputText:', inputText);
-
-    if (wsRef.current?.readyState !== WebSocket.OPEN) return;
-    wsRef.current.send(JSON.stringify({ type: "chat-message", message }));
-
-    dispatch(addMessage({ contactId: activeContactId, message: { ...message, from: "me" } }));
-    setDrafts((currentDrafts) => ({ ...currentDrafts, [activeContactId]: "" }));
+    try {
+      await dispatch(sendChatMessage({ contactId: activeContactId, text: inputText })).unwrap();
+      setDrafts((currentDrafts) => ({ ...currentDrafts, [activeContactId]: "" }));
+    } catch (error) {
+      showToast(error);
+    }
   };
 
   /* ---------- toasts ---------- */
