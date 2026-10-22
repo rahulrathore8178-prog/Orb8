@@ -328,7 +328,9 @@ export default function AppSidebar() {
 
             {/* settings */}
             <button
-              // onClick={}
+              type="button"
+              onClick={() => handleNavigate('/settings')}
+              title="Settings"
               className={`${GLASS_BTN} mb-2 bg-white/5 border-white/10 hover:bg-white/10`}
             >
               <span className="py-2"><Settings /></span>
@@ -424,6 +426,15 @@ export default function AppSidebar() {
                 >
                   <span className="py-2"><FaBell /></span>
                   <span>Notifications</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleNavigate('/settings')}
+                  className={`${GLASS_BTN} mb-2 bg-white/5 border-white/10 hover:bg-white/10`}
+                >
+                  <span className="py-2"><Settings /></span>
+                  <span>Settings</span>
                 </button>
 
                 {/* Log Out */}
