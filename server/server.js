@@ -25,6 +25,16 @@ const clients = new Map();
     const server = http.createServer(app);
     const wss = new WebSocket.Server({ server });
 
+    // Heartbeat: drop dead sockets so they don't pile up behind Render's proxy
+    const heartbeat = setInterval(() => {
+      wss.clients.forEach((s) => {
+        if (!s.isAlive) return s.terminate();
+        s.isAlive = false;
+        s.ping();
+      });
+    }, 30000);
+    wss.on('close', () => clearInterval(heartbeat));
+
     app.set('publishChatMessage', (recipientId, message) => {
       console.log("Publishing message");
       console.log("Recipient:", recipientId);
@@ -36,12 +46,10 @@ const clients = new Map();
       }
     });
 
-    wss.on('connection', async (socket) => {
+    wss.on('connection', (socket) => {
+      socket.isAlive = true;
+      socket.on('pong', () => { socket.isAlive = true; });
       console.log('New WS connection');
-      console.log(
-        "REGISTERED USER",
-        userId
-      );
       let registeredUserId = null;
 
       socket.on('message', async (rawData) => {
@@ -54,6 +62,7 @@ const clients = new Map();
             const decoded = jwt.verify(msg.token, process.env.JWT_SECRET);
             registeredUserId = String(decoded.id);
             clients.set(registeredUserId, socket);
+            socket.send(JSON.stringify({ type: 'registered' }));
             console.log(`Registered user ${registeredUserId}`);
             return;
           }
