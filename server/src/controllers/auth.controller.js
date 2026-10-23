@@ -10,6 +10,8 @@ const { checkAndAwardBadges } = require('./badge.controller');
 const { sendOtpEmail } = require('../utils/mailer');
 const post = require('../models/post.model');
 const { uploadBufferToDrive } = require('../utils/driveUpload');
+const { OAuth2Client } = require('google-auth-library');
+const googleClient = new OAuth2Client();
 
 const PROFILE_PICS_DIR = path.join(__dirname, '..', '..', 'uploads', 'profile-pics');
 const MAX_PROCESSED_IMAGE_BYTES = 450 * 1024;
@@ -145,6 +147,49 @@ async function loginUser(req, res) {
     });
   } catch (error) {
     return res.status(500).json({ message: error.message });
+  }
+};
+
+// google mobile 
+async function googleMobile(req, res) {
+  try {
+    const { idToken } = req.body;
+    if (!idToken) return res.status(400).json({ message: 'idToken is required.' });
+
+    const ticket = await googleClient.verifyIdToken({
+      idToken,
+      audience: [process.env.GOOGLE_WEB_CLIENT_ID, process.env.GOOGLE_IOS_CLIENT_ID].filter(Boolean),
+    });
+    const payload = ticket.getPayload();
+    if (!payload?.email || !payload.email_verified) {
+      return res.status(401).json({ message: 'Google account email is not verified.' });
+    }
+
+    const email = payload.email.toLowerCase();
+    let user = await userModel.findOne({ email });
+
+    if (!user) {
+      // Create it the same way your existing /api/auth/google callback does
+      // (username/password placeholders, googleId field, etc.).
+      user = await userModel.create({
+        email,
+        googleId: payload.sub,
+        notifications: [{ title: 'Welcome to Orb8', detail: 'Your feed is ready.' }],
+      });
+    }
+
+    const token = signToken(user._id);
+    res.cookie('token', token, getCookieOptions());
+
+    return res.status(200).json({
+      message: 'Google login successful.',
+      token,
+      user: buildUserPayload(user),
+      // must match the condition your web flow uses to send people to complete-profile
+      profileComplete: !user.needsProfileCompletion,
+    });
+  } catch (error) {
+    return res.status(401).json({ message: 'Invalid Google token.' });
   }
 }
 
@@ -552,9 +597,8 @@ async function resetPassword(req, res) {
 
 
 const completeProfile = async (req, res) => {
-  console.log('[AUTH] completeProfile hit', req.body);
   try {
-    const { username, password } = req.body;
+    const { username, password, bio } = req.body;
 
     if (!username || username.trim().length < 3) {
       return res.status(400).json({ message: 'Username must be at least 3 characters' });
@@ -562,23 +606,26 @@ const completeProfile = async (req, res) => {
     if (!password || password.length < 6) {
       return res.status(400).json({ message: 'Password must be at least 6 characters' });
     }
+    if (bio && bio.length > 150) {
+      return res.status(400).json({ message: 'Bio must be 150 characters or less' });
+    }
 
     const taken = await userModel.findOne({ username: username.trim(), _id: { $ne: req.user.id } });
-    if (taken) {
-      return res.status(409).json({ message: 'Username already taken' });
-    }
+    if (taken) return res.status(409).json({ message: 'Username already taken' });
 
     const user = await userModel.findById(req.user.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
     user.username = username.trim();
     user.password = await bcrypt.hash(password, 10);
+    if (bio !== undefined) user.bio = bio.trim();
+    if (req.file) user.profilePic = /* same value your profile-update route stores, e.g. `/uploads/${req.file.filename}` */
     user.needsProfileCompletion = false;
     await user.save();
 
     return res.status(200).json({
       message: 'Profile completed',
-      user: { id: user._id, username: user.username, email: user.email },
+      user: buildUserPayload(user), // full payload, same as login
     });
   } catch (err) {
     console.error('Complete profile error:', err);
@@ -586,14 +633,15 @@ const completeProfile = async (req, res) => {
   }
 };
 
-async function logoutUser(req, res) {
+const logoutUser = async (req, res) => {
   res.clearCookie('token', getCookieOptions());
-  return res.status(200).json({ message: 'Logout successful' });
-}
+  return res.status(200).json({ message: 'Logged out successfully.' });
+};
 
 module.exports = {
   registerUser,
   loginUser,
+  googleMobile,
   getCurrentUser,
   getPublicProfile,
   updateProfile,

@@ -5,12 +5,14 @@ const { isGoogleEnabled } = require('../config/passport');
 const jwt = require('jsonwebtoken');
 const { protect } = require('../middlewares/auth.middleware');
 const { profileImageUpload } = require('../middlewares/upload.middleware');
+// const { googleMobile } = require('../controllers/googleMobile.controller');
 const upload = require('../middlewares/upload.middleware');
 
 const router = express.Router();
 
 router.post('/user/register', authController.registerUser);
 router.post('/user/login', authController.loginUser);
+router.post('/google/mobile', authController.googleMobile);
 router.get('/user/me', protect, authController.getCurrentUser);
 router.get('/user/:userId/public',protect, authController.getPublicProfile);
 router.patch('/user/profile', protect, authController.updateProfile);
