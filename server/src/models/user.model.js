@@ -157,6 +157,12 @@ const userSchema = new mongoose.Schema(
     },
     locationUpdatedAt: { type: Date },
     isDiscoverable: { type: Boolean, default: false },
+    cosmicLocation: {
+      type: { type: String, enum: ["Point"] },
+      coordinates: { type: [Number] },
+    },
+    cosmicLocationUpdatedAt: { type: Date },
+    isCosmicDiscoverable: { type: Boolean, default: false },
     deviceTokens: {
       type: [String],
       default: [],
@@ -185,6 +191,7 @@ const userSchema = new mongoose.Schema(
 
 // Ensure 2dsphere index for geo queries
 userSchema.index({ location: '2dsphere' });
+userSchema.index({ cosmicLocation: '2dsphere' });
 
 const userModal = mongoose.model("User", userSchema);
 module.exports = userModal;

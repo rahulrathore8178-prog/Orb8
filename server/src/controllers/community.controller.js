@@ -1056,8 +1056,9 @@ const addPostToCollection = async (req, res) => {
 
 const getProfileInsights = async (req, res) => {
   try {
+    const authorId = new (require('mongoose').Types.ObjectId)(req.user.id);
     const [summary] = await Post.aggregate([
-      { $match: { author: new (require('mongoose').Types.ObjectId)(req.user.id), isActive: true } },
+      { $match: { author: authorId, isActive: true } },
       {
         $group: {
           _id: null,
@@ -1068,7 +1069,72 @@ const getProfileInsights = async (req, res) => {
         },
       },
     ]);
-    return res.json({ insights: summary || { posts: 0, likes: 0, comments: 0, views: 0 } });
+
+    const recentPosts = await Post.find({ author: authorId, isActive: true })
+      .select('content image video voiceNote hashtags likes comments viewedBy createdAt')
+      .sort({ createdAt: -1 })
+      .limit(500)
+      .lean();
+
+    const commentsSince = Date.now() - 14 * 24 * 60 * 60 * 1000;
+    const postTypes = { image: 0, video: 0, audio: 0, text: 0 };
+    const hashtagCounts = new Map();
+    const commentDates = [];
+
+    const scored = recentPosts.map((post) => {
+      const likes = (post.likes || []).length;
+      const comments = (post.comments || []).length;
+      const views = (post.viewedBy || []).length;
+
+      if (post.video) postTypes.video += 1;
+      else if (post.image) postTypes.image += 1;
+      else if (post.voiceNote) postTypes.audio += 1;
+      else postTypes.text += 1;
+
+      (post.hashtags || []).forEach((tag) => {
+        if (tag) hashtagCounts.set(tag, (hashtagCounts.get(tag) || 0) + 1);
+      });
+      (post.comments || []).forEach((comment) => {
+        if (comment.createdAt && new Date(comment.createdAt).getTime() >= commentsSince) {
+          commentDates.push(comment.createdAt);
+        }
+      });
+
+      return {
+        id: String(post._id),
+        snippet: (post.content || '').slice(0, 90),
+        image: post.image || '',
+        likes,
+        comments,
+        views,
+        score: likes * 3 + comments * 4 + views,
+      };
+    });
+
+    const topPosts = scored
+      .filter((post) => post.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 3);
+
+    const topHashtags = [...hashtagCounts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 6)
+      .map(([tag, count]) => ({ tag, count }));
+
+    const totals = summary || { posts: 0, likes: 0, comments: 0, views: 0 };
+    return res.json({
+      insights: {
+        posts: totals.posts,
+        likes: totals.likes,
+        comments: totals.comments,
+        views: totals.views,
+        postTypes,
+        topPosts,
+        topHashtags,
+        postDates: recentPosts.map((post) => post.createdAt),
+        commentDates,
+      },
+    });
   } catch (error) {
     console.error('Get profile insights error:', error);
     return res.status(500).json({ message: 'Failed to load insights' });
