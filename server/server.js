@@ -38,6 +38,10 @@ const clients = new Map();
 
     wss.on('connection', async (socket) => {
       console.log('New WS connection');
+      console.log(
+        "REGISTERED USER",
+        userId
+      );
       let registeredUserId = null;
 
       socket.on('message', async (rawData) => {
