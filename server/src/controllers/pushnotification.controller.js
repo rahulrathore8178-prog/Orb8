@@ -26,9 +26,12 @@
   }
 
   async function notifyUser(userId, title, body, data = {}) {
-    const user = await User.findById(userId).select("deviceTokens");
+    const user = await User.findById(userId).select("deviceTokens notificationPreferences");
 
     if (!user?.deviceTokens?.length) return;
+    const preferences = user.notificationPreferences || {};
+    if (preferences.pushEnabled === false) return;
+    if (['social', 'learning', 'product'].includes(data.category) && preferences[data.category] === false) return;
 
     await Promise.allSettled(
       user.deviceTokens.map((token) =>
