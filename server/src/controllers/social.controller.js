@@ -88,6 +88,41 @@ exports.getFollowRequests = async (req, res) => {
   }
 };
 
+exports.getFollowConnections = async (req, res) => {
+  const { userId, connectionType } = req.params;
+  if (!['followers', 'following'].includes(connectionType)) {
+    return res.status(400).json({ message: 'Unsupported connection type' });
+  }
+
+  try {
+    const [profile, viewer] = await Promise.all([
+      User.findById(userId)
+        .select('isPrivate blockedUsers followers following')
+        .populate(connectionType, 'username profilePic bio')
+        .lean(),
+      User.findById(req.user.id).select('blockedUsers following').lean(),
+    ]);
+
+    if (!profile) return res.status(404).json({ message: 'User not found' });
+    const isOwner = String(req.user.id) === String(userId);
+    const isBlocked = includesId(profile.blockedUsers, req.user.id)
+      || includesId(viewer?.blockedUsers, userId);
+    if (isBlocked) return res.status(404).json({ message: 'User not found' });
+
+    const canViewPrivateProfile = !profile.isPrivate
+      || isOwner
+      || includesId(viewer?.following, userId);
+    if (!canViewPrivateProfile) {
+      return res.status(403).json({ message: 'Follow this private profile to view its connections' });
+    }
+
+    return res.json({ users: profile[connectionType] || [] });
+  } catch (error) {
+    console.error('Get follow connections error:', error);
+    return res.status(500).json({ message: 'Failed to load profile connections' });
+  }
+};
+
 exports.resolveFollowRequest = async (req, res) => {
   try {
     const { currentUser, targetUser: requester, error } = await getUsersForRelationship(req.user.id, req.params.userId);
@@ -124,6 +159,33 @@ exports.updatePrivacy = async (req, res) => {
   } catch (error) {
     console.error('Update privacy error:', error);
     return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+exports.updateNotificationPreferences = async (req, res) => {
+  const allowedKeys = new Set(['pushEnabled', 'social', 'learning', 'product']);
+  const updates = req.body?.preferences;
+  if (!updates || typeof updates !== 'object' || Array.isArray(updates)) {
+    return res.status(400).json({ message: 'preferences must be an object' });
+  }
+
+  const entries = Object.entries(updates);
+  if (!entries.length || entries.some(([key, value]) => !allowedKeys.has(key) || typeof value !== 'boolean')) {
+    return res.status(400).json({ message: 'Preferences must contain supported boolean values' });
+  }
+
+  try {
+    const set = Object.fromEntries(entries.map(([key, value]) => [`notificationPreferences.${key}`, value]));
+    const user = await User.findByIdAndUpdate(
+      req.user.id,
+      { $set: set },
+      { new: true, runValidators: true },
+    ).select('notificationPreferences');
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    return res.json({ preferences: user.notificationPreferences });
+  } catch (error) {
+    console.error('Update notification preferences error:', error);
+    return res.status(500).json({ message: 'Failed to update notification preferences' });
   }
 };
 

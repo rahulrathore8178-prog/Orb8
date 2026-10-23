@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import axios from 'axios';
 import {
   Accessibility,
@@ -15,6 +15,13 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { apiUrl, getAuthHeaders } from '../utilites/DashboardHelper';
 import { registerPushNotifications } from '../notifications/registerPushNotifications';
+
+const DEFAULT_NOTIFICATION_PREFERENCES = {
+  pushEnabled: true,
+  social: true,
+  learning: true,
+  product: true,
+};
 
 const sections = [
   { id: 'account', label: 'Your account', summary: 'Account information and profile', icon: UserRound },
@@ -39,12 +46,37 @@ export default function SettingsPage() {
   const [user, setUser] = useState(readStoredUser);
   const [privacySaving, setPrivacySaving] = useState(false);
   const [notificationsSaving, setNotificationsSaving] = useState(false);
+  const [savingPreference, setSavingPreference] = useState(null);
+  const [notificationPreferences, setNotificationPreferences] = useState(() => ({
+    ...DEFAULT_NOTIFICATION_PREFERENCES,
+    ...(readStoredUser()?.notificationPreferences || {}),
+  }));
   const [message, setMessage] = useState('');
   const active = sections.find(section => section.id === activeSection) || sections[0];
   const ActiveIcon = active.icon;
   const filteredSections = sections.filter(section =>
     `${section.label} ${section.summary}`.toLowerCase().includes(query.trim().toLowerCase()),
   );
+
+  useEffect(() => {
+    let active = true;
+    axios.get(`${apiUrl}/api/auth/user/me`, {
+      withCredentials: true,
+      headers: getAuthHeaders(),
+    }).then(response => {
+      if (!active || !response.data?.user) return;
+      const freshUser = response.data.user;
+      setUser(freshUser);
+      setNotificationPreferences({
+        ...DEFAULT_NOTIFICATION_PREFERENCES,
+        ...(freshUser.notificationPreferences || {}),
+      });
+      localStorage.setItem('user', JSON.stringify(freshUser));
+    }).catch(() => {
+      // Keep the last locally cached preferences if the account refresh fails.
+    });
+    return () => { active = false; };
+  }, []);
 
   const updatePrivacy = async () => {
     if (privacySaving) return;
@@ -80,6 +112,35 @@ export default function SettingsPage() {
       setMessage(error.message || 'Could not enable push notifications.');
     } finally {
       setNotificationsSaving(false);
+    }
+  };
+
+  const updateNotificationPreference = async (key, value) => {
+    if (savingPreference) return;
+    const previous = notificationPreferences;
+    const optimistic = { ...previous, [key]: value };
+    setNotificationPreferences(optimistic);
+    setSavingPreference(key);
+    setMessage('');
+    try {
+      const response = await axios.patch(`${apiUrl}/api/social/notification-preferences`, {
+        preferences: { [key]: value },
+      }, {
+        withCredentials: true,
+        headers: getAuthHeaders(),
+      });
+      const saved = { ...DEFAULT_NOTIFICATION_PREFERENCES, ...response.data.preferences };
+      setNotificationPreferences(saved);
+      const updatedUser = { ...user, notificationPreferences: saved };
+      setUser(updatedUser);
+      localStorage.setItem('user', JSON.stringify(updatedUser));
+      window.dispatchEvent(new Event('auth:user-updated'));
+      setMessage('Notification preferences saved.');
+    } catch (error) {
+      setNotificationPreferences(previous);
+      setMessage(error.response?.data?.message || 'Could not save notification preferences.');
+    } finally {
+      setSavingPreference(null);
     }
   };
 
@@ -203,14 +264,51 @@ export default function SettingsPage() {
 
             {activeSection === 'notifications' && (
               <div>
-                <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-neutral-500">Push notifications</h3>
+                <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-neutral-500">Delivery</h3>
                 <div className="flex flex-col gap-4 border-y border-white/10 py-5 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <p className="text-sm font-semibold">Browser notifications</p>
-                    <p className="mt-1 max-w-md text-sm leading-6 text-neutral-400">Get Orbit updates on this device. Your browser may ask you to allow notifications.</p>
+                    <p className="text-sm font-semibold">Push notifications</p>
+                    <p className="mt-1 max-w-md text-sm leading-6 text-neutral-400">Allow Orbit to send push notifications to your registered devices.</p>
                   </div>
-                  <button type="button" onClick={enableNotifications} disabled={notificationsSaving} className="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 bg-cyan-400 px-4 text-sm font-semibold text-black transition hover:bg-cyan-300 disabled:opacity-60">
-                    {notificationsSaving ? 'Enabling…' : <><Bell size={16} /> Enable</>}
+                  <PreferenceSwitch
+                    label="Push notifications"
+                    checked={notificationPreferences.pushEnabled}
+                    saving={savingPreference === 'pushEnabled'}
+                    disabled={Boolean(savingPreference)}
+                    onChange={value => updateNotificationPreference('pushEnabled', value)}
+                  />
+                </div>
+
+                <h3 className="mb-2 mt-7 text-xs font-semibold uppercase tracking-[0.14em] text-neutral-500">What you receive</h3>
+                <div className="divide-y divide-white/10 border-y border-white/10">
+                  {[
+                    ['social', 'Social activity', 'Follow and community activity.'],
+                    ['learning', 'Learning activity', 'Challenges, progress, and learning reminders.'],
+                    ['product', 'Orbit updates', 'Product news and service announcements.'],
+                  ].map(([key, label, description]) => (
+                    <div key={key} className="flex items-center justify-between gap-5 py-4">
+                      <div>
+                        <p className="text-sm font-medium">{label}</p>
+                        <p className="mt-1 text-sm text-neutral-400">{description}</p>
+                      </div>
+                      <PreferenceSwitch
+                        label={label}
+                        checked={notificationPreferences[key]}
+                        saving={savingPreference === key}
+                        disabled={Boolean(savingPreference)}
+                        onChange={value => updateNotificationPreference(key, value)}
+                      />
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-7 flex flex-col gap-3 border-t border-white/10 pt-5 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-semibold">This browser</p>
+                    <p className="mt-1 text-sm text-neutral-400">Register this device and request browser permission.</p>
+                  </div>
+                  <button type="button" onClick={enableNotifications} disabled={notificationsSaving} className="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 border border-white/15 px-4 text-sm font-semibold text-white transition hover:bg-white/10 disabled:opacity-60">
+                    {notificationsSaving ? 'Enabling…' : <><Bell size={16} /> Enable on this device</>}
                   </button>
                 </div>
               </div>
@@ -249,5 +347,23 @@ export default function SettingsPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+function PreferenceSwitch({ label, checked, saving, disabled, onChange }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={Boolean(checked)}
+      aria-label={label}
+      onClick={() => onChange(!checked)}
+      disabled={disabled}
+      className={`relative h-6 w-11 shrink-0 transition-colors disabled:cursor-wait disabled:opacity-60 ${checked ? 'bg-cyan-500' : 'bg-neutral-700'}`}
+    >
+      <span className={`absolute top-0.5 grid h-5 w-5 place-items-center bg-white transition-transform ${checked ? 'translate-x-[22px]' : 'translate-x-0.5'}`}>
+        {saving && <span className="h-2.5 w-2.5 animate-spin border border-neutral-500 border-t-transparent" />}
+      </span>
+    </button>
   );
 }

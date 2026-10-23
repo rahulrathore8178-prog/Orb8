@@ -1,6 +1,6 @@
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
 import { searchUsers } from "../../pages/FriendsPage";
-import { apiUrl, getAuthHeaders } from "../../utilites/communityHelper";
+import { apiUrl, getAuthHeaders } from "../../utilites/DashboardHelper";
 import axios from "axios";
 
 const friendsSlice = createSlice({

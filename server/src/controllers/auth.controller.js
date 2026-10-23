@@ -70,6 +70,7 @@ function buildUserPayload(user) {
     blockedUsers: user.blockedUsers || [],
     profileGridLayout: user.profileGridLayout || [],
     savedCollections: user.savedCollections || [],
+    notificationPreferences: user.notificationPreferences || {},
     preferences: user.preferences || [],
   };
 }

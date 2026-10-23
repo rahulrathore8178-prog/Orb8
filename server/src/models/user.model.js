@@ -161,6 +161,12 @@ const userSchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
+    notificationPreferences: {
+      pushEnabled: { type: Boolean, default: true },
+      social: { type: Boolean, default: true },
+      learning: { type: Boolean, default: true },
+      product: { type: Boolean, default: true },
+    },
     preferences: {
       primaryLanguage: { type: String, default: "english" },
       content: {
