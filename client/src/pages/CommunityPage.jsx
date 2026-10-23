@@ -432,7 +432,7 @@ export default function CommunityPage() {
               setComposerPreview={setComposerPreview}
             />
           )}
-          <div className="relative flex justify-around px-24 pt-4 pb-2 bg-black/50 border-b border-white/[0.06] transition-all duration-300 ease-out overflow-hidden">
+          <div className="relative flex justify-around gap-4 px-4 pt-3 pb-2 sm:gap-8 sm:px-12 sm:pt-4 lg:px-24 bg-black/50 border-b border-white/[0.06] transition-all duration-300 ease-out overflow-hidden">
             {FEED_TYPES.map((tab) => {
               const active = tab.value === activeFeedType;
 
@@ -444,7 +444,7 @@ export default function CommunityPage() {
                   }}
                   type="button"
                   onClick={() => dispatch(setActiveFeedType(tab.value))}
-                  className={`relative pb-3 text-lg font-medium transition-colors ${active
+                  className={`relative whitespace-nowrap px-2 pb-3 text-sm font-medium transition-colors sm:text-base lg:text-lg ${active
                     ? 'font-bold text-white'
                     : 'text-neutral-500 hover:text-neutral-300'
                     }`}

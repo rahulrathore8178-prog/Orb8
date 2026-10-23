@@ -9,6 +9,8 @@ import axios from "axios";
 import { FaCamera, FaEdit, FaHeart, FaSave, FaTimes } from "react-icons/fa";
 import { FiMessageCircle } from "react-icons/fi";
 import PostPreview from "../components/SocialProfile/postPreview";
+import InsightsPanel from "../components/SocialProfile/InsightsPanel";
+import { raised } from "../utilites/cssUtility";
 import { useDispatch, useSelector } from "react-redux";
 import { FaSearch, FaUserCircle /* ...your existing icons */ } from "react-icons/fa";
 import { fetchFriendRequests, fetchFriends } from "../redux/slices/friendsSlice";
@@ -229,10 +231,10 @@ export default function SocialProfileSection() {
     }, [activeTab, postsLoading]);
 
     const TABS = [
-        { label: 'Posts', count: userPosts?.length ?? 0 },
-        { label: 'Followers', count: currentUser?.followersCount ?? currentUser?.followers?.length ?? 0 },
-        { label: 'Following', count: currentUser?.followingCount ?? currentUser?.following?.length ?? 0 },
-        { label: 'Friends', count: friendsCount },
+        { label: 'Posts', value: 'Posts', count: userPosts?.length ?? 0 },
+        { label: 'Orbiters', value: 'Followers', count: currentUser?.followersCount ?? currentUser?.followers?.length ?? 0 },
+        { label: 'Orbits', value: 'Following', count: currentUser?.followingCount ?? currentUser?.following?.length ?? 0 },
+        { label: 'Constellations', value: 'Friends', count: friendsCount },
         ...(isOwnProfile ? [
             { label: 'Saved', count: null },
             { label: 'Archived', count: null },
@@ -726,6 +728,11 @@ export default function SocialProfileSection() {
     const handleTabClick = (tab) => {
         if (tab === activeTab) return;
 
+        const strip = tabsRef.current;
+        const target = strip?.querySelector(`[data-tab="${tab}"]`);
+        if (strip && target && strip.scrollWidth > strip.clientWidth) {
+            strip.scrollTo({ left: target.offsetLeft - (strip.clientWidth - target.offsetWidth) / 2, behavior: "smooth" });
+        }
         gsap.to(contentRef.current, {
             opacity: 0,
             y: 10,
@@ -754,9 +761,9 @@ export default function SocialProfileSection() {
     return (
         <div
             ref={rootRef}
-            className="relative min-h-screen w-full overflow-hidden bg-black text-white"
+            className="relative min-h-full w-full bg-black text-white"
         >
-            <div className="relative max-h-screen overflow-auto z-10 mx-auto max-w-6xl scrollbar-none px-3 sm:px-6 md:px-10 pb-12 sm:pb-16 md:pb-20 pt-8 sm:pt-12 md:pt-16">
+            <div className="relative z-10 mx-auto w-full max-w-6xl px-3 pb-12 pt-8 sm:px-6 sm:pb-16 sm:pt-12 md:px-10 md:pb-20">
                 {/* ---------------- Header ---------------- */}
                 <div ref={headerRef} className="flex flex-col sm:flex-row items-start justify-between gap-6 sm:gap-8">
                     <div className="flex flex-col sm:flex-row items-start gap-4 sm:gap-6 md:gap-8 w-full sm:w-auto">
@@ -883,8 +890,8 @@ export default function SocialProfileSection() {
                                 </div>
                             )}
                             <div className="mt-3 flex flex-wrap gap-4 text-xs text-white/55">
-                                <span>{currentUser?.followersCount ?? currentUser?.followers?.length ?? 0} followers</span>
-                                <span>{currentUser?.followingCount ?? currentUser?.following?.length ?? 0} following</span>
+                                <span>{currentUser?.followersCount ?? currentUser?.followers?.length ?? 0} Orbiters</span>
+                                <span>{currentUser?.followingCount ?? currentUser?.following?.length ?? 0} Orbits</span>
                             </div>
                             {isOwnProfile && (
                                 <button
@@ -929,21 +936,30 @@ export default function SocialProfileSection() {
                 {/* ---------------- Tabs ---------------- */}
                 <div
                     ref={tabsRef}
-                    className="mt-8 sm:mt-10 flex items-center justify-start gap-6 overflow-x-auto border-b border-white/10 pb-3 sm:justify-center sm:gap-10 sm:pb-4"
+                    role="tablist"
+                    aria-label="Profile sections"
+                    className="-mx-3 mt-8 flex snap-x snap-mandatory items-center gap-2 overflow-x-auto px-3 pb-2 [mask-image:linear-gradient(to_right,transparent,#000_14px,#000_calc(100%-14px),transparent)] [scrollbar-width:none] sm:mx-0 sm:mt-10 sm:justify-center sm:px-0 sm:[mask-image:none] [&::-webkit-scrollbar]:hidden"
                 >
-                    {TABS.map(({ label, count }) => {
-                        const active = label === activeTab;
+                    {TABS.map(({ label, count, value = label }) => {
+                        const active = value === activeTab;
                         return (
                             <button
-                                key={label}
-                                data-tab={label}
-                                onClick={() => handleTabClick(label)}
-                                className={`relative pb-2 text-sm sm:text-lg font-medium transition-colors whitespace-nowrap ${active ? 'font-bold text-white' : 'text-neutral-500 hover:text-neutral-300'
+                                key={value}
+                                type="button"
+                                role="tab"
+                                aria-selected={active}
+                                data-tab={value}
+                                onClick={() => handleTabClick(value)}
+                                className={`inline-flex shrink-0 snap-center items-center gap-2 whitespace-nowrap rounded-full border px-3.5 py-2 text-xs transition duration-300 active:scale-95 sm:text-sm ${active
+                                    ? `${raised} border-white/15 font-medium text-white`
+                                    : 'border-white/[0.07] bg-white/[0.03] text-neutral-400 hover:border-white/15 hover:text-neutral-100'
                                     }`}
                             >
-                                [ {label} {count} ]
-                                {active && (
-                                    <span className="underline-bar absolute -bottom-[17px] left-0 h-[2px] w-full bg-white" />
+                                {label}
+                                {count !== null && count !== undefined && (
+                                    <span className={`rounded-full px-1.5 py-px text-[10px] tabular-nums ${active ? 'bg-white/15 text-white' : 'bg-white/[0.06] text-neutral-500'}`}>
+                                        {count}
+                                    </span>
                                 )}
                             </button>
                         );
@@ -955,23 +971,26 @@ export default function SocialProfileSection() {
                         <p className="text-sm">Follow this private profile to see its posts.</p>
                     </div>
                 ) : activeTab === 'Insights' && isOwnProfile ? (
-                    <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
-                        {[
-                            ['Posts', insights?.posts || 0],
-                            ['Likes', insights?.likes || 0],
-                            ['Comments', insights?.comments || 0],
-                            ['Unique views', insights?.views || 0],
-                        ].map(([label, value]) => (
-                            <div key={label} className="rounded-lg border border-white/10 bg-[#111318] p-4">
-                                <div className="text-2xl font-bold text-white">{value.toLocaleString()}</div>
-                                <div className="mt-1 text-xs text-white/45">{label}</div>
-                            </div>
-                        ))}
-                    </div>
+                    <InsightsPanel insights={insights} loading={postsLoading && !insights} resolveImage={resolveImg} />
                 ) : activeTab === 'Followers' || activeTab === 'Following' ? (
                     <div className="mt-5 divide-y divide-white/10 border-y border-white/10">
+                        <div className="py-4">
+                            <h3 className="text-sm font-semibold text-white">
+                                {activeTab === 'Followers' ? 'Orbiters' : 'Orbits'}
+                            </h3>
+                            <p className="mt-1 text-sm text-neutral-400">
+                                {activeTab === 'Followers'
+                                    ? 'People who follow your content are orbiting around your digital world.'
+                                    : "The people whose worlds you've chosen to keep up with."}
+                            </p>
+                            <p className="mt-1 text-xs italic text-neutral-500">
+                                {activeTab === 'Followers'
+                                    ? `Example: “You have ${(currentUser?.followersCount ?? currentUser?.followers?.length ?? 0).toLocaleString()} Orbiters.”`
+                                    : `Example: “You're in ${(currentUser?.followingCount ?? currentUser?.following?.length ?? 0).toLocaleString()} Orbits.”`}
+                            </p>
+                        </div>
                         {connectionsLoading ? (
-                            <p className="py-8 text-center text-sm text-neutral-400">Loading {activeTab.toLowerCase()}...</p>
+                            <p className="py-8 text-center text-sm text-neutral-400">Loading {activeTab === 'Followers' ? 'Orbiters' : 'Orbits'}...</p>
                         ) : connectionsError ? (
                             <p role="status" className="py-8 text-center text-sm text-neutral-400">
                                 {connectionsError.includes('private')
@@ -979,7 +998,7 @@ export default function SocialProfileSection() {
                                     : connectionsError}
                             </p>
                         ) : profileConnections.length === 0 ? (
-                            <p className="py-8 text-center text-sm text-neutral-400">No {activeTab.toLowerCase()} yet.</p>
+                            <p className="py-8 text-center text-sm text-neutral-400">No {activeTab === 'Followers' ? 'Orbiters' : 'Orbits'} yet.</p>
                         ) : profileConnections.map(person => (
                             <button
                                 key={person._id}
@@ -1003,21 +1022,25 @@ export default function SocialProfileSection() {
                     </div>
                 ) : activeTab === 'Friends' ? (
                     <div>
+                        <div className="mt-5 mb-4">
+                            <h3 className="text-sm font-semibold text-white">Constellations</h3>
+                            <p className="mt-1 text-sm text-neutral-400">Mutual connections who share your corner of the universe.</p>
+                        </div>
                         <div className="relative mb-4 sm:mb-6 mt-5 max-w-md mx-auto sm:mx-0">
                             <FaSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500" size={13} />
                             <input
                                 type="text"
                                 value={friendSearch}
                                 onChange={(e) => setFriendSearch(e.target.value)}
-                                placeholder="Search friends..."
+                                placeholder="Search your constellation..."
                                 className="w-full bg-transparent border border-white/10 rounded-full pl-9 pr-4 py-2 sm:py-2.5 text-sm text-white placeholder-gray-500 outline-none transition-colors focus:border-white/25"
                             />
                         </div>
 
                         {friends.length === 0 ? (
-                            <div className="text-center text-gray-400 text-sm sm:text-base">No friends yet.</div>
+                            <div className="text-center text-gray-400 text-sm sm:text-base">Your constellation is just beginning.</div>
                         ) : (
-                            <div ref={friendsListRef} className="flex flex-col divide-y divide-white/5 min-w-2xl mx-auto">
+                            <div ref={friendsListRef} className="flex min-w-0 w-full flex-col divide-y divide-white/5 mx-auto">
                                 {filteredFriends.map((friend) => (
                                     <div
                                         key={friend.id}

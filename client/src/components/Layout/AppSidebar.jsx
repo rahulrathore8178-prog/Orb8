@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react';
 import {
-  FaBars,
   FaBell,
   FaBook,
   FaBrain,
@@ -23,11 +22,12 @@ import {
 } from 'react-icons/fa';
 import { useDispatch, useSelector } from 'react-redux';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { setDesktopCollapsed, setMobileMenuOpen } from '../../redux/slices/sideBarSlice';
+import { setMobileMenuOpen } from '../../redux/slices/sideBarSlice';
 import axios from 'axios';
 import { apiUrl, getAuthHeaders } from '../../utilites/DashboardHelper';
 import { setCurrentUser } from '../../redux/slices/dashboardSlice';
 import { registerPushNotifications } from '../../notifications/registerPushNotifications';
+import { raised } from '../../utilites/cssUtility';
 import { ChevronRight, Settings, Users2Icon } from 'lucide-react';
 
 const communityNavItems = [
@@ -37,6 +37,7 @@ const communityNavItems = [
   { key: 'rememberIgris', label: 'Remember Igris', icon: FaBook, to: '/rememberIgris', match: ['/rememberIgris'] },
   { key: 'search', label: 'Search', icon: FaSearch, to: '/search', match: ['/search'] },
   { key: 'discover', label: 'Discover', icon: FaUserFriends, to: '/discover', match: ['/discover'] },
+  { key: 'cosmicDiscovery', label: 'Cosmic Discovery', icon: FaSearch, to: '/cosmic-discovery', match: ['/cosmic-discovery'] },
   { key: 'socialprofile', label: 'Social Profile', icon: FaUser, to: '/socialprofile', match: ['/socialprofile'] },
 ];
 
@@ -185,13 +186,54 @@ export default function AppSidebar() {
   const location = useLocation();
   const navigate = useNavigate();
   const dispatch = useDispatch();
-  const isDesktopCollapsed = useSelector((state) => state.sideBar.isDesktopCollapsed);
   const isMobileMenuOpen = useSelector((state) => state.sideBar.isMobileMenuOpen);
+  const currentUser = useSelector((state) => state.dashboard.currentUser);
 
   // Personality mode
   const [activeMode, setActiveMode] = useState('Social');
   const [isOpen, setIsOpen] = useState(false);
+  const [isHeaderVisible, setIsHeaderVisible] = useState(true);
   const containerRef = useRef(null);
+  const lastTouchPosition = useRef(null);
+
+  useEffect(() => {
+    const handleWheel = (event) => {
+      if (Math.abs(event.deltaY) < 8) return;
+      setIsHeaderVisible(event.deltaY < 0);
+    };
+
+    const handleTouchStart = (event) => {
+      lastTouchPosition.current = event.touches[0]?.clientY ?? null;
+    };
+
+    const handleTouchMove = (event) => {
+      const touchPosition = event.touches[0]?.clientY;
+      if (touchPosition == null || lastTouchPosition.current == null) return;
+
+      const scrollIntent = lastTouchPosition.current - touchPosition;
+      if (Math.abs(scrollIntent) >= 8) {
+        setIsHeaderVisible(scrollIntent < 0);
+        lastTouchPosition.current = touchPosition;
+      }
+    };
+
+    const clearTouchPosition = () => {
+      lastTouchPosition.current = null;
+    };
+
+    document.addEventListener('wheel', handleWheel, { passive: true });
+    document.addEventListener('touchstart', handleTouchStart, { passive: true });
+    document.addEventListener('touchmove', handleTouchMove, { passive: true });
+    document.addEventListener('touchend', clearTouchPosition, { passive: true });
+    document.addEventListener('touchcancel', clearTouchPosition, { passive: true });
+    return () => {
+      document.removeEventListener('wheel', handleWheel);
+      document.removeEventListener('touchstart', handleTouchStart);
+      document.removeEventListener('touchmove', handleTouchMove);
+      document.removeEventListener('touchend', clearTouchPosition);
+      document.removeEventListener('touchcancel', clearTouchPosition);
+    };
+  }, []);
 
   // closes the menu on outside tap/click — needed for mobile since there's no "mouse leave"
   useEffect(() => {
@@ -232,6 +274,7 @@ export default function AppSidebar() {
 
   const handleNavigate = (to) => {
     dispatch(setMobileMenuOpen(false));
+    setIsHeaderVisible(true);
     navigate(to);
   };
 
@@ -263,193 +306,80 @@ export default function AppSidebar() {
     };
   }, []);
   const navItems = dashboardMode === 'community' ? communityNavItems : lmsNavItems;
+  const pageLabel = [...communityNavItems, ...lmsNavItems].find(isActiveItem)?.label ?? 'Orbit';
 
   return (
     <>
-      {/* ───────────────────────── Desktop ───────────────────────── */}
-      <aside className="hidden z-10 bg-black min-h-screen lg:block shrink-0">
-        <div
-          onMouseEnter={() => dispatch(setDesktopCollapsed(false))}
-          onMouseLeave={() => { dispatch(setDesktopCollapsed(true)); setIsOpen(false); }}
-          className={`sticky z-10 top-0 flex flex-col h-[95vh] mt-5 justify-between bg-[#2B2B2B] border-r border-white/10 py-4 rounded-2xl ml-4 transition-[width,padding] duration-200 ease-in-out will-change-[width] ${isDesktopCollapsed ? 'w-20  px-2' : 'w-45 px-2'
-            }`}
+      <div className={`relative z-40 w-full shrink-0 overflow-hidden transition-[height] duration-200 ease-out motion-reduce:transition-none ${isHeaderVisible ? 'h-14' : 'h-0'}`}>
+        <header
+          className={`app-topbar flex h-14 w-full items-center gap-3 border-b border-white/[0.06] bg-black/75 px-4 backdrop-blur-xl transition-transform duration-200 ease-out motion-reduce:transition-none ${isHeaderVisible ? 'translate-y-0' : '-translate-y-full pointer-events-none'}`}
         >
-          <nav className="space-y-1">
-            {isDesktopCollapsed === false && (
-              <div ref={containerRef} className="relative mb-5 w-full">
-                <button
-                  onClick={() => setIsOpen((prev) => !prev)}
-                  className="flex items-center justify-center gap-2 py-1 px-3 rounded-xl w-full text-white bg-white/10 hover:bg-white/15 active:bg-white/20 border border-white/15 backdrop-blur-md transition-colors duration-200"
-                >
-                  <span>{activeMode}</span>
-                  <span className={`transition-transform duration-200 ${isOpen ? 'rotate-90' : ''}`}>
-                    <ChevronRight size={18} />
-                  </span>
-                </button>
-
-                <div
-                  className={`absolute left-0 right-0 top-full mt-1.5 rounded-xl bg-[#2B2B2B] border border-white/15 overflow-hidden z-50 origin-top shadow-lg transition-all duration-200 ease-out ${isOpen
-                    ? 'opacity-100 scale-y-100 translate-y-0 pointer-events-auto'
-                    : 'opacity-0 scale-y-95 -translate-y-1 pointer-events-none'
-                    }`}
-                >
-                  {MODES.map((mode) => (
-                    <button
-                      key={mode}
-                      onClick={() => handleSelect(mode)}
-                      className={`w-full text-left px-3 py-2 text-sm transition-colors duration-150 ${activeMode === mode
-                        ? 'bg-white/15 text-white font-medium'
-                        : 'text-gray-200 hover:bg-white/10'
-                        }`}
-                    >
-                      {mode}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <NavList
-              items={navItems}
-              isActiveItem={isActiveItem}
-              collapsed={isDesktopCollapsed}
-              onNavigate={handleNavigate}
-            />
-          </nav>
-
-          <div>
-            <button
-              onClick={handleEnableNotifications}
-              className={`${GLASS_BTN} mb-2 bg-cyan-500/15 border-cyan-400/25 hover:bg-cyan-500/25`}
-            >
-              <span className="py-2"><FaBell /></span>
-              {!isDesktopCollapsed && <span>Notifications</span>}
-            </button>
-
-            {/* settings */}
-            <button
-              type="button"
-              onClick={() => handleNavigate('/settings')}
-              title="Settings"
-              className={`${GLASS_BTN} mb-2 bg-white/5 border-white/10 hover:bg-white/10`}
-            >
-              <span className="py-2"><Settings /></span>
-              {!isDesktopCollapsed && <span>Settings</span>}
-            </button>
-
-            {/* Log Out */}
-            <button
-              onClick={handleLogout}
-              className={`${GLASS_BTN} bg-red-500/15 border-red-400/25 hover:bg-red-500/25`}
-            >
-              <span className="py-2"><FaSignOutAlt /></span>
-              {!isDesktopCollapsed && <span>Log-out</span>}
-            </button>
-          </div>
-        </div>
-      </aside>
-
-      {/* ─────────────────────── Mobile icon rail ─────────────────────── */}
-      <aside className="fixed inset-y-0 left-0 z-30 w-10 lg:hidden bg-[#2B2B2B] border-r border-white/10">
-        <div className="h-full min-h-screen py-3 px-1 flex flex-col gap-2 items-center">
           <button
             type="button"
             onClick={() => dispatch(setMobileMenuOpen(true))}
-            className="h-10 w-10 rounded-lg text-[#A0A0A0] hover:bg-white/10 transition grid place-items-center"
-            aria-label="Open sidebar menu"
-            title="Open menu"
+            aria-label="Open navigation menu"
+            aria-expanded={isMobileMenuOpen}
+            aria-controls="orbit-navigation-drawer"
+            className={`grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-full p-[3px] text-sm font-semibold text-white transition duration-200 active:scale-95 focus-visible:outline-2 focus-visible:outline-white/60 ${raised}`}
           >
-            <FaBars />
+            {currentUser?.profilePic ? (
+              <img src={currentUser.profilePic} alt="" className="h-full w-full rounded-full object-cover" />
+            ) : (
+              currentUser?.username?.charAt(0)?.toUpperCase() || <FaUser aria-hidden="true" />
+            )}
           </button>
-
-          <div className="flex flex-col justify-between">
-            <NavList
-              items={navItems}
-              isActiveItem={isActiveItem}
-              collapsed={false}
-              onNavigate={handleNavigate}
-              iconOnly
-              keyPrefix="rail-"
-            />
-
-            <div>
-              {/* Log Out — icon only, the rail is too narrow for a label */}
-              <button
-                onClick={handleLogout}
-                aria-label="Log out"
-                className={`${GLASS_BTN} bg-red-500/15 border-red-400/25 hover:bg-red-500/25`}
-              >
-                <span className="py-2"><FaSignOutAlt /></span>
-              </button>
-            </div>
+          <div className={`min-w-0 leading-tight ${location.pathname === '/search' ? 'hidden' : ''}`}>
+            <p className="text-base font-semibold tracking-tight text-neutral-100">Orb8</p>
+            <p className="truncate text-[11px] font-light text-neutral-500">{pageLabel}</p>
           </div>
-        </div>
-      </aside>
+        </header>
+      </div>
 
-      {/* ───────────────────────── Mobile drawer ───────────────────────── */}
-      {isMobileMenuOpen ? (
-        <div className="fixed top-16 left-0 right-0 bottom-0 z-40 lg:hidden">
-          <button
-            type="button"
-            className="absolute min-h-screen inset-0 bg-black/60 backdrop-blur-sm"
-            onClick={() => dispatch(setMobileMenuOpen(false))}
-            aria-label="Close sidebar menu backdrop"
-          />
-
-          <div className="absolute bottom-0.5 min-h-screen h-full w-50 bg-[#2B2B2B] border-r border-white/10 p-3 shadow-2xl">
-            <div className="flex items-center justify-between mb-5 px-1">
-              <div className="text-xl font-extrabold text-cyan-400">Orbit</div>
+          {isMobileMenuOpen && (
+            <div className="fixed inset-0 z-50">
               <button
                 type="button"
+                className="absolute inset-0 bg-black/70 backdrop-blur-sm"
                 onClick={() => dispatch(setMobileMenuOpen(false))}
-                className="h-9 w-9 rounded-lg text-[#A0A0A0] hover:bg-white/10 transition grid place-items-center"
-                aria-label="Close sidebar menu"
+                aria-label="Close navigation menu"
+              />
+              <aside
+                id="orbit-navigation-drawer"
+                className="absolute inset-y-0 left-0 flex w-[min(20rem,calc(100vw-2.5rem))] flex-col border-r border-white/10 bg-[#090909]/95 p-4 shadow-2xl backdrop-blur-2xl"
+                aria-label="Main navigation"
               >
-                <FaTimes />
-              </button>
+                <div className="mb-6 flex items-center justify-between gap-3 border-b border-white/10 pb-4">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <span className="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-full border border-white/15 bg-white/10 text-sm font-semibold text-white">
+                      {currentUser?.profilePic ? <img src={currentUser.profilePic} alt="" className="h-full w-full object-cover" /> : currentUser?.username?.charAt(0)?.toUpperCase() || <FaUser aria-hidden="true" />}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-semibold text-white">{currentUser?.username || 'Orb8'}</span>
+                      <span className="block text-xs text-neutral-500">Navigation</span>
+                    </span>
+                  </div>
+                  <button type="button" onClick={() => dispatch(setMobileMenuOpen(false))} className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-neutral-400 transition hover:bg-white/10 hover:text-white" aria-label="Close navigation menu"><FaTimes /></button>
+                </div>
+
+                <div ref={containerRef} className="relative mb-4">
+                  <button type="button" onClick={() => setIsOpen((previous) => !previous)} aria-expanded={isOpen} className="flex min-h-10 w-full items-center justify-between rounded-xl border border-white/10 bg-white/[0.04] px-3 text-sm text-neutral-200 transition hover:bg-white/[0.08]">
+                    <span>{activeMode}</span><ChevronRight size={18} className={`transition-transform ${isOpen ? 'rotate-90' : ''}`} />
+                  </button>
+                  {isOpen && <div className="absolute inset-x-0 top-full z-20 mt-1 overflow-hidden rounded-xl border border-white/10 bg-[#111111] shadow-xl">{MODES.map((mode) => <button key={mode} type="button" onClick={() => handleSelect(mode)} className={`w-full px-3 py-2.5 text-left text-sm transition ${activeMode === mode ? 'bg-white/10 text-white' : 'text-neutral-400 hover:bg-white/5 hover:text-white'}`}>{mode}</button>)}</div>}
+                </div>
+
+                <nav className="min-h-0 flex-1 overflow-y-auto" aria-label="Pages">
+                  <NavList items={navItems} isActiveItem={isActiveItem} collapsed={false} onNavigate={handleNavigate} keyPrefix="drawer-" />
+                </nav>
+
+                <div className="mt-4 border-t border-white/10 pt-4">
+                  <button type="button" onClick={handleEnableNotifications} className={`${GLASS_BTN} mb-2 border-white/10 bg-white/[0.04] hover:bg-white/10`}><span className="py-2"><FaBell /></span><span>Notifications</span></button>
+                  <button type="button" onClick={() => handleNavigate('/settings')} className={`${GLASS_BTN} mb-2 border-white/10 bg-white/[0.04] hover:bg-white/10`}><span className="py-2"><Settings /></span><span>Settings</span></button>
+                  <button type="button" onClick={handleLogout} className={`${GLASS_BTN} border-white/10 bg-white/[0.04] hover:bg-white/10`}><span className="py-2"><FaSignOutAlt /></span><span>Log out</span></button>
+                </div>
+              </aside>
             </div>
-            <div className="flex flex-col justify-between">
-              <nav>
-                <NavList
-                  items={navItems}
-                  isActiveItem={isActiveItem}
-                  collapsed={false}
-                  onNavigate={handleNavigate}
-                  keyPrefix="mobile-"
-                />
-              </nav>
-
-              <div>
-                <button
-                  onClick={handleEnableNotifications}
-                  className={`${GLASS_BTN} mb-2 bg-cyan-500/15 border-cyan-400/25 hover:bg-cyan-500/25`}
-                >
-                  <span className="py-2"><FaBell /></span>
-                  <span>Notifications</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleNavigate('/settings')}
-                  className={`${GLASS_BTN} mb-2 bg-white/5 border-white/10 hover:bg-white/10`}
-                >
-                  <span className="py-2"><Settings /></span>
-                  <span>Settings</span>
-                </button>
-
-                {/* Log Out */}
-                <button
-                  onClick={handleLogout}
-                  className={`${GLASS_BTN} bg-red-500/15 border-red-400/25 hover:bg-red-500/25`}
-                >
-                  <span className="py-2"><FaSignOutAlt /></span>
-                  <span>Log-Out</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      )}
     </>
   );
 }

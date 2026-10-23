@@ -28,6 +28,7 @@ import Comments from './pages/CommentsModal.jsx';
 import SocialProfileSection from './pages/SocialProfilePage.jsx';
 import GlassFeed from './pages/LandinPageExperimental.jsx';
 import DiscoverPage from './pages/discoverPage.jsx';
+import CosmicDiscoveryPage from './pages/CosmicDiscoveryPage.jsx';
 import AskIgris from './pages/askIgris.jsx';
 import RememberIgris from './pages/rememberIgris.jsx';
 import { onMessage } from './firebase';
@@ -208,9 +209,19 @@ function AppShell() {
   return (
     <>
       {/* <LandingHeader /> */}
-      <div className="flex max-h-screen">
+      <div className="app-frame relative isolate flex h-dvh min-h-0 max-h-dvh flex-col overflow-hidden bg-[#050505] text-neutral-100">
+        <div className="orbit-backdrop" aria-hidden="true">
+          <div className="orbit-backdrop-glow" />
+          {[52, 84, 122].map((size, index) => (
+            <span key={size} className="orbit-ring" style={{ '--size': size, '--n': index }}>
+              <span className="orbit-orbiter" style={{ '--d': `${28 + index * 14}s` }}>
+                <span className={`orbit-dot ${index === 1 ? 'orbit-dot-lg' : ''}`} />
+              </span>
+            </span>
+          ))}
+        </div>
         {showSidebar ? <AppSidebar /> : null}
-        <div className={`flex-1 min-w-0 max-h-screen ${showSidebar ? 'pl-10 lg:pl-0' : ''}`}>
+        <div key={location.pathname.split('/')[1] || 'root'} className="app-content page-enter relative z-10 min-h-0 min-w-0 flex-1">
           <Routes>
             <Route path="/" element={<LandingPage />} />
             <Route path="/language/:langId" element={<LanguagePageWrapper />} />
@@ -338,6 +349,14 @@ function AppShell() {
               element={(
                 <ProtectedRoute>
                   <DiscoverPage />
+                </ProtectedRoute>
+              )}
+            />
+            <Route
+              path="/cosmic-discovery"
+              element={(
+                <ProtectedRoute>
+                  <CosmicDiscoveryPage />
                 </ProtectedRoute>
               )}
             />

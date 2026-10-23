@@ -219,8 +219,8 @@ useEffect(() => {
           <div className="flex items-center gap-2 sm:gap-3">
             <FaUserFriends className="text-2xl sm:text-3xl md:text-4xl text-white/60" />
             <div>
-              <h1 className="text-2xl sm:text-3xl font-light tracking-tight">Friends</h1>
-              <p className="text-white/40 text-xs sm:text-sm font-light">Manage your connections</p>
+              <h1 className="text-2xl sm:text-3xl font-light tracking-tight">Constellations</h1>
+              <p className="text-white/40 text-xs sm:text-sm font-light">Your mutual connections</p>
             </div>
           </div>
         </div>
@@ -248,7 +248,7 @@ useEffect(() => {
             }`}
           >
             <FaUserFriends className="inline mr-1 sm:mr-2" />
-            <span className="hidden sm:inline">Friends ({friends.length})</span>
+            <span className="hidden sm:inline">Constellations ({friends.length})</span>
             <span className="sm:hidden">({friends.length})</span>
           </button>
           <button
@@ -289,16 +289,16 @@ useEffect(() => {
             {/* Friends Tab */}
             {activeTab === 'friends' && (
               <div className="bg-gradient-to-br from-[#111820] to-[#0f1620] rounded-xl sm:rounded-2xl p-4 sm:p-6 border border-white/5">
-                <h2 className="text-lg sm:text-xl font-light mb-4 tracking-tight">Your Friends</h2>
+                <h2 className="text-lg sm:text-xl font-light mb-4 tracking-tight">Your Constellations</h2>
                 {isLoading ? (
                   <div className="text-center py-8 sm:py-12">
                     <div className="animate-spin w-10 h-10 sm:w-12 sm:h-12 border border-white/20 border-t-white/60 rounded-full mx-auto mb-4"></div>
-                    <p className="text-white/50 text-sm sm:text-base font-light">Loading friends...</p>
+                    <p className="text-white/50 text-sm sm:text-base font-light">Loading your constellation...</p>
                   </div>
                 ) : friends.length === 0 ? (
                   <div className="text-center py-8 sm:py-12 text-white/50">
                     <FaUserFriends className="text-3xl sm:text-5xl mx-auto mb-4 opacity-30" />
-                    <p className="text-sm sm:text-base font-light">No friends yet</p>
+                    <p className="text-sm sm:text-base font-light">Your constellation is just beginning</p>
                   </div>
                 ) : (
                   <div className="space-y-2 sm:space-y-3">
@@ -368,7 +368,7 @@ useEffect(() => {
             {/* Search Tab */}
             {activeTab === 'search' && (
               <div className="bg-gradient-to-br from-[#111820] to-[#0f1620] rounded-xl sm:rounded-2xl p-4 sm:p-6 border border-white/5">
-                <h2 className="text-lg sm:text-xl font-light mb-4 tracking-tight">Find Friends</h2>
+                <h2 className="text-lg sm:text-xl font-light mb-4 tracking-tight">Find people for your constellation</h2>
                 <div className="relative mb-4">
                   <FaSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-white/30" />
                   <input
@@ -416,7 +416,7 @@ useEffect(() => {
                           </div>
                           {user.isFriend ? (
                             <div className="px-2 sm:px-4 py-1 sm:py-2 bg-white/10 text-white rounded-lg text-xs sm:text-sm font-light whitespace-nowrap border border-white/10">
-                              Friends
+                              In your constellation
                             </div>
                           ) : user.hasPendingRequest ? (
                             <div className="px-2 sm:px-4 py-1 sm:py-2 bg-white/5 text-white/60 rounded-lg text-xs sm:text-sm font-light cursor-default whitespace-nowrap border border-white/10">
