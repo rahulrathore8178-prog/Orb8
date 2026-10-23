@@ -34,6 +34,7 @@ import { onMessage } from './firebase';
 import { registerPushNotifications } from './notifications/registerPushNotifications';
 import SearchPage from './pages/SearchPage.jsx';
 import OrbitalPage from './pages/OrbitalPage.jsx';
+import SettingsPage from './pages/SettingsPage.jsx'
 
 function ProtectedRoute({ children }) {
   const [isChecking, setIsChecking] = useState(true);
