@@ -27,7 +27,8 @@ export const getUserIdentifier = (user) => {
     return user.id || user._id || user.email || user.username || "guest";
 }
 
-export const apiUrl = import.meta.env.VITE_ || "http://localhost:5000";
+export const apiUrl =
+    import.meta.env.VITE_API_URL?.replace(/\/+$/, "") || "http://localhost:5000";
 
 const fallbackLeaderboard = [
     { rank: 1, name: "ProCoder123", xp: 5420, medal: "🥇" },
