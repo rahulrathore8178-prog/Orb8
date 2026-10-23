@@ -891,7 +891,7 @@ const discoverNearbyPeople = async (req, res) => {
         $geoNear: {
           near: { type: 'Point', coordinates: [lng, lat] },
           distanceField: 'distance',
-          maxDistance: 10000, // meters
+          maxDistance: 500, // meters
           spherical: true,
           query: {
             _id: { $ne: user._id },
