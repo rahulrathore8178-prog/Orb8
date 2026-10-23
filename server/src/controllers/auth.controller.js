@@ -10,11 +10,8 @@ const { checkAndAwardBadges } = require('./badge.controller');
 const { sendOtpEmail } = require('../utils/mailer');
 const post = require('../models/post.model');
 const { uploadBufferToDrive } = require('../utils/driveUpload');
-<<<<<<< HEAD
 const { OAuth2Client } = require('google-auth-library');
 const googleClient = new OAuth2Client();
-=======
->>>>>>> origin/main
 
 const PROFILE_PICS_DIR = path.join(__dirname, '..', '..', 'uploads', 'profile-pics');
 const MAX_PROCESSED_IMAGE_BYTES = 450 * 1024;

@@ -428,8 +428,6 @@ export default function AppSidebar() {
                   <span>Notifications</span>
                 </button>
 
-<<<<<<< HEAD
-=======
                 <button
                   type="button"
                   onClick={() => handleNavigate('/settings')}
@@ -439,7 +437,6 @@ export default function AppSidebar() {
                   <span>Settings</span>
                 </button>
 
->>>>>>> origin/main
                 {/* Log Out */}
                 <button
                   onClick={handleLogout}
