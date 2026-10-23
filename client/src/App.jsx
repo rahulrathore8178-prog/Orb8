@@ -388,6 +388,14 @@ function AppShell() {
                 </ProtectedRoute>
               )}
             />
+            <Route
+              path="/settings"
+              element={(
+                <ProtectedRoute>
+                  <SettingsPage />
+                </ProtectedRoute>
+              )}
+            />
             <Route path="/level/:courseId/:levelNo" element={<LevelPage />} />
             <Route path="/levels/:courseId" element={<LevelsPageWrapper />} />
             <Route path="/languagepage" element={<LanguagePage />} />
