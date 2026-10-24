@@ -310,7 +310,7 @@ const LoginHero = () => {
         <div className="flex w-full gap-4">
           <button
             type="button"
-            onClick={() => { if (googleEnabled) window.location.href = `${apiUrl}/api/auth/google`; }}
+            onClick={() => { if (googleEnabled) window.location.href = `${apiUrl}/api/auth/google?return=${encodeURIComponent(window.location.origin)}`; }}
             disabled={!googleEnabled}
             className={`flex h-[46px] flex-1 items-center justify-center gap-2.5 rounded-xl border text-[14px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5B7FFF]/50 ${
               googleEnabled

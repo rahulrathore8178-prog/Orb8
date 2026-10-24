@@ -385,7 +385,7 @@ export default function SignupHero() {
               <div className="flex-1 border-t border-white/10" />
             </div>
             <div ref={collectField} className="flex w-full gap-4">
-              <button type="button" onClick={() => { if (googleEnabled) window.location.href = `${apiUrl}/api/auth/google`; }} disabled={!googleEnabled} className={`flex h-[46px] flex-1 items-center justify-center gap-2.5 rounded-xl border text-[14px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5B7FFF]/50 ${googleEnabled ? "border-white/10 bg-[#0D1117] text-[#E7EAEF] hover:border-white/20 hover:bg-[#151B24]" : "cursor-not-allowed border-white/5 bg-[#0D1117]/60 text-[#5B6472]"}`}>
+              <button type="button" onClick={() => { if (googleEnabled) window.location.href = `${apiUrl}/api/auth/google?return=${encodeURIComponent(window.location.origin)}`; }} disabled={!googleEnabled} className={`flex h-[46px] flex-1 items-center justify-center gap-2.5 rounded-xl border text-[14px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5B7FFF]/50 ${googleEnabled ? "border-white/10 bg-[#0D1117] text-[#E7EAEF] hover:border-white/20 hover:bg-[#151B24]" : "cursor-not-allowed border-white/5 bg-[#0D1117]/60 text-[#5B6472]"}`}>
                 <GoogleIcon />
                 Continue with Google
               </button>
