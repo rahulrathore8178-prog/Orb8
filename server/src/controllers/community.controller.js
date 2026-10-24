@@ -278,9 +278,9 @@ async function getFeed(req, res) {
       isArchived: { $ne: true },
     };
 
-    const viewer = await User.findById(req.user.id).select('following blockedUsers savedPosts').lean();
+    const viewer = await User.findById(req.user.id).select('friends blockedUsers savedPosts').lean();
     if (!viewer) return res.status(404).json({ message: 'User not found' });
-    const allowedPrivateAuthors = [...(viewer.following || []), viewer._id];
+    const allowedPrivateAuthors = [...(viewer.friends || []), viewer._id];
     const hiddenPrivateUsers = await User.find({
       isPrivate: true,
       _id: { $nin: allowedPrivateAuthors },
@@ -420,7 +420,7 @@ async function getPost(req, res) {
     const postId = req.params.postId;
 
     const post = await Post.findById(postId)
-      .populate('author', 'username profilePic league level totalXp isPrivate followers blockedUsers')
+      .populate('author', 'username profilePic league level totalXp isPrivate friends blockedUsers')
       .populate('comments.author', 'username profilePic')
       .populate('comments.likes', '_id')
       .populate('comments.replies.author', 'username profilePic')
@@ -432,9 +432,9 @@ async function getPost(req, res) {
     const viewer = await User.findById(req.user.id).select('blockedUsers').lean();
     const authorBlockedViewer = post.author.blockedUsers?.some(id => String(id) === String(req.user.id));
     const viewerBlockedAuthor = viewer?.blockedUsers?.some(id => String(id) === String(post.author._id));
-    const followsAuthor = post.author.followers?.some(id => String(id) === String(req.user.id));
+    const isAuthorFriend = post.author.friends?.some(id => String(id) === String(req.user.id));
     if (authorBlockedViewer || viewerBlockedAuthor
-      || (post.author.isPrivate && !followsAuthor && String(post.author._id) !== String(req.user.id))) {
+      || (post.author.isPrivate && !isAuthorFriend && String(post.author._id) !== String(req.user.id))) {
       return res.status(404).json({ message: 'Post not found' });
     }
     const replies = post.comments.reduce((acc, comment) => {
@@ -787,14 +787,14 @@ async function getUserPosts(req, res) {
     const isOwner = String(userId) === String(req.user.id);
     if (!isOwner) {
       const [viewer, profileOwner] = await Promise.all([
-        User.findById(req.user.id).select('following blockedUsers').lean(),
+        User.findById(req.user.id).select('friends blockedUsers').lean(),
         User.findById(userId).select('isPrivate blockedUsers').lean(),
       ]);
       if (!profileOwner) return res.status(404).json({ message: 'User not found' });
       const isBlocked = viewer?.blockedUsers?.some(id => String(id) === String(userId))
         || profileOwner.blockedUsers?.some(id => String(id) === String(req.user.id));
       const canView = !profileOwner.isPrivate
-        || viewer?.following?.some(id => String(id) === String(userId));
+        || viewer?.friends?.some(id => String(id) === String(userId));
       if (isBlocked || !canView) return res.status(403).json({ message: 'This profile is private' });
     }
     const filter = { author: userId, isActive: true };

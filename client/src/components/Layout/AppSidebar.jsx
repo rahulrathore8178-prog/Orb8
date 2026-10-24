@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react';
 import {
   FaBell,
-  FaBook,
   FaBrain,
   FaEllipsisH,
   FaFacebookMessenger,
@@ -21,14 +20,15 @@ import { apiUrl, getAuthHeaders } from '../../utilites/DashboardHelper';
 import { setCurrentUser } from '../../redux/slices/dashboardSlice';
 import { registerPushNotifications } from '../../notifications/registerPushNotifications';
 import { raised } from '../../utilites/cssUtility';
+import { useUnreadNotifications } from '../../utilites/useUnreadNotifications';
 import { Settings } from 'lucide-react';
 
 const navItems = [
   { key: 'home', label: 'Home', icon: FaHome, to: '/community', match: ['/community'] },
   { key: 'explore', label: 'Explore', icon: FaSearch, to: '/explore', match: ['/explore'] },
   { key: 'messages', label: 'Messages', icon: FaFacebookMessenger, to: '/messages', match: ['/messages'] },
-  { key: 'askIgris', label: 'Ask Igris', icon: FaBrain, to: '/askIgris', match: ['/askIgris'] },
-  { key: 'rememberIgris', label: 'Remember Igris', icon: FaBook, to: '/rememberIgris', match: ['/rememberIgris'] },
+  { key: 'notifications', label: 'Notifications', icon: FaBell, to: '/notifications', match: ['/notifications'] },
+  { key: 'assistant', label: 'Igris AI', icon: FaBrain, to: '/assistant', match: ['/assistant'] },
   { key: 'profile', label: 'Profile', icon: FaUser, to: '/profile', match: ['/profile', '/socialprofile'] },
 ];
 
@@ -168,6 +168,7 @@ export default function AppSidebar() {
   const dispatch = useDispatch();
   const isMobileMenuOpen = useSelector((state) => state.sideBar.isMobileMenuOpen);
   const currentUser = useSelector((state) => state.dashboard.currentUser);
+  const unreadCount = useUnreadNotifications();
 
   const [isHeaderVisible, setIsHeaderVisible] = useState(true);
   const lastTouchPosition = useRef(null);
@@ -271,8 +272,19 @@ export default function AppSidebar() {
           </button>
           <div className={`min-w-0 leading-tight ${location.pathname === '/explore' ? 'hidden' : ''}`}>
             <p className="text-base font-semibold tracking-tight text-neutral-100">Orb8</p>
-            <p className="truncate text-[11px] font-light text-neutral-500">{pageLabel}</p>
+            <p className="truncate text-xs font-light text-neutral-400">{pageLabel}</p>
           </div>
+          <button
+            type="button"
+            onClick={() => handleNavigate('/notifications')}
+            aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : 'Notifications'}
+            className={`relative ml-auto grid h-11 w-11 shrink-0 place-items-center rounded-full text-neutral-200 transition duration-200 active:scale-95 focus-visible:outline-2 focus-visible:outline-white/60 ${raised}`}
+          >
+            <FaBell aria-hidden="true" />
+            {unreadCount > 0 && (
+              <span aria-hidden="true" className="absolute right-2.5 top-2.5 h-2.5 w-2.5 rounded-full bg-rose-400 ring-2 ring-[#111]" />
+            )}
+          </button>
         </header>
       </div>
 
@@ -307,7 +319,7 @@ export default function AppSidebar() {
                 </nav>
 
                 <div className="mt-4 border-t border-white/10 pt-4">
-                  <button type="button" onClick={handleEnableNotifications} className={`${GLASS_BTN} mb-2 border-white/10 bg-white/[0.04] hover:bg-white/10`}><span className="py-2"><FaBell /></span><span>Notifications</span></button>
+                  <button type="button" onClick={handleEnableNotifications} className={`${GLASS_BTN} mb-2 border-white/10 bg-white/[0.04] hover:bg-white/10`}><span className="py-2"><FaBell /></span><span>Turn on alerts</span></button>
                   <button type="button" onClick={() => handleNavigate('/settings')} className={`${GLASS_BTN} mb-2 border-white/10 bg-white/[0.04] hover:bg-white/10`}><span className="py-2"><Settings /></span><span>Settings</span></button>
                   <button type="button" onClick={handleLogout} className={`${GLASS_BTN} border-white/10 bg-white/[0.04] hover:bg-white/10`}><span className="py-2"><FaSignOutAlt /></span><span>Log out</span></button>
                 </div>
