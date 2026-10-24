@@ -6,14 +6,19 @@ import { InputBar } from "../components/Messages/ChatInput";
 import { Sidebar } from "../components/Messages/ContactList";
 import { useDispatch, useSelector } from "react-redux";
 import { addMessage, fetchContacts, fetchConversation, sendChatMessage, setActiveContact } from "../redux/slices/chatSlice";
+import { useNavigate } from "react-router-dom";
+import EmptyState from "../components/shared/EmptyState";
+import { MESSAGES_CHANGED } from "../utilites/useUnreadMessages";
 
 export default function MessagesApp() {
   const isMobile = useIsMobile();
   const { gsapRef, ready: gsapReady } = useGsap();
   const dispatch = useDispatch();
+  const navigate = useNavigate();
+  const [contactsLoaded, setContactsLoaded] = useState(false);
 
   useEffect(() => {
-    dispatch(fetchContacts());
+    dispatch(fetchContacts()).finally(() => setContactsLoaded(true));
   }, [dispatch]);
 
   const { activeContactId, contacts } = useSelector((s) => s.chat ?? null);
@@ -50,7 +55,9 @@ export default function MessagesApp() {
   const wsRef = useRef(null);
 
   useEffect(() => {
-    if (activeContactId) dispatch(fetchConversation(activeContactId));
+    if (activeContactId) {
+      dispatch(fetchConversation(activeContactId)).finally(() => window.dispatchEvent(new Event(MESSAGES_CHANGED)));
+    }
   }, [activeContactId, dispatch]);
 
   useEffect(() => {
@@ -292,6 +299,18 @@ export default function MessagesApp() {
   /* ============================================================
      RENDER
      ============================================================ */
+  if (contactsLoaded && contacts.length === 0) {
+    return (
+      <EmptyState
+        className="h-full justify-center"
+        title="No conversations yet"
+        description="You can message people once you are connected. Find someone you know to start."
+        actionLabel="Find people"
+        onAction={() => navigate('/explore?tab=search')}
+      />
+    );
+  }
+
   return (
     <div className="h-screen w-full flex bg-black text-slate-100 overflow-hidden font-sans antialiased">
       <style>{`
@@ -341,8 +360,6 @@ export default function MessagesApp() {
           setMoreMenuOpen={setMoreMenuOpen}
           moreWrapRef={moreWrapRef}
           setEmojiOpen={setEmojiOpen}
-          showToast={showToast}
-          setContacts={() => { }}
         />
 
         <ChatArea

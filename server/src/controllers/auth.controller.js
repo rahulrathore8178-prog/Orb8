@@ -10,6 +10,7 @@ const { checkAndAwardBadges } = require('./badge.controller');
 const { sendOtpEmail } = require('../utils/mailer');
 const post = require('../models/post.model');
 const { uploadBufferToDrive } = require('../utils/driveUpload');
+const { currentStreak, dayKey, getDailyPrompt } = require('../utils/habit');
 const { OAuth2Client } = require('google-auth-library');
 const googleClient = new OAuth2Client();
 
@@ -60,6 +61,7 @@ function buildUserPayload(user) {
     email: user.email,
     profilePic: user.profilePic || '',
     bio: user.bio || '',
+    createdAt: user.createdAt,
     notifications: (user.notifications || []).slice(-10).reverse(),
     friends: user.friends || [],
     friendRequests: user.friendRequests || [],
@@ -330,6 +332,51 @@ async function getNotifications(req, res) {
     const notifications = (user.notifications || []).slice(-20).reverse();
     const unreadCount = (user.notifications || []).filter(item => !item.isRead).length;
     return res.status(200).json({ notifications, unreadCount });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+}
+
+const CHECKLIST_DAYS = 7;
+
+async function getHabit(req, res) {
+  try {
+    const user = await userModel.findById(req.user.id).select('streakCount lastActiveDay');
+    if (!user) {
+      return res.status(404).json({ message: 'User not found.' });
+    }
+    return res.status(200).json({
+      streakCount: currentStreak(user),
+      activeToday: user.lastActiveDay === dayKey(),
+      prompt: getDailyPrompt(),
+    });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+}
+
+async function getChecklist(req, res) {
+  try {
+    const user = await userModel.findById(req.user.id).select('profilePic bio friends createdAt');
+    if (!user) {
+      return res.status(404).json({ message: 'User not found.' });
+    }
+
+    const hasPosted = await post.Post.exists({ author: user._id, isActive: true });
+    const items = [
+      { key: 'photo', label: 'Add a profile photo', done: Boolean(user.profilePic), to: '/profile' },
+      { key: 'bio', label: 'Write a short bio', done: Boolean(user.bio && user.bio.trim()), to: '/profile' },
+      { key: 'friend', label: 'Connect with a friend', done: (user.friends || []).length > 0, to: '/explore?tab=search' },
+      { key: 'post', label: 'Share your first post', done: Boolean(hasPosted), to: '/community?compose=1' },
+    ];
+
+    const ageDays = Math.floor((Date.now() - new Date(user.createdAt).getTime()) / 86400000);
+    return res.status(200).json({
+      items,
+      completed: items.filter(item => item.done).length,
+      total: items.length,
+      daysLeft: Math.max(0, CHECKLIST_DAYS - ageDays),
+    });
   } catch (error) {
     return res.status(500).json({ message: error.message });
   }
@@ -655,6 +702,8 @@ module.exports = {
   getNotifications,
   markNotificationRead,
   markAllNotificationsRead,
+  getChecklist,
+  getHabit,
   updateStreak,
   claimReward,
   forgotPassword,

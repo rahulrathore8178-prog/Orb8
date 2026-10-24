@@ -598,7 +598,7 @@ export default function ComposerCard({
                         className="w-full bg-transparent border-none outline-none text-[15px] text-white/95 placeholder-white/40 caret-[#00e5ff] font-['Plus_Jakarta_Sans'] leading-[1.6]"
                         style={{ fontSize: '15px' }}
                     />
-                    <div className="text-[11px] text-white/50 font-['DM_Mono'] mt-1">
+                    <div className="text-xs text-white/70 font-['DM_Mono'] mt-1">
                         {content.length}/2000
                     </div>
                 </div>

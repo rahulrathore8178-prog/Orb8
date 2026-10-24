@@ -5,6 +5,7 @@ import axios from "axios";
 import { apiUrl, getAuthHeaders, getStoredUser } from "../../utilites/communityHelper";
 import { useDispatch, useSelector } from "react-redux";
 import { setCapsule } from "../../redux/slices/capsuleSlice";
+import { useFeedback } from "../shared/Feedback";
 
 /* ────────────────────────────────────────────────────────────────────────
    TIME CONSTANTS — the entire lifecycle is defined by these three numbers.
@@ -143,7 +144,7 @@ function CapsuleTile({ story, derived, index, onOpenCapsule, onRevive }) {
         </button>
       )}
 
-      <span className="absolute inset-x-0 bottom-2.5 z-10 px-2 text-center text-[10px] text-white truncate">
+      <span className="absolute inset-x-0 bottom-2.5 z-10 px-2 text-center text-xs text-white truncate">
         {story.user?.username || 'Unknown'}
       </span>
     </button>
@@ -168,7 +169,7 @@ function AddCapsuleTile({ onAddCapsule }) {
       <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white/10">
         <FiPlus className="text-[14px] text-zinc-200" />
       </span>
-      <span className="text-[9px] text-zinc-500">Add</span>
+      <span className="text-xs text-zinc-400">Add</span>
     </button>
   );
 }
@@ -177,6 +178,7 @@ export default function Capsules({ onAddCapsule, onOpenCapsule, onRevive }) {
   const [now, setNow] = useState(() => Date.now());
   const capsule = useSelector(state => state.capsule?.capsule ?? []);
   const dispatch = useDispatch();
+  const { toast, confirm } = useFeedback();
   const storedUser = getStoredUser();
 
 
@@ -231,7 +233,12 @@ const visible = useMemo(() => {
       const capsuleId = storyToDelete?._id;
       if (!capsuleId) return;
 
-      const ok = window.confirm('Delete this capsule? This will also remove its media.');
+      const ok = await confirm({
+        title: 'Delete this capsule?',
+        message: 'This will also remove its media.',
+        confirmLabel: 'Delete',
+        destructive: true,
+      });
       if (!ok) return;
 
       try {
@@ -247,9 +254,9 @@ const visible = useMemo(() => {
         setOpenIndex(null);
       } catch (err) {
         console.error('Failed to delete capsule:', err);
-        window.alert(err?.response?.data?.message || 'Failed to delete capsule');
+        toast(err?.response?.data?.message || 'Failed to delete capsule', 'error');
       }
-    }, [capsule, dispatch]);
+    }, [capsule, dispatch, confirm, toast]);
 
     const activeEntry = openIndex !== null ? visible[openIndex] : null;
     const modalStory = activeEntry

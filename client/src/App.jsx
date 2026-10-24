@@ -1,29 +1,39 @@
 import './App.css'
 import axios from 'axios';
 import { BrowserRouter, Routes, Route, useNavigate, Navigate, useLocation } from "react-router-dom";
-import LoginPage from './pages/LoginPage.jsx'
-import RegisterationPage from './pages/RegisterationPage.jsx';
-import SignupPage from './pages/SignupPage.jsx';
-import CommunityPage from './pages/CommunityPage.jsx';
-import { FriendsPage } from './pages/FriendsPage.jsx';
-import ForgotPasswordPage from './pages/ForgotPasswordPage.jsx';
-import ResetPasswordPage from './pages/ResetPasswordPage.jsx';
-import OAuthCallbackPage from './pages/OAuthCallbackPage.jsx';
-import { useEffect, useState } from 'react';
-import LandingPage from './pages/LandingPage.jsx';
+import { Suspense, lazy, useEffect, useState } from 'react';
 import AppSidebar from './components/Layout/AppSidebar.jsx';
+import OnboardingDialog from './components/Layout/OnboardingDialog.jsx';
 import BottomTabBar from './components/Layout/BottomTabBar.jsx';
-import Messages from './pages/messages.jsx';
-import Comments from './pages/CommentsModal.jsx';
-import SocialProfileSection from './pages/SocialProfilePage.jsx';
-import GlassFeed from './pages/LandinPageExperimental.jsx';
-import ExplorePage from './pages/ExplorePage.jsx';
-import NotificationsPage from './pages/NotificationsPage.jsx';
-import AssistantPage from './pages/AssistantPage.jsx';
 import { onMessage } from './firebase';
 import { registerPushNotifications } from './notifications/registerPushNotifications';
-import OrbitalPage from './pages/OrbitalPage.jsx';
-import SettingsPage from './pages/SettingsPage.jsx'
+
+const LoginPage = lazy(() => import('./pages/LoginPage.jsx'));
+const RegisterationPage = lazy(() => import('./pages/RegisterationPage.jsx'));
+const SignupPage = lazy(() => import('./pages/SignupPage.jsx'));
+const CommunityPage = lazy(() => import('./pages/CommunityPage.jsx'));
+const FriendsPage = lazy(() => import('./pages/FriendsPage.jsx').then((module) => ({ default: module.FriendsPage })));
+const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage.jsx'));
+const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage.jsx'));
+const OAuthCallbackPage = lazy(() => import('./pages/OAuthCallbackPage.jsx'));
+const LandingPage = lazy(() => import('./pages/LandingPage.jsx'));
+const Messages = lazy(() => import('./pages/messages.jsx'));
+const Comments = lazy(() => import('./pages/CommentsModal.jsx'));
+const SocialProfileSection = lazy(() => import('./pages/SocialProfilePage.jsx'));
+const GlassFeed = lazy(() => import('./pages/LandinPageExperimental.jsx'));
+const ExplorePage = lazy(() => import('./pages/ExplorePage.jsx'));
+const NotificationsPage = lazy(() => import('./pages/NotificationsPage.jsx'));
+const AssistantPage = lazy(() => import('./pages/AssistantPage.jsx'));
+const OrbitalPage = lazy(() => import('./pages/OrbitalPage.jsx'));
+const SettingsPage = lazy(() => import('./pages/SettingsPage.jsx'));
+
+function PageFallback() {
+  return (
+    <div role="status" aria-label="Loading" className="grid h-full min-h-40 place-items-center">
+      <span className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-white motion-reduce:animate-none" />
+    </div>
+  );
+}
 
 const AUTH_RECHECK_MS = 5 * 60 * 1000;
 let lastVerifiedAt = 0;
@@ -245,6 +255,7 @@ function AppShell() {
         </div>
         {showSidebar ? <AppSidebar /> : null}
         <div key={location.pathname.split('/')[1] || 'root'} className="app-content page-enter relative z-10 min-h-0 min-w-0 flex-1">
+          <Suspense fallback={<PageFallback />}>
           <Routes>
             <Route path="/" element={<LandingPage />} />
             <Route path="/login" element={<LoginPage />} />
@@ -357,8 +368,10 @@ function AppShell() {
             />
             <Route path="*" element={<Navigate to="/community" replace />} />
           </Routes>
+          </Suspense>
         </div>
         {showSidebar ? <BottomTabBar /> : null}
+        {location.pathname === '/community' ? <OnboardingDialog /> : null}
       </div>
     </>
   )

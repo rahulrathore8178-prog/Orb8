@@ -365,7 +365,7 @@ function MessageBubble({ msg, mine, gsapReady }) {
                 : <video src={sharedPost.video} muted className="h-32 w-full object-cover" />
             )}
             <div className="p-2.5">
-              <span className="block text-[11px] opacity-65">{sharedPost.author?.username || 'Shared post'}</span>
+              <span className="block text-xs opacity-80">{sharedPost.author?.username || 'Shared post'}</span>
               <span className="mt-1 block line-clamp-2 text-sm">{sharedPost.content || 'Open post'}</span>
             </div>
           </button>

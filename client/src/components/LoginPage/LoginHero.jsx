@@ -190,7 +190,7 @@ const LoginHero = () => {
           <button
             type="button"
             onClick={() => navigate("/signup")}
-            className="rounded-full border border-white/10 px-3.5 py-1.5 text-[11px] font-semibold tracking-wide text-[#8891A0] transition-colors hover:border-white/20 hover:text-[#E7EAEF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5B7FFF]/50"
+            className="rounded-full border border-white/10 px-3.5 py-1.5 text-xs font-semibold tracking-wide text-[#9AA3B2] transition-colors hover:border-white/20 hover:text-[#E7EAEF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5B7FFF]/50"
           >
             SIGN UP
           </button>
@@ -241,7 +241,7 @@ const LoginHero = () => {
               htmlFor="emailOrUsername"
               className={`pointer-events-none absolute left-4 font-medium transition-all duration-150 ${
                 focusedField === "email" ? "text-[#7C97FF]" : "text-[#5B6472]"
-              } ${emailShrink ? "top-3.5 text-[11px]" : "top-1/2 -translate-y-1/2 text-[15px]"}`}
+              } ${emailShrink ? "top-3.5 text-xs" : "top-1/2 -translate-y-1/2 text-[15px]"}`}
             >
               Email or username
             </label>
@@ -263,7 +263,7 @@ const LoginHero = () => {
               htmlFor="password"
               className={`pointer-events-none absolute left-4 font-medium transition-all duration-150 ${
                 focusedField === "password" ? "text-[#7C97FF]" : "text-[#5B6472]"
-              } ${passwordShrink ? "top-3.5 text-[11px]" : "top-1/2 -translate-y-1/2 text-[15px]"}`}
+              } ${passwordShrink ? "top-3.5 text-xs" : "top-1/2 -translate-y-1/2 text-[15px]"}`}
             >
               Password
             </label>
@@ -302,7 +302,7 @@ const LoginHero = () => {
         {/* Separator */}
         <div className="my-6 flex w-full items-center">
           <div className="flex-1 border-t border-white/10" />
-          <span className="mx-3 text-[11px] font-medium uppercase tracking-wider text-[#5B6472]">or continue with</span>
+          <span className="mx-3 text-xs font-medium uppercase tracking-wider text-[#8C96A6]">or continue with</span>
           <div className="flex-1 border-t border-white/10" />
         </div>
 
@@ -329,7 +329,7 @@ const LoginHero = () => {
           <span className="text-[#8891A0] underline decoration-white/20 underline-offset-2">Terms</span> and{" "}
           <span className="text-[#8891A0] underline decoration-white/20 underline-offset-2">Privacy Policy</span>.
         </p>
-        <p className="text-center text-[11px] leading-[1.5] text-[#4A5261]">
+        <p className="text-center text-xs leading-[1.5] text-[#8C96A6]">
           This site is protected by reCAPTCHA Enterprise and the Google{" "}
           <span className="underline decoration-white/10 underline-offset-2">Privacy Policy</span> and{" "}
           <span className="underline decoration-white/10 underline-offset-2">Terms of Service</span> apply.

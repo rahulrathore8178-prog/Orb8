@@ -5,7 +5,8 @@ import { ReplyCard } from "./ReplyCard";
 import axios from "axios";
 import { setCommentLiked, setCommentLikedCount, setLocalCommentReplies, setRepliesOpen, setReplyText } from "../../redux/slices/feedSlice";
 import { useDispatch, useSelector } from "react-redux";
-import { formatTimeAgo, getAuthHeaders } from "../../utilites/communityHelper";
+import { formatTimeAgo, getAuthHeaders, getStoredUser } from "../../utilites/communityHelper";
+import { useFeedback } from "../shared/Feedback";
 import { FaHeart, FaRegHeart, FaTrash } from "react-icons/fa";
 
 const SELF_GRADIENT = "linear-gradient(135deg,#7c6aff,#22d3a0)";
@@ -34,6 +35,8 @@ export const CommentCard = ({ postId, comment }) => {
   const repliesRef = useRef(null);
   const replyWrapRef = useRef(null);
   const dispatch = useDispatch();
+  const { toast } = useFeedback();
+  const isOwnComment = String(comment?.author?.id) === String(getStoredUser()?.id);
 
   useEffect(() => {
     if (cardRef.current) {
@@ -117,7 +120,7 @@ export const CommentCard = ({ postId, comment }) => {
       );
     } catch (err) {
       console.error('Delete comment error:', err);
-      alert('You can only delete your posted comment!')
+      toast('Could not delete this comment. Please try again.', 'error');
     }
   };
 
@@ -156,9 +159,11 @@ export const CommentCard = ({ postId, comment }) => {
           <div className="flex justify-between font-mono-coder items-center gap-2">
             <span className="font-sans-coder font-bold coder-text" style={{ fontSize: 13 }}>{comment.author.username}</span>
             {/* <Badge badge={comment.badge} /> */}
-            <button onClick={handleDeleteComment} className="cursor-pointer">
-              <FaTrash />
-            </button>
+            {isOwnComment && (
+              <button onClick={handleDeleteComment} aria-label="Delete comment" className="grid h-11 w-11 cursor-pointer place-items-center">
+                <FaTrash />
+              </button>
+            )}
           </div>
           <div className="text-gray-400 font-mono-coder" style={{ fontSize: 10, marginTop: 1 }}>{formatTimeAgo(comment?.createdAt)}</div>
         </div>

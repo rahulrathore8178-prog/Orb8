@@ -27,7 +27,6 @@ const GREETINGS = [
     "What can I help with?",
     "Where should we start?",
     "What are we figuring out today?",
-    "Lawde na bhojyam",
     "Ready when you are.",
     "What's the plan?",
     "What are we working on?",
@@ -1163,7 +1162,7 @@ function MessageBubble({ message, formatSize }) {
                         <div className="min-w-0">
                             <p className="text-xs truncate max-w-[180px]">{message.attachment.name}</p>
                             {formatSize && (
-                                <p className={`text-[11px] ${isUser ? "text-zinc-600" : "text-zinc-500"}`}>
+                                <p className={`text-xs ${isUser ? "text-zinc-400" : "text-zinc-400"}`}>
                                     {formatSize(message.attachment.size)}
                                 </p>
                             )}

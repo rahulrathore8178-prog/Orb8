@@ -19,6 +19,8 @@ router.patch('/user/profile', protect, authController.updateProfile);
 router.patch('/user/profile/image', protect, profileImageUpload, authController.uploadProfileImage);
 router.get('/user/notifications', protect, authController.getNotifications);
 router.patch('/user/notifications/read-all', protect, authController.markAllNotificationsRead);
+router.get('/user/checklist', protect, authController.getChecklist);
+router.get('/user/habit', protect, authController.getHabit);
 router.patch('/user/notifications/:notificationId/read', protect, authController.markNotificationRead);
 router.patch('/user/streak', protect, authController.updateStreak);
 router.post('/user/rewards/claim', protect, authController.claimReward);
