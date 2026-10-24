@@ -3,21 +3,14 @@ import {
   FaBell,
   FaBook,
   FaBrain,
-  FaChartLine,
   FaEllipsisH,
   FaFacebookMessenger,
-  FaFlagCheckered,
-  FaGraduationCap,
   FaHome,
-  FaMedal,
   FaPlus,
-  FaRegStar,
   FaSearch,
   FaSignOutAlt,
   FaTimes,
-  FaTrophy,
   FaUser,
-  FaUserFriends,
   FaUsers
 } from 'react-icons/fa';
 import { useDispatch, useSelector } from 'react-redux';
@@ -30,24 +23,13 @@ import { registerPushNotifications } from '../../notifications/registerPushNotif
 import { raised } from '../../utilites/cssUtility';
 import { Settings } from 'lucide-react';
 
-const communityNavItems = [
+const navItems = [
   { key: 'home', label: 'Home', icon: FaHome, to: '/community', match: ['/community'] },
+  { key: 'explore', label: 'Explore', icon: FaSearch, to: '/explore', match: ['/explore'] },
   { key: 'messages', label: 'Messages', icon: FaFacebookMessenger, to: '/messages', match: ['/messages'] },
   { key: 'askIgris', label: 'Ask Igris', icon: FaBrain, to: '/askIgris', match: ['/askIgris'] },
   { key: 'rememberIgris', label: 'Remember Igris', icon: FaBook, to: '/rememberIgris', match: ['/rememberIgris'] },
-  { key: 'search', label: 'Search', icon: FaSearch, to: '/search', match: ['/search'] },
-  { key: 'discover', label: 'Discover', icon: FaUserFriends, to: '/discover', match: ['/discover'] },
-  { key: 'cosmicDiscovery', label: 'Cosmic Discovery', icon: FaSearch, to: '/cosmic-discovery', match: ['/cosmic-discovery'] },
-  { key: 'socialprofile', label: 'Social Profile', icon: FaUser, to: '/socialprofile', match: ['/socialprofile'] },
-];
-
-const lmsNavItems = [
-  { key: 'dashboard', label: 'Dashboard', icon: FaRegStar, to: '/dashboard', match: ['/dashboard'] },
-  { key: 'learn', label: 'Learn', icon: FaGraduationCap, to: '/learn', match: ['/learn', '/levels', '/language'] },
-  { key: 'challenges', label: 'Challenges', icon: FaFlagCheckered, to: '/challenges', match: ['/challenges'] },
-  { key: 'leaderboards', label: 'Leaderboards', icon: FaTrophy, to: '/leaderboard', match: ['/leaderboard'] },
-  { key: 'profile', label: 'Profile', icon: FaMedal, to: '/profile', match: ['/profile'] },
-  { key: 'progress', label: 'Progress', icon: FaChartLine, to: '/progress', match: ['/progress'] },
+  { key: 'profile', label: 'Profile', icon: FaUser, to: '/profile', match: ['/profile', '/socialprofile'] },
 ];
 
 function SidebarItem({ item, isActive, collapsed, onClick, iconOnly = false }) {
@@ -265,37 +247,7 @@ export default function AppSidebar() {
   const isActiveItem = (item) =>
     item.match.some((routePrefix) => location.pathname.startsWith(routePrefix));
 
-  const [storedMode, setStoredMode] = useState(
-    localStorage.getItem('dashboardMode') || 'community'
-  );
-  useEffect(() => {
-    const syncMode = () =>
-      setStoredMode(localStorage.getItem('dashboardMode') || 'community');
-
-    window.addEventListener('storage', syncMode);
-    window.addEventListener('dashboardModeChanged', syncMode); // custom event for same tab
-    return () => {
-      window.removeEventListener('storage', syncMode);
-      window.removeEventListener('dashboardModeChanged', syncMode);
-    };
-  }, []);
-
-  // The page you are on decides which menu you see, so the two can never disagree.
-  const matchesRoute = (items) => items.some(isActiveItem);
-  const dashboardMode = matchesRoute(lmsNavItems)
-    ? 'lms'
-    : matchesRoute(communityNavItems)
-      ? 'community'
-      : storedMode;
-  const navItems = dashboardMode === 'community' ? communityNavItems : lmsNavItems;
-  const pageLabel = [...communityNavItems, ...lmsNavItems].find(isActiveItem)?.label ?? 'Orbit';
-
-  const handleSwitchMode = (mode) => {
-    if (mode === dashboardMode) return;
-    localStorage.setItem('dashboardMode', mode);
-    window.dispatchEvent(new Event('dashboardModeChanged'));
-    handleNavigate(mode === 'community' ? '/community' : '/dashboard');
-  };
+  const pageLabel = navItems.find(isActiveItem)?.label ?? 'Orbit';
 
   return (
     <>
@@ -317,7 +269,7 @@ export default function AppSidebar() {
               currentUser?.username?.charAt(0)?.toUpperCase() || <FaUser aria-hidden="true" />
             )}
           </button>
-          <div className={`min-w-0 leading-tight ${location.pathname === '/search' ? 'hidden' : ''}`}>
+          <div className={`min-w-0 leading-tight ${location.pathname === '/explore' ? 'hidden' : ''}`}>
             <p className="text-base font-semibold tracking-tight text-neutral-100">Orb8</p>
             <p className="truncate text-[11px] font-light text-neutral-500">{pageLabel}</p>
           </div>
@@ -348,21 +300,6 @@ export default function AppSidebar() {
                     </span>
                   </div>
                   <button type="button" onClick={() => dispatch(setMobileMenuOpen(false))} className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-neutral-400 transition hover:bg-white/10 hover:text-white" aria-label="Close navigation menu"><FaTimes /></button>
-                </div>
-
-                <div role="tablist" aria-label="Section" className="mb-4 grid grid-cols-2 gap-1 rounded-xl border border-white/10 bg-white/[0.04] p-1">
-                  {[['community', 'Community'], ['lms', 'Learn']].map(([mode, label]) => (
-                    <button
-                      key={mode}
-                      type="button"
-                      role="tab"
-                      aria-selected={dashboardMode === mode}
-                      onClick={() => handleSwitchMode(mode)}
-                      className={`min-h-10 rounded-lg px-3 text-sm font-medium transition ${dashboardMode === mode ? 'bg-white/12 text-white' : 'text-neutral-400 hover:bg-white/5 hover:text-white'}`}
-                    >
-                      {label}
-                    </button>
-                  ))}
                 </div>
 
                 <nav className="min-h-0 flex-1 overflow-y-auto" aria-label="Pages">

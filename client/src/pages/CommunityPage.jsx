@@ -5,7 +5,7 @@ import {
   FaLock,
   FaGlobe
 } from 'react-icons/fa';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import {
   setContent,
@@ -176,6 +176,14 @@ export default function CommunityPage() {
   const underlineRef = useRef(null);
   const lastScrollPos = useRef(0);
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // The mobile bottom bar's Create button arrives here as ?compose=1.
+  useEffect(() => {
+    if (searchParams.get('compose') !== '1') return;
+    setShowComposer(true);
+    setSearchParams({}, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   // Crossfading ambient backdrop
   const [bgA, setBgA] = useState('');
@@ -671,7 +679,7 @@ export default function CommunityPage() {
         onClick={() => {
           setShowComposer(true);
         }}
-        className="fixed bottom-8 right-8 w-14 h-14 rounded-full bg-gradient-to-br from-[#858585] to-[#656565] text-black flex items-center justify-center shadow-[0_4px_24px_#a6a6a6] z-50 transition-all duration-300 ease-out hover:shadow-[0_6px_32px_#a6a6a6] hover:scale-110 active:scale-95 ring-2 ring-[#858585] hover:ring-[#a6a6a6]"
+        className="fixed bottom-8 right-8 hidden md:flex w-14 h-14 rounded-full bg-gradient-to-br from-[#858585] to-[#656565] text-black items-center justify-center shadow-[0_4px_24px_#a6a6a6] z-50 transition-all duration-300 ease-out hover:shadow-[0_6px_32px_#a6a6a6] hover:scale-110 active:scale-95 ring-2 ring-[#858585] hover:ring-[#a6a6a6]"
         aria-label="New post"
       >
         <Plus size={26} strokeWidth={2.5} />

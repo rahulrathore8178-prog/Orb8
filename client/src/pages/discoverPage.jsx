@@ -191,7 +191,7 @@ const DiscoverPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#0b0b0d] px-4 py-6 sm:px-6 sm:py-10">
+    <div className="min-h-full bg-[#0b0b0d] px-4 py-6 sm:px-6 sm:py-10">
       <div className="mx-auto w-full max-w-md sm:max-w-lg">
         {/* Header */}
         {isSharing && (

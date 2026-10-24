@@ -1,38 +1,27 @@
 import './App.css'
 import axios from 'axios';
-import { BrowserRouter, Routes, Route, useParams, useNavigate, Navigate, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useNavigate, Navigate, useLocation } from "react-router-dom";
 import LoginPage from './pages/LoginPage.jsx'
 import RegisterationPage from './pages/RegisterationPage.jsx';
 import SignupPage from './pages/SignupPage.jsx';
-import DashboardPage from './pages/DashboardPage.jsx';
-import LevelsPage from './pages/LevelsPage';
-import LanguagePage from './pages/LanguagePage.jsx';
-import LearnPage from './pages/LearnPage.jsx';
-import { LeaderboardPage } from './pages/LeaderboardPage.jsx';
-import ChallengePage from './pages/ChallengePage.jsx';
-import ProfilePage from './pages/ProfilePage.jsx';
 import CommunityPage from './pages/CommunityPage.jsx';
-import ProgressPage from './pages/ProgressPage.jsx';
 import { FriendsPage } from './pages/FriendsPage.jsx';
 import ForgotPasswordPage from './pages/ForgotPasswordPage.jsx';
 import ResetPasswordPage from './pages/ResetPasswordPage.jsx';
 import OAuthCallbackPage from './pages/OAuthCallbackPage.jsx';
 import { useEffect, useState } from 'react';
 import LandingPage from './pages/LandingPage.jsx';
-import LandingHeader from './components/LandingPage/LandingHeader.jsx';
 import AppSidebar from './components/Layout/AppSidebar.jsx';
-import LevelPage from './pages/LevelPage.jsx';
+import BottomTabBar from './components/Layout/BottomTabBar.jsx';
 import Messages from './pages/messages.jsx';
 import Comments from './pages/CommentsModal.jsx';
 import SocialProfileSection from './pages/SocialProfilePage.jsx';
 import GlassFeed from './pages/LandinPageExperimental.jsx';
-import DiscoverPage from './pages/discoverPage.jsx';
-import CosmicDiscoveryPage from './pages/CosmicDiscoveryPage.jsx';
+import ExplorePage from './pages/ExplorePage.jsx';
 import AskIgris from './pages/askIgris.jsx';
 import RememberIgris from './pages/rememberIgris.jsx';
 import { onMessage } from './firebase';
 import { registerPushNotifications } from './notifications/registerPushNotifications';
-import SearchPage from './pages/SearchPage.jsx';
 import OrbitalPage from './pages/OrbitalPage.jsx';
 import SettingsPage from './pages/SettingsPage.jsx'
 
@@ -243,7 +232,6 @@ function AppShell() {
 
   return (
     <>
-      {/* <LandingHeader /> */}
       <div className="app-frame relative isolate flex h-dvh min-h-0 max-h-dvh flex-col overflow-hidden bg-[#050505] text-neutral-100">
         <div className="orbit-backdrop" aria-hidden="true">
           <div className="orbit-backdrop-glow" />
@@ -259,7 +247,6 @@ function AppShell() {
         <div key={location.pathname.split('/')[1] || 'root'} className="app-content page-enter relative z-10 min-h-0 min-w-0 flex-1">
           <Routes>
             <Route path="/" element={<LandingPage />} />
-            <Route path="/language/:langId" element={<LanguagePageWrapper />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterationPage />} />
             <Route path="/signup" element={<SignupPage />} />
@@ -268,66 +255,10 @@ function AppShell() {
             <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
             <Route path="/next-step" element={<Navigate to="/signup" replace />} />
             <Route
-              path="/dashboard"
-              element={(
-                <ProtectedRoute>
-                  <DashboardPage />
-                </ProtectedRoute>
-              )}
-            />
-            <Route
-              path="/Dashboard"
-              element={(
-                <ProtectedRoute>
-                  <DashboardPage />
-                </ProtectedRoute>
-              )}
-            />
-            <Route
-              path="/levels"
-              element={(
-                <ProtectedRoute>
-                  <LevelsPage />
-                </ProtectedRoute>
-              )}
-            />
-            <Route
-              path="/levels"
-              element={(
-                <ProtectedRoute>
-                  <LevelsPage />
-                </ProtectedRoute>
-              )}
-            />
-            <Route
               path="/experimental"
               element={(
                 <ProtectedRoute>
                   <GlassFeed />
-                </ProtectedRoute>
-              )}
-            />
-            <Route
-              path="/Learn"
-              element={(
-                <ProtectedRoute>
-                  <LearnPage />
-                </ProtectedRoute>
-              )}
-            />
-            <Route
-              path="/leaderboard"
-              element={(
-                <ProtectedRoute>
-                  <LeaderboardPage />
-                </ProtectedRoute>
-              )}
-            />
-            <Route
-              path="/challenges"
-              element={(
-                <ProtectedRoute>
-                  <ChallengePage />
                 </ProtectedRoute>
               )}
             />
@@ -348,13 +279,16 @@ function AppShell() {
               )}
             />
             <Route
-              path="/search"
+              path="/explore"
               element={(
                 <ProtectedRoute>
-                  <SearchPage />
+                  <ExplorePage />
                 </ProtectedRoute>
               )}
             />
+            <Route path="/search" element={<Navigate to="/explore?tab=search" replace />} />
+            <Route path="/discover" element={<Navigate to="/explore?tab=nearby" replace />} />
+            <Route path="/cosmic-discovery" element={<Navigate to="/explore?tab=cosmic" replace />} />
             <Route
               path="/orbital/:orbitalId"
               element={(
@@ -380,22 +314,6 @@ function AppShell() {
               )}
             />
             <Route
-              path="/discover"
-              element={(
-                <ProtectedRoute>
-                  <DiscoverPage />
-                </ProtectedRoute>
-              )}
-            />
-            <Route
-              path="/cosmic-discovery"
-              element={(
-                <ProtectedRoute>
-                  <CosmicDiscoveryPage />
-                </ProtectedRoute>
-              )}
-            />
-            <Route
               path="/askIgris"
               element={(
                 <ProtectedRoute>
@@ -408,22 +326,6 @@ function AppShell() {
               element={(
                 <ProtectedRoute>
                   <RememberIgris />
-                </ProtectedRoute>
-              )}
-            />
-            <Route
-              path="/profile/:userId"
-              element={(
-                <ProtectedRoute>
-                  <ProfilePage />
-                </ProtectedRoute>
-              )}
-            />
-            <Route
-              path="/progress"
-              element={(
-                <ProtectedRoute>
-                  <ProgressPage />
                 </ProtectedRoute>
               )}
             />
@@ -451,46 +353,13 @@ function AppShell() {
                 </ProtectedRoute>
               )}
             />
-            <Route path="/level/:courseId/:levelNo" element={<LevelPage />} />
-            <Route path="/levels/:courseId" element={<LevelsPageWrapper />} />
-            <Route path="/languagepage" element={<LanguagePage />} />
+            <Route path="*" element={<Navigate to="/community" replace />} />
           </Routes>
         </div>
+        {showSidebar ? <BottomTabBar /> : null}
       </div>
     </>
   )
-}
-
-function LanguagePageWrapper() {
-  const { langId } = useParams();
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    window.scrollTo(0, 0);
-  }, [langId]);
-
-  return (
-    <LanguagePage
-      langId={langId}
-      onBack={() => navigate("/")}
-    />
-  );
-}
-
-function LevelsPageWrapper() {
-  const { courseId } = useParams();
-  const navigate = useNavigate();
-  const hasSession = Boolean(localStorage.getItem('user') || localStorage.getItem('token'));
-
-  useEffect(() => {
-    window.scrollTo(0, 0);
-  }, [courseId]);
-
-  if (!hasSession) {
-    return <Navigate to="/login" replace />;
-  }
-
-  return <LevelsPage courseId={courseId} onBack={() => navigate("/dashboard")} />;
 }
 
 export default App  
