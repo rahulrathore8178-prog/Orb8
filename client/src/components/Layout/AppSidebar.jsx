@@ -3,21 +3,14 @@ import {
   FaBell,
   FaBook,
   FaBrain,
-  FaChartLine,
   FaEllipsisH,
   FaFacebookMessenger,
-  FaFlagCheckered,
-  FaGraduationCap,
   FaHome,
-  FaMedal,
   FaPlus,
-  FaRegStar,
   FaSearch,
   FaSignOutAlt,
   FaTimes,
-  FaTrophy,
   FaUser,
-  FaUserFriends,
   FaUsers
 } from 'react-icons/fa';
 import { useDispatch, useSelector } from 'react-redux';
@@ -28,29 +21,16 @@ import { apiUrl, getAuthHeaders } from '../../utilites/DashboardHelper';
 import { setCurrentUser } from '../../redux/slices/dashboardSlice';
 import { registerPushNotifications } from '../../notifications/registerPushNotifications';
 import { raised } from '../../utilites/cssUtility';
-import { ChevronRight, Settings, Users2Icon } from 'lucide-react';
+import { Settings } from 'lucide-react';
 
-const communityNavItems = [
+const navItems = [
   { key: 'home', label: 'Home', icon: FaHome, to: '/community', match: ['/community'] },
+  { key: 'explore', label: 'Explore', icon: FaSearch, to: '/explore', match: ['/explore'] },
   { key: 'messages', label: 'Messages', icon: FaFacebookMessenger, to: '/messages', match: ['/messages'] },
   { key: 'askIgris', label: 'Ask Igris', icon: FaBrain, to: '/askIgris', match: ['/askIgris'] },
   { key: 'rememberIgris', label: 'Remember Igris', icon: FaBook, to: '/rememberIgris', match: ['/rememberIgris'] },
-  { key: 'search', label: 'Search', icon: FaSearch, to: '/search', match: ['/search'] },
-  { key: 'discover', label: 'Discover', icon: FaUserFriends, to: '/discover', match: ['/discover'] },
-  { key: 'cosmicDiscovery', label: 'Cosmic Discovery', icon: FaSearch, to: '/cosmic-discovery', match: ['/cosmic-discovery'] },
-  { key: 'socialprofile', label: 'Social Profile', icon: FaUser, to: '/socialprofile', match: ['/socialprofile'] },
+  { key: 'profile', label: 'Profile', icon: FaUser, to: '/profile', match: ['/profile', '/socialprofile'] },
 ];
-
-const lmsNavItems = [
-  { key: 'dashboard', label: 'Dashboard', icon: FaRegStar, to: '/dashboard', match: ['/dashboard'] },
-  { key: 'learn', label: 'Learn', icon: FaGraduationCap, to: '/learn', match: ['/learn', '/levels', '/language'] },
-  { key: 'challenges', label: 'Challenges', icon: FaFlagCheckered, to: '/challenges', match: ['/challenges'] },
-  { key: 'leaderboards', label: 'Leaderboards', icon: FaTrophy, to: '/leaderboard', match: ['/leaderboard'] },
-  { key: 'profile', label: 'Profile', icon: FaMedal, to: '/profile', match: ['/profile'] },
-  { key: 'progress', label: 'Progress', icon: FaChartLine, to: '/progress', match: ['/progress'] },
-];
-
-const MODES = ['Social', 'Professional', 'Private'];
 
 function SidebarItem({ item, isActive, collapsed, onClick, iconOnly = false }) {
   const Icon = item.icon;
@@ -189,11 +169,7 @@ export default function AppSidebar() {
   const isMobileMenuOpen = useSelector((state) => state.sideBar.isMobileMenuOpen);
   const currentUser = useSelector((state) => state.dashboard.currentUser);
 
-  // Personality mode
-  const [activeMode, setActiveMode] = useState('Social');
-  const [isOpen, setIsOpen] = useState(false);
   const [isHeaderVisible, setIsHeaderVisible] = useState(true);
-  const containerRef = useRef(null);
   const lastTouchPosition = useRef(null);
 
   useEffect(() => {
@@ -235,26 +211,6 @@ export default function AppSidebar() {
     };
   }, []);
 
-  // closes the menu on outside tap/click — needed for mobile since there's no "mouse leave"
-  useEffect(() => {
-    const handleOutsideClick = (e) => {
-      if (containerRef.current && !containerRef.current.contains(e.target)) {
-        setIsOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleOutsideClick);
-    document.addEventListener('touchstart', handleOutsideClick);
-    return () => {
-      document.removeEventListener('mousedown', handleOutsideClick);
-      document.removeEventListener('touchstart', handleOutsideClick);
-    };
-  }, []);
-
-  const handleSelect = (mode) => {
-    setActiveMode(mode);
-    setIsOpen(false);
-  };
-
   const handleLogout = async () => {
     try {
       await axios.get(`${apiUrl}/api/auth/user/logout`, {
@@ -291,22 +247,7 @@ export default function AppSidebar() {
   const isActiveItem = (item) =>
     item.match.some((routePrefix) => location.pathname.startsWith(routePrefix));
 
-  const [dashboardMode, setDashboardMode] = useState(
-    localStorage.getItem('dashboardMode') || 'community'
-  );
-  useEffect(() => {
-    const syncMode = () =>
-      setDashboardMode(localStorage.getItem('dashboardMode') || 'community');
-
-    window.addEventListener('storage', syncMode);
-    window.addEventListener('dashboardModeChanged', syncMode); // custom event for same tab
-    return () => {
-      window.removeEventListener('storage', syncMode);
-      window.removeEventListener('dashboardModeChanged', syncMode);
-    };
-  }, []);
-  const navItems = dashboardMode === 'community' ? communityNavItems : lmsNavItems;
-  const pageLabel = [...communityNavItems, ...lmsNavItems].find(isActiveItem)?.label ?? 'Orbit';
+  const pageLabel = navItems.find(isActiveItem)?.label ?? 'Orbit';
 
   return (
     <>
@@ -328,7 +269,7 @@ export default function AppSidebar() {
               currentUser?.username?.charAt(0)?.toUpperCase() || <FaUser aria-hidden="true" />
             )}
           </button>
-          <div className={`min-w-0 leading-tight ${location.pathname === '/search' ? 'hidden' : ''}`}>
+          <div className={`min-w-0 leading-tight ${location.pathname === '/explore' ? 'hidden' : ''}`}>
             <p className="text-base font-semibold tracking-tight text-neutral-100">Orb8</p>
             <p className="truncate text-[11px] font-light text-neutral-500">{pageLabel}</p>
           </div>
@@ -359,13 +300,6 @@ export default function AppSidebar() {
                     </span>
                   </div>
                   <button type="button" onClick={() => dispatch(setMobileMenuOpen(false))} className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-neutral-400 transition hover:bg-white/10 hover:text-white" aria-label="Close navigation menu"><FaTimes /></button>
-                </div>
-
-                <div ref={containerRef} className="relative mb-4">
-                  <button type="button" onClick={() => setIsOpen((previous) => !previous)} aria-expanded={isOpen} className="flex min-h-10 w-full items-center justify-between rounded-xl border border-white/10 bg-white/[0.04] px-3 text-sm text-neutral-200 transition hover:bg-white/[0.08]">
-                    <span>{activeMode}</span><ChevronRight size={18} className={`transition-transform ${isOpen ? 'rotate-90' : ''}`} />
-                  </button>
-                  {isOpen && <div className="absolute inset-x-0 top-full z-20 mt-1 overflow-hidden rounded-xl border border-white/10 bg-[#111111] shadow-xl">{MODES.map((mode) => <button key={mode} type="button" onClick={() => handleSelect(mode)} className={`w-full px-3 py-2.5 text-left text-sm transition ${activeMode === mode ? 'bg-white/10 text-white' : 'text-neutral-400 hover:bg-white/5 hover:text-white'}`}>{mode}</button>)}</div>}
                 </div>
 
                 <nav className="min-h-0 flex-1 overflow-y-auto" aria-label="Pages">

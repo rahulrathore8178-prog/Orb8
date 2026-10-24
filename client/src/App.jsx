@@ -1,73 +1,94 @@
 import './App.css'
 import axios from 'axios';
-import { BrowserRouter, Routes, Route, useParams, useNavigate, Navigate, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useNavigate, Navigate, useLocation } from "react-router-dom";
 import LoginPage from './pages/LoginPage.jsx'
 import RegisterationPage from './pages/RegisterationPage.jsx';
 import SignupPage from './pages/SignupPage.jsx';
-import SignupNextPage from './pages/SignupNextPage.jsx';
-import DashboardPage from './pages/DashboardPage.jsx';
-import LevelsPage from './pages/LevelsPage';
-import LanguagePage from './pages/LanguagePage.jsx';
-import LearnPage from './pages/LearnPage.jsx';
-import { LeaderboardPage } from './pages/LeaderboardPage.jsx';
-import ChallengePage from './pages/ChallengePage.jsx';
-import ProfilePage from './pages/ProfilePage.jsx';
 import CommunityPage from './pages/CommunityPage.jsx';
-import ProgressPage from './pages/ProgressPage.jsx';
 import { FriendsPage } from './pages/FriendsPage.jsx';
 import ForgotPasswordPage from './pages/ForgotPasswordPage.jsx';
 import ResetPasswordPage from './pages/ResetPasswordPage.jsx';
 import OAuthCallbackPage from './pages/OAuthCallbackPage.jsx';
 import { useEffect, useState } from 'react';
 import LandingPage from './pages/LandingPage.jsx';
-import LandingHeader from './components/LandingPage/LandingHeader.jsx';
 import AppSidebar from './components/Layout/AppSidebar.jsx';
-import LevelPage from './pages/LevelPage.jsx';
+import BottomTabBar from './components/Layout/BottomTabBar.jsx';
 import Messages from './pages/messages.jsx';
 import Comments from './pages/CommentsModal.jsx';
 import SocialProfileSection from './pages/SocialProfilePage.jsx';
 import GlassFeed from './pages/LandinPageExperimental.jsx';
-import DiscoverPage from './pages/discoverPage.jsx';
-import CosmicDiscoveryPage from './pages/CosmicDiscoveryPage.jsx';
+import ExplorePage from './pages/ExplorePage.jsx';
 import AskIgris from './pages/askIgris.jsx';
 import RememberIgris from './pages/rememberIgris.jsx';
 import { onMessage } from './firebase';
 import { registerPushNotifications } from './notifications/registerPushNotifications';
-import SearchPage from './pages/SearchPage.jsx';
 import OrbitalPage from './pages/OrbitalPage.jsx';
 import SettingsPage from './pages/SettingsPage.jsx'
 
+const AUTH_RECHECK_MS = 5 * 60 * 1000;
+let lastVerifiedAt = 0;
+
+// A fresh login must be verified once before it is trusted again.
+if (typeof window !== 'undefined') {
+  window.addEventListener('auth:user-updated', () => {
+    lastVerifiedAt = 0;
+  });
+}
+
+const hasFreshSession = () =>
+  Boolean(localStorage.getItem('token')) && Date.now() - lastVerifiedAt < AUTH_RECHECK_MS;
+
+function clearSession() {
+  lastVerifiedAt = 0;
+  localStorage.removeItem('user');
+  localStorage.removeItem('token');
+}
+
 function ProtectedRoute({ children }) {
-  const [isChecking, setIsChecking] = useState(true);
-  const [isAllowed, setIsAllowed] = useState(false);
+  const [isChecking, setIsChecking] = useState(() => !hasFreshSession());
+  const [isAllowed, setIsAllowed] = useState(() => hasFreshSession());
+  const [isSlow, setIsSlow] = useState(false);
 
   useEffect(() => {
+    if (hasFreshSession()) return undefined;
+
     let isActive = true;
+    const slowTimer = setTimeout(() => {
+      if (isActive) setIsSlow(true);
+    }, 6000);
 
     async function checkAuth() {
+      const token = localStorage.getItem('token');
       try {
         const apiUrl = import.meta.env.VITE_API_URL || '';
-        const token = localStorage.getItem('token');
-
         const response = await axios.get(`${apiUrl}/api/auth/user/me`, {
           withCredentials: true,
+          timeout: 70000,
           headers: token ? { Authorization: `Bearer ${token}` } : {}
         });
 
         if (!isActive) return;
         if (response.data?.user) {
           localStorage.setItem('user', JSON.stringify(response.data.user));
+          lastVerifiedAt = Date.now();
           setIsAllowed(true);
         } else {
-          localStorage.removeItem('user');
-          localStorage.removeItem('token');
+          clearSession();
           setIsAllowed(false);
         }
-      } catch {
+      } catch (error) {
         if (!isActive) return;
-        localStorage.removeItem('user');
-        localStorage.removeItem('token');
-        setIsAllowed(false);
+        const status = error.response?.status;
+        if (status === 401 || status === 403) {
+          clearSession();
+          setIsAllowed(false);
+        } else if (token && localStorage.getItem('user')) {
+          // Network drops and server cold starts must not sign anyone out.
+          console.warn('[AUTH] Session check failed, keeping the saved session:', error.message);
+          setIsAllowed(true);
+        } else {
+          setIsAllowed(false);
+        }
       } finally {
         if (isActive) setIsChecking(false);
       }
@@ -76,11 +97,14 @@ function ProtectedRoute({ children }) {
     checkAuth();
     return () => {
       isActive = false;
+      clearTimeout(slowTimer);
     };
   }, []);
   const fullScreen = true;
   const label = "ORBIT";
-  const subtext = "Loading your feed...";
+  const subtext = isSlow
+    ? "Waking the server up. The first visit can take up to a minute..."
+    : "Loading your feed...";
   const wrapperClass = fullScreen
     ? "fixed inset-0 z-50 bg-black"
     : "w-full";
@@ -208,7 +232,6 @@ function AppShell() {
 
   return (
     <>
-      {/* <LandingHeader /> */}
       <div className="app-frame relative isolate flex h-dvh min-h-0 max-h-dvh flex-col overflow-hidden bg-[#050505] text-neutral-100">
         <div className="orbit-backdrop" aria-hidden="true">
           <div className="orbit-backdrop-glow" />
@@ -224,75 +247,18 @@ function AppShell() {
         <div key={location.pathname.split('/')[1] || 'root'} className="app-content page-enter relative z-10 min-h-0 min-w-0 flex-1">
           <Routes>
             <Route path="/" element={<LandingPage />} />
-            <Route path="/language/:langId" element={<LanguagePageWrapper />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterationPage />} />
             <Route path="/signup" element={<SignupPage />} />
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
             <Route path="/reset-password" element={<ResetPasswordPage />} />
             <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
-            <Route path="/next-step" element={<ProtectedRoute><SignupNextPage /></ProtectedRoute>} />
-            <Route
-              path="/dashboard"
-              element={(
-                <ProtectedRoute>
-                  <DashboardPage />
-                </ProtectedRoute>
-              )}
-            />
-            <Route
-              path="/Dashboard"
-              element={(
-                <ProtectedRoute>
-                  <DashboardPage />
-                </ProtectedRoute>
-              )}
-            />
-            <Route
-              path="/levels"
-              element={(
-                <ProtectedRoute>
-                  <LevelsPage />
-                </ProtectedRoute>
-              )}
-            />
-            <Route
-              path="/levels"
-              element={(
-                <ProtectedRoute>
-                  <LevelsPage />
-                </ProtectedRoute>
-              )}
-            />
+            <Route path="/next-step" element={<Navigate to="/signup" replace />} />
             <Route
               path="/experimental"
               element={(
                 <ProtectedRoute>
                   <GlassFeed />
-                </ProtectedRoute>
-              )}
-            />
-            <Route
-              path="/Learn"
-              element={(
-                <ProtectedRoute>
-                  <LearnPage />
-                </ProtectedRoute>
-              )}
-            />
-            <Route
-              path="/leaderboard"
-              element={(
-                <ProtectedRoute>
-                  <LeaderboardPage />
-                </ProtectedRoute>
-              )}
-            />
-            <Route
-              path="/challenges"
-              element={(
-                <ProtectedRoute>
-                  <ChallengePage />
                 </ProtectedRoute>
               )}
             />
@@ -313,13 +279,16 @@ function AppShell() {
               )}
             />
             <Route
-              path="/search"
+              path="/explore"
               element={(
                 <ProtectedRoute>
-                  <SearchPage />
+                  <ExplorePage />
                 </ProtectedRoute>
               )}
             />
+            <Route path="/search" element={<Navigate to="/explore?tab=search" replace />} />
+            <Route path="/discover" element={<Navigate to="/explore?tab=nearby" replace />} />
+            <Route path="/cosmic-discovery" element={<Navigate to="/explore?tab=cosmic" replace />} />
             <Route
               path="/orbital/:orbitalId"
               element={(
@@ -345,22 +314,6 @@ function AppShell() {
               )}
             />
             <Route
-              path="/discover"
-              element={(
-                <ProtectedRoute>
-                  <DiscoverPage />
-                </ProtectedRoute>
-              )}
-            />
-            <Route
-              path="/cosmic-discovery"
-              element={(
-                <ProtectedRoute>
-                  <CosmicDiscoveryPage />
-                </ProtectedRoute>
-              )}
-            />
-            <Route
               path="/askIgris"
               element={(
                 <ProtectedRoute>
@@ -373,22 +326,6 @@ function AppShell() {
               element={(
                 <ProtectedRoute>
                   <RememberIgris />
-                </ProtectedRoute>
-              )}
-            />
-            <Route
-              path="/profile/:userId"
-              element={(
-                <ProtectedRoute>
-                  <ProfilePage />
-                </ProtectedRoute>
-              )}
-            />
-            <Route
-              path="/progress"
-              element={(
-                <ProtectedRoute>
-                  <ProgressPage />
                 </ProtectedRoute>
               )}
             />
@@ -416,46 +353,13 @@ function AppShell() {
                 </ProtectedRoute>
               )}
             />
-            <Route path="/level/:courseId/:levelNo" element={<LevelPage />} />
-            <Route path="/levels/:courseId" element={<LevelsPageWrapper />} />
-            <Route path="/languagepage" element={<LanguagePage />} />
+            <Route path="*" element={<Navigate to="/community" replace />} />
           </Routes>
         </div>
+        {showSidebar ? <BottomTabBar /> : null}
       </div>
     </>
   )
-}
-
-function LanguagePageWrapper() {
-  const { langId } = useParams();
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    window.scrollTo(0, 0);
-  }, [langId]);
-
-  return (
-    <LanguagePage
-      langId={langId}
-      onBack={() => navigate("/")}
-    />
-  );
-}
-
-function LevelsPageWrapper() {
-  const { courseId } = useParams();
-  const navigate = useNavigate();
-  const hasSession = Boolean(localStorage.getItem('user') || localStorage.getItem('token'));
-
-  useEffect(() => {
-    window.scrollTo(0, 0);
-  }, [courseId]);
-
-  if (!hasSession) {
-    return <Navigate to="/login" replace />;
-  }
-
-  return <LevelsPage courseId={courseId} onBack={() => navigate("/dashboard")} />;
 }
 
 export default App  

@@ -48,7 +48,15 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
             }
           }
 
-          const username = profile.displayName?.replace(/\s+/g, '_').toLowerCase() || 'google_user';
+          const baseUsername = (profile.displayName || '')
+            .replace(/\s+/g, '_')
+            .replace(/[^\w]/g, '')
+            .toLowerCase()
+            .slice(0, 24) || 'google_user';
+          let username = baseUsername;
+          for (let attempt = 0; attempt < 5 && (await User.exists({ username })); attempt += 1) {
+            username = `${baseUsername}_${Math.random().toString(36).slice(2, 6)}`;
+          }
           console.log(`${TAG} S3a creating new user`, { username });
           user = await User.create({
             username,

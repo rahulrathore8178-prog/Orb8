@@ -205,7 +205,7 @@ export default function SearchPage() {
     const remove = (term) => setHistory((h) => h.filter((x) => x !== term));
 
     return (
-        <main ref={root} className="relative flex h-[100dvh] w-full flex-col overflow-hidden bg-black font-['Sora',system-ui,sans-serif] text-neutral-200 selection:bg-white/20">
+        <main ref={root} className="relative flex h-full w-full flex-col overflow-hidden bg-black font-['Sora',system-ui,sans-serif] text-neutral-200 selection:bg-white/20">
             <style>{`@import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600&display=swap');`}</style>
 
             {/* orbit backdrop */}
