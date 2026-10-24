@@ -1,4 +1,5 @@
 const User = require('../models/user.model');
+const { recordSocialActivity } = require('../utils/habit');
 
 /**
  * Search users by username (excluding self and already-friends)
@@ -260,6 +261,7 @@ exports.sendFriendRequest = async (req, res) => {
     targetUser.friendRequests.push({ from: currentUserId });
     await targetUser.save();
 
+    recordSocialActivity(currentUserId);
     res.json({ message: 'Friend request sent successfully' });
   } catch (error) {
     console.error('Send friend request error:', error);
@@ -298,6 +300,7 @@ exports.acceptFriendRequest = async (req, res) => {
 
     await currentUser.save();
 
+    recordSocialActivity(currentUserId);
     res.json({ message: 'Friend request accepted', friendId });
   } catch (error) {
     console.error('Accept friend request error:', error);

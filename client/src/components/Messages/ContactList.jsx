@@ -164,7 +164,7 @@ export function Sidebar({
                       {c.lastMsg}
                     </span>
                     {unread && (
-                      <span className="shrink-0 min-w-[18px] h-[18px] px-1.5 rounded-full bg-blue-500 text-white text-[11px] font-bold flex items-center justify-center">
+                      <span className="shrink-0 min-w-[18px] h-[18px] px-1.5 rounded-full bg-blue-500 text-white text-xs font-bold flex items-center justify-center">
                         {c.unreadCount}
                       </span>
                     )}

@@ -1,6 +1,7 @@
 import { FaFacebookMessenger, FaHome, FaPlus, FaSearch, FaUser } from 'react-icons/fa';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { raised } from '../../utilites/cssUtility';
+import { useUnreadMessages } from '../../utilites/useUnreadMessages';
 
 const TABS = [
   { key: 'home', label: 'Home', icon: FaHome, to: '/community', match: ['/community'] },
@@ -13,6 +14,7 @@ const TABS = [
 export default function BottomTabBar() {
   const location = useLocation();
   const navigate = useNavigate();
+  const unreadMessages = useUnreadMessages();
 
   return (
     <div className="relative z-20 shrink-0 px-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 md:hidden">
@@ -37,11 +39,14 @@ export default function BottomTabBar() {
                     <Icon size={13} />
                   </span>
                 ) : (
-                  <span className="grid h-8 w-8 place-items-center" aria-hidden="true">
+                  <span className="relative grid h-8 w-8 place-items-center" aria-hidden="true">
                     <Icon size={17} />
+                    {key === 'messages' && unreadMessages > 0 && (
+                      <span className="absolute right-0.5 top-0.5 h-2.5 w-2.5 rounded-full bg-rose-400 ring-2 ring-[#050505]" />
+                    )}
                   </span>
                 )}
-                <span className="text-xs">{label}</span>
+                <span className="text-xs">{label}{key === 'messages' && unreadMessages > 0 && <span className="sr-only">, {unreadMessages} unread</span>}</span>
               </button>
             );
           })}

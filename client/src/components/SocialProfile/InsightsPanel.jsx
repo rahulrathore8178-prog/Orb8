@@ -129,7 +129,7 @@ function StatTile({ label, value, hint, color, Icon, index }) {
           <Icon size={18} />
         </span>
       </div>
-      <div className="relative mt-3 text-[11px] text-neutral-500">{hint}</div>
+      <div className="relative mt-3 text-xs text-neutral-400">{hint}</div>
     </div>
   );
 }
@@ -176,7 +176,7 @@ function EngagementRing({ rate, hasViews }) {
             <div className="text-3xl font-light tracking-tight text-white tabular-nums">
               {hasViews ? `${animatedRate.toFixed(rate < 10 ? 1 : 0)}%` : "—"}
             </div>
-            <div className="text-[10px] uppercase tracking-[0.16em] text-neutral-500">engaged</div>
+            <div className="text-xs uppercase tracking-[0.16em] text-neutral-400">engaged</div>
           </div>
         </div>
       </div>
@@ -185,7 +185,7 @@ function EngagementRing({ rate, hasViews }) {
           <Flame size={14} className="text-orange-400" />
           {hasViews ? engagementTier(rate) : "Awaiting viewers"}
         </div>
-        <p className="text-[11px] leading-relaxed text-neutral-500">Likes and comments as a share of unique views.</p>
+        <p className="text-xs leading-relaxed text-neutral-400">Likes and comments as a share of unique views.</p>
       </div>
     </div>
   );
@@ -200,7 +200,7 @@ function ActivityChart({ days }) {
     <div className={`rounded-2xl p-5 lg:col-span-2 ${glassRow}`}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-medium text-neutral-200">Activity · last {DAYS} days</h3>
-        <div className="flex items-center gap-4 text-[11px] text-neutral-400">
+        <div className="flex items-center gap-4 text-xs text-neutral-400">
           <span className="flex items-center gap-1.5"><i className="h-2 w-2 rounded-full" style={{ background: COLORS.posts }} />Posts</span>
           <span className="flex items-center gap-1.5"><i className="h-2 w-2 rounded-full" style={{ background: COLORS.comments }} />Comments</span>
         </div>
@@ -239,7 +239,7 @@ function ActivityChart({ days }) {
         {days.map((day) => (
           <span
             key={day.key}
-            className={`flex-1 text-center text-[10px] ${day.key === todayKey ? "font-semibold text-white" : "text-neutral-600"}`}
+            className={`flex-1 text-center text-xs ${day.key === todayKey ? "font-semibold text-white" : "text-neutral-400"}`}
           >
             {day.date.toLocaleDateString(undefined, { weekday: "narrow" })}
           </span>
@@ -277,7 +277,7 @@ function ContentMix({ postTypes = {}, total }) {
                 </span>
                 <span className="min-w-0">
                   <span className="block text-sm font-medium tabular-nums text-neutral-100">{item.count}</span>
-                  <span className="block text-[11px] text-neutral-500">{item.label}</span>
+                  <span className="block text-xs text-neutral-400">{item.label}</span>
                 </span>
               </li>
             ))}
@@ -306,7 +306,7 @@ function TopHashtags({ tags = [] }) {
               style={{ "--i": index, fontSize: `${Math.max(11, 14 - index)}px` }}
             >
               #{tag.replace(/^#/, "")}
-              <b className="rounded-full bg-white/10 px-1.5 py-px text-[10px] font-medium text-neutral-400">{count}</b>
+              <b className="rounded-full bg-white/10 px-1.5 py-px text-xs font-medium text-neutral-300">{count}</b>
             </span>
           ))}
         </div>
@@ -343,7 +343,7 @@ function TopPosts({ posts = [], resolveImage }) {
                 )}
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm text-neutral-100">{post.snippet || (post.image ? "Photo post" : "Untitled post")}</p>
-                  <div className="mt-1 flex items-center gap-3 text-[11px] text-neutral-400">
+                  <div className="mt-1 flex items-center gap-3 text-xs text-neutral-400">
                     <span className="flex items-center gap-1"><Heart size={11} style={{ color: COLORS.likes }} />{post.likes}</span>
                     <span className="flex items-center gap-1"><MessageCircle size={11} style={{ color: COLORS.comments }} />{post.comments}</span>
                     <span className="flex items-center gap-1"><Eye size={11} style={{ color: COLORS.views }} />{post.views}</span>

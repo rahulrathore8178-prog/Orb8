@@ -21,6 +21,8 @@ import { setCurrentUser } from '../../redux/slices/dashboardSlice';
 import { registerPushNotifications } from '../../notifications/registerPushNotifications';
 import { raised } from '../../utilites/cssUtility';
 import { useUnreadNotifications } from '../../utilites/useUnreadNotifications';
+import { useUnreadMessages } from '../../utilites/useUnreadMessages';
+import { useFeedback } from '../shared/Feedback';
 import { Settings } from 'lucide-react';
 
 const navItems = [
@@ -32,7 +34,7 @@ const navItems = [
   { key: 'profile', label: 'Profile', icon: FaUser, to: '/profile', match: ['/profile', '/socialprofile'] },
 ];
 
-function SidebarItem({ item, isActive, collapsed, onClick, iconOnly = false }) {
+function SidebarItem({ item, isActive, collapsed, onClick, iconOnly = false, badge = 0 }) {
   const Icon = item.icon;
 
   return (
@@ -48,6 +50,11 @@ function SidebarItem({ item, isActive, collapsed, onClick, iconOnly = false }) {
     >
       <Icon className="text-sm" />
       {iconOnly || collapsed ? null : <span>{item.label}</span>}
+      {badge > 0 && (
+        <span className="ml-auto h-2.5 w-2.5 rounded-full bg-rose-400">
+          <span className="sr-only">{badge} unread</span>
+        </span>
+      )}
     </button>
   );
 }
@@ -79,6 +86,7 @@ function NavList({
   collapsed = false,
   iconOnly = false,
   keyPrefix = '',
+  badges = {},
 }) {
   const listRef = useRef(null);
   const itemRefs = useRef([]);
@@ -150,6 +158,7 @@ function NavList({
               collapsed={collapsed}
               onClick={onNavigate}
               iconOnly={iconOnly}
+              badge={badges[item.key] || 0}
             />
           </div>
         );
@@ -169,6 +178,8 @@ export default function AppSidebar() {
   const isMobileMenuOpen = useSelector((state) => state.sideBar.isMobileMenuOpen);
   const currentUser = useSelector((state) => state.dashboard.currentUser);
   const unreadCount = useUnreadNotifications();
+  const unreadMessages = useUnreadMessages();
+  const { toast } = useFeedback();
 
   const [isHeaderVisible, setIsHeaderVisible] = useState(true);
   const lastTouchPosition = useRef(null);
@@ -238,10 +249,10 @@ export default function AppSidebar() {
   const handleEnableNotifications = async () => {
     try {
       await registerPushNotifications();
-      window.alert('Notifications enabled');
+      toast('Alerts are on');
     } catch (error) {
       console.error('Failed to enable notifications:', error);
-      window.alert(error.message || 'Unable to enable notifications');
+      toast(error.message || 'Unable to turn on alerts', 'error');
     }
   };
 
@@ -262,7 +273,7 @@ export default function AppSidebar() {
             aria-label="Open navigation menu"
             aria-expanded={isMobileMenuOpen}
             aria-controls="orbit-navigation-drawer"
-            className={`grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-full p-[3px] text-sm font-semibold text-white transition duration-200 active:scale-95 focus-visible:outline-2 focus-visible:outline-white/60 ${raised}`}
+            className={`grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-full p-[3px] text-sm font-semibold text-white transition duration-200 active:scale-95 focus-visible:outline-2 focus-visible:outline-white/60 ${raised}`}
           >
             {currentUser?.profilePic ? (
               <img src={currentUser.profilePic} alt="" className="h-full w-full rounded-full object-cover" />
@@ -315,7 +326,7 @@ export default function AppSidebar() {
                 </div>
 
                 <nav className="min-h-0 flex-1 overflow-y-auto" aria-label="Pages">
-                  <NavList items={navItems} isActiveItem={isActiveItem} collapsed={false} onNavigate={handleNavigate} keyPrefix="drawer-" />
+                  <NavList items={navItems} isActiveItem={isActiveItem} collapsed={false} onNavigate={handleNavigate} keyPrefix="drawer-" badges={{ messages: unreadMessages, notifications: unreadCount }} />
                 </nav>
 
                 <div className="mt-4 border-t border-white/10 pt-4">

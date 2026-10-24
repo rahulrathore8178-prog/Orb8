@@ -387,7 +387,7 @@ export default function OrbitalPage({ onMessage = () => { } }) {
                                 <Avatar user={p.author} size={32} />
                                 <div>
                                     <div className="text-[13px] font-semibold">{p.author?.username}</div>
-                                    <div className="text-[11px] text-[#777777]">{new Date(p.createdAt).toLocaleDateString()}</div>
+                                    <div className="text-xs text-[#aaaaaa]">{new Date(p.createdAt).toLocaleDateString()}</div>
                                 </div>
                             </div>
                             <p className="text-[13px] text-[#cccccc] leading-[1.6] whitespace-pre-wrap">{p.content}</p>
@@ -406,9 +406,9 @@ export default function OrbitalPage({ onMessage = () => { } }) {
                             <Avatar user={m.user} />
                             <div className="min-w-0 flex-1">
                                 <div className="text-[13px] font-semibold truncate">{m.user?.username}</div>
-                                <div className="text-[11px] text-[#777777] truncate">{m.user?.fullName}</div>
+                                <div className="text-xs text-[#aaaaaa] truncate">{m.user?.fullName}</div>
                             </div>
-                            {m.role === 'admin' && <span className="text-[11px] text-[#aaaaaa] border border-white/10 rounded-full px-2 py-0.5">admin</span>}
+                            {m.role === 'admin' && <span className="text-xs text-[#aaaaaa] border border-white/10 rounded-full px-2 py-0.5">admin</span>}
                         </div>
                     ))}
                 </div>
@@ -423,7 +423,7 @@ export default function OrbitalPage({ onMessage = () => { } }) {
                         <Avatar user={r.user} />
                         <div className="min-w-0 flex-1">
                             <div className="text-[13px] font-semibold truncate">{r.user?.username}</div>
-                            <div className="text-[11px] text-[#777777] truncate">{r.user?.fullName}</div>
+                            <div className="text-xs text-[#aaaaaa] truncate">{r.user?.fullName}</div>
                         </div>
                         <button type="button" disabled={busy} onClick={() => handleApprove(r.user._id)} className={`${neo} px-4 py-1.5 text-xs font-semibold`}>
                             Approve

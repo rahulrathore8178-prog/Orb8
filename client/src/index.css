@@ -39,13 +39,6 @@ body {
   overflow-x: hidden;
 }
 
-button,
-input,
-textarea,
-select {
-  font: inherit;
-}
-
 ::selection {
   background: rgba(255, 255, 255, 0.2);
 }

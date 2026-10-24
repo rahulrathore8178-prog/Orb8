@@ -328,7 +328,7 @@ export default function FilmPostCard({ post, cardRef, textGradient, isOwn, isAct
                         >
                             {post.author.username}
                         </span>
-                        <span className="text-[11px] text-white/70" style={{ fontFamily: "'DM Mono'" }}>
+                        <span className="text-xs text-white/80" style={{ fontFamily: "'DM Mono'" }}>
                             {formatTimeAgo(post.createdAt)} ago
                         </span>
                     </div>
@@ -410,7 +410,7 @@ export default function FilmPostCard({ post, cardRef, textGradient, isOwn, isAct
                                         style={{ left: `${audioProgress}%` }}
                                     />
                                 </div>
-                                <div className="flex items-center justify-between px-1 text-[11px] tabular-nums text-white [text-shadow:0_2px_8px_rgba(0,0,0,0.25)]">
+                                <div className="flex items-center justify-between px-1 text-xs tabular-nums text-white [text-shadow:0_2px_8px_rgba(0,0,0,0.25)]">
                                     <span>{formatDuration(audioCurrentTime)}</span>
                                     <span>{formatDuration(post.voiceNoteDuration)}</span>
                                 </div>

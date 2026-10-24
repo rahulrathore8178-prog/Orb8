@@ -293,7 +293,7 @@ export default function PostPreview({ posts, initialIndex = 0, isOpen, onClose }
                 )}
 
                 <div
-                    className="absolute lg:left-60 sm:left-50 top-4 z-30 rounded-full bg-black/30 px-3 py-1 text-[11px] font-medium text-white/80 backdrop-blur-md"
+                    className="absolute lg:left-60 sm:left-50 top-4 z-30 rounded-full bg-black/30 px-3 py-1 text-xs font-medium text-white/90 backdrop-blur-md"
                     style={{ fontFamily: "'DM Mono', monospace" }}
                 >
                     {index + 1} / {previewPosts.length} posts
@@ -320,7 +320,7 @@ export default function PostPreview({ posts, initialIndex = 0, isOpen, onClose }
                                 >
                                     {post.author.username}
                                 </span>
-                                <span className="text-[11px] text-white/70" style={{ fontFamily: "'DM Mono', monospace" }}>
+                                <span className="text-xs text-white/80" style={{ fontFamily: "'DM Mono', monospace" }}>
                                     {formatTimeAgo(post.createdAt)} ago
                                 </span>
                             </div>

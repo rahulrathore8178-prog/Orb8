@@ -7,6 +7,7 @@ const { uploadBufferToDrive } = require('../utils/driveUpload');
 const { deleteFileFromDrive } = require('../utils/driveUpload');
 const { streamFileFromDrive } = require('../utils/driveUpload');
 const axios = require("axios");
+const { recordSocialActivity } = require('../utils/habit');
 
 const PYTHON_API_URL = process.env.PYTHON_API_URL || 'http://localhost:8000';
 
@@ -198,6 +199,7 @@ async function createPost(req, res) {
         });
     }
 
+    recordSocialActivity(req.user.id);
     return res.status(201).json({
       message: 'Post created successfully',
       post: {
@@ -536,6 +538,7 @@ async function toggleLike(req, res) {
 
       console.log('post.likes:', post.likes);
 
+      recordSocialActivity(userId);
       return res.status(200).json({
         message: 'Post liked',
         likesCount: post.likes.length,
@@ -603,6 +606,7 @@ async function addComment(req, res) {
 
     const newComment = post.comments[post.comments.length - 1];
 
+    recordSocialActivity(req.user.id);
     return res.status(201).json({
       message: 'Comment added',
       comment: {

@@ -212,7 +212,7 @@ export default function OrbitalPicker({ value = [], onChange, className = '' }) 
                     <OrbitalAvatar orbital={o} size={40} />
                     <span className="min-w-0 flex-1">
                         <span className="block truncate text-[13px] font-semibold text-[#e8f0fe]">{o.name}</span>
-                        <span className="flex items-center gap-3 text-[11px] text-[#777777]">
+                        <span className="flex items-center gap-3 text-xs text-[#aaaaaa]">
                             <span className="flex items-center gap-1">
                                 {o.visibility === 'private' ? <FaLock className="text-[9px]" /> : <FaGlobe className="text-[9px]" />}
                                 {o.visibility}

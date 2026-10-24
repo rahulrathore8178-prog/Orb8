@@ -10,6 +10,8 @@ import { FaCamera, FaEdit, FaHeart, FaSave, FaTimes } from "react-icons/fa";
 import { FiMessageCircle } from "react-icons/fi";
 import PostPreview from "../components/SocialProfile/postPreview";
 import InsightsPanel from "../components/SocialProfile/InsightsPanel";
+import EmptyState from "../components/shared/EmptyState";
+import { useFeedback } from "../components/shared/Feedback";
 import { raised } from "../utilites/cssUtility";
 import { useDispatch, useSelector } from "react-redux";
 import { FaSearch, FaUserCircle /* ...your existing icons */ } from "react-icons/fa";
@@ -152,6 +154,7 @@ export default function SocialProfileSection() {
     const [activeTab, setActiveTab] = useState("Posts");
     const { userId } = useParams();
     const navigate = useNavigate();
+    const { confirm } = useFeedback();
     const storedUser = getStoredUser();
     const isOwnProfile = !userId || userId === storedUser?.id;
     const [currentUser, setCurrentUser] = useState(isOwnProfile ? storedUser : null);
@@ -447,7 +450,7 @@ export default function SocialProfileSection() {
 
     const updateConnection = async () => {
         if (isUpdatingConnection) return;
-        if (friendStatus === 'friends' && !confirm('Remove this friend?')) return;
+        if (friendStatus === 'friends' && !(await confirm({ title: 'Remove this friend?', confirmLabel: 'Remove', destructive: true }))) return;
         setIsUpdatingConnection(true);
         setError(null);
         const config = { withCredentials: true, headers: getAuthHeaders() };
@@ -474,7 +477,7 @@ export default function SocialProfileSection() {
     };
 
     const blockProfile = async () => {
-        if (!confirm('Block this user? You will no longer see each other.')) return;
+        if (!(await confirm({ title: 'Block this user?', message: 'You will no longer see each other.', confirmLabel: 'Block', destructive: true }))) return;
         await axios.post(`${apiUrl}/api/social/block/${userId}`, {}, {
             withCredentials: true,
             headers: getAuthHeaders(),
@@ -580,7 +583,7 @@ export default function SocialProfileSection() {
 
     // delete function
     const handleDelete = async (postId) => {
-        if (!confirm('Delete this post?')) return;
+        if (!(await confirm({ title: 'Delete this post?', message: 'This cannot be undone.', confirmLabel: 'Delete', destructive: true }))) return;
         try {
             // console.log(postId)
             await axios.delete(`${apiUrl}/api/community/posts/${postId}`, {
@@ -905,7 +908,7 @@ export default function SocialProfileSection() {
                             >
                                 {label}
                                 {count !== null && count !== undefined && (
-                                    <span className={`rounded-full px-1.5 py-px text-[10px] tabular-nums ${active ? 'bg-white/15 text-white' : 'bg-white/[0.06] text-neutral-500'}`}>
+                                    <span className={`rounded-full px-1.5 py-px text-xs tabular-nums ${active ? 'bg-white/15 text-white' : 'bg-white/[0.06] text-neutral-400'}`}>
                                         {count}
                                     </span>
                                 )}
@@ -938,7 +941,12 @@ export default function SocialProfileSection() {
                         </div>
 
                         {friends.length === 0 ? (
-                            <div className="text-center text-gray-400 text-sm sm:text-base">No friends yet. Find people in Explore.</div>
+                            <EmptyState
+                                title="No friends yet"
+                                description={isOwnProfile ? 'Connect with people to see them here.' : 'This person has not added any friends yet.'}
+                                actionLabel={isOwnProfile ? 'Find people' : undefined}
+                                onAction={() => navigate('/explore?tab=search')}
+                            />
                         ) : (
                             <div ref={friendsListRef} className="flex min-w-0 w-full flex-col divide-y divide-white/5 mx-auto">
                                 {filteredFriends.map((friend) => (
@@ -1008,7 +1016,12 @@ export default function SocialProfileSection() {
                     postsLoading ? (
                         <div className="text-center text-gray-400 text-sm sm:text-base">Loading posts...</div>
                     ) : userPosts.length === 0 ? (
-                        <div className="text-center text-gray-400 text-sm sm:text-base">No posts yet.</div>
+                        <EmptyState
+                            title="No posts yet"
+                            description={isOwnProfile ? 'Share your first photo or video.' : undefined}
+                            actionLabel={isOwnProfile ? 'Create a post' : undefined}
+                            onAction={() => navigate('/community?compose=1')}
+                        />
                     ) : (
                         <div ref={contentRef} className="mt-5 sm:mt-7">
                             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={reorderGrid}>
@@ -1176,7 +1189,7 @@ function SortableProfileTile({
                     <button type="button" onClick={(event) => { event.stopPropagation(); onDelete(post.id); }} className="p-1 hover:text-red-400" aria-label="Delete post"><Trash2 size={13} /></button>
                 </div>
             )}
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex items-center justify-center gap-3 px-2 py-2 text-[10px] font-medium text-white sm:gap-4 sm:text-xs">
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex items-center justify-center gap-3 px-2 py-2 text-xs font-medium text-white sm:gap-4 sm:text-xs">
                 <span className="flex items-center gap-1"><FaHeart size={11} />{post.likesCount || 0}</span>
                 <span className="flex items-center gap-1"><FiMessageCircle size={11} />{post.commentsCount || 0}</span>
                 <span className="flex items-center gap-1"><BarChart3 size={11} />{post.views || 0}</span>
