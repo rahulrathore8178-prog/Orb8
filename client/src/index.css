@@ -1,11 +1,430 @@
 @import "tailwindcss";
-:root { scroll-behavior: smooth; }
-  /* body  { font-family: 'DM Sans', sans-serif; } */
 
-  ::-webkit-scrollbar       { width: 5px; }
-  ::-webkit-scrollbar-track { background: rgb(55, 55, 55); }
-  ::-webkit-scrollbar-thumb { background: #60636b; border-radius: 99px; }
-  ::-webkit-scrollbar-thumb:hover { background: #898b96; }
+@theme {
+  --font-sans: "Sora", ui-sans-serif, system-ui, sans-serif;
+}
+
+:root {
+  --orbit-raised-bg: linear-gradient(to bottom right, #262626, #0e0e0e);
+  --orbit-raised-shadow: 5px 5px 12px rgba(0, 0, 0, 0.95), -3px -3px 9px rgba(255, 255, 255, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --orbit-pressed-shadow: inset 3px 3px 8px rgba(0, 0, 0, 0.9), inset -2px -2px 6px rgba(255, 255, 255, 0.05);
+  --orbit-glass-bg: linear-gradient(to bottom right, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.015));
+  --orbit-glass-shadow: 10px 10px 24px rgba(0, 0, 0, 0.85), -3px -3px 12px rgba(255, 255, 255, 0.03), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --orbit-inset-shadow: inset 5px 5px 12px rgba(0, 0, 0, 0.95), inset -3px -3px 9px rgba(255, 255, 255, 0.045);
+  --orbit-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+:root {
+  scroll-behavior: smooth;
+  color-scheme: dark;
+  font-family: "Sora", sans-serif;
+  background: #050505;
+  color: #ededed;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+  background: #050505;
+}
+
+body {
+  margin: 0;
+  color: #ededed;
+  overflow-x: hidden;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+::selection {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.app-content {
+  position: relative;
+  z-index: 10;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+}
+
+.app-content > [class~="h-screen"],
+.app-content > [class*="h-[100dvh]"] {
+  height: 100%;
+  min-height: 0;
+}
+
+.app-content > [class~="w-screen"] {
+  width: 100%;
+}
+
+.app-content > [class~="min-h-screen"] {
+  min-height: 100%;
+}
+
+@media (max-width: 640px) {
+  html,
+  body,
+  #root,
+  .app-frame {
+    width: 100%;
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
+
+  .app-content img,
+  .app-content video,
+  .app-content canvas {
+    max-width: 100%;
+  }
+}
+
+.app-content [class*="min-h-screen"][class*="bg-"],
+.app-content [class*="min-h-full"][class*="bg-"] {
+  background-color: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+/* Page roots with their own solid fill hide the shared orbit backdrop; SearchPage draws its own. */
+.app-content > [class*="bg-"]:not([class*="Sora"]),
+.app-content [class*="bg-[#111315]" i],
+.app-content [class*="bg-[#111113]" i],
+.app-content [class*="bg-[#0a0e14]" i] {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.app-content > * > [class*="max-w-5xl"][class*="border-x"] {
+  width: calc(100% - 1.5rem);
+  min-height: calc(100% - 1.5rem) !important;
+  margin: 0.75rem auto;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 1.5rem;
+  background-image: var(--orbit-glass-bg);
+  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(24px);
+  box-shadow: var(--orbit-glass-shadow);
+  overflow: hidden;
+}
+
+/* Glass rows: the SearchPage card surface. */
+.app-content [class*="bg-[#141b24]" i],
+.app-content [class*="bg-[#1a2332]" i],
+.app-content [class*="bg-[#1f2a38]" i],
+.app-content [class*="bg-[#0f1620]" i],
+.app-content [class*="bg-[#111820]" i],
+.app-content [class*="bg-[#151b24]" i],
+.app-content [class*="bg-[#12161d]" i],
+.app-content [class*="bg-[#161625]" i],
+.app-content [class*="bg-[#16161f]" i],
+.app-content [class*="bg-[#1e1e32]" i],
+.app-content [class*="bg-[#131316]" i],
+.app-content [class*="bg-[#141414]" i],
+.app-content [class*="bg-[#101010]" i],
+.app-content [class*="bg-[#161616]" i],
+.app-content [class*="bg-gray-8"],
+.app-content [class*="bg-gray-9"],
+.app-content [class*="bg-slate-8"],
+.app-content [class*="bg-slate-9"],
+.app-content [class*="bg-zinc-8"],
+.app-content [class*="bg-zinc-9"],
+.app-content [class*="bg-neutral-8"],
+.app-content [class*="bg-neutral-9"],
+.app-content [class*="bg-[#1a1a1e]" i],
+.app-content :is([class*="bg-gradient-to-"], [class*="bg-linear-to-"]):not([class*="bg-clip-text"]):not([class*="absolute"]):not([class*="fixed"]):not([class*="to-transparent"]):not([class*="via-transparent"]):not(button) {
+  background-image: var(--orbit-glass-bg) !important;
+  background-color: transparent !important;
+  border-color: rgba(255, 255, 255, 0.07) !important;
+  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(24px);
+  box-shadow: var(--orbit-glass-shadow);
+}
+
+/* Recessed tracks and wells use the search bar's inset surface. */
+.app-content [class*="bg-[#0d1117]" i],
+.app-content [class*="bg-[#0f1419]" i],
+.app-content [class*="bg-[#0b0b10]" i],
+.app-content [class*="bg-[#08080f]" i] {
+  background-color: #050505 !important;
+  background-image: none !important;
+  border-color: rgba(255, 255, 255, 0.06);
+  box-shadow: var(--orbit-inset-shadow);
+}
+
+/* Plain black panels let the orbit backdrop through. */
+.app-content [class~="bg-black"]:not(video):not(img) {
+  background-color: transparent !important;
+}
+
+/* Tinted blues and slates fold into the neutral palette. */
+.app-content [class*="border-slate-"],
+.app-content [class*="border-gray-"],
+.app-content [class*="border-zinc-"],
+.app-content [class*="border-blue-"],
+.app-content [class*="border-cyan-"] {
+  border-color: rgba(255, 255, 255, 0.09) !important;
+}
+
+.app-content :not(button)[class*="bg-blue-"],
+.app-content :not(button)[class*="bg-indigo-"],
+.app-content :not(button)[class*="bg-purple-"],
+.app-content :not(button)[class*="bg-cyan-"] {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+  background-image: none !important;
+}
+
+.app-content [class*="text-slate-1"],
+.app-content [class*="text-slate-2"],
+.app-content [class*="text-slate-3"] {
+  color: #e5e5e5 !important;
+}
+
+.app-content [class*="text-slate-4"] {
+  color: #a3a3a3 !important;
+}
+
+.app-content [class*="text-slate-5"],
+.app-content [class*="text-slate-6"] {
+  color: #737373 !important;
+}
+
+/* Raised buttons: the SearchPage action button. */
+.app-content button[class*="bg-cyan-"],
+.app-content button[class*="bg-blue-"],
+.app-content button[class*="bg-indigo-"],
+.app-content button[class*="bg-purple-"],
+.app-content button[class*="bg-violet-"],
+.app-content button[class*="bg-[#6c63ff]" i],
+.app-content button[class*="bg-[#8c93f0]" i],
+.app-content button[class*="bg-[#5b7fff]" i],
+.app-content button[class*="bg-[#858585]" i],
+.app-content button:is([class*="bg-gradient-to-"], [class*="bg-linear-to-"]):not([class*="bg-clip-text"]),
+.app-content a[class*="bg-cyan-"],
+.app-content a[class*="bg-blue-"] {
+  background-image: var(--orbit-raised-bg) !important;
+  background-color: transparent !important;
+  border-color: transparent !important;
+  box-shadow: var(--orbit-raised-shadow) !important;
+  color: #f4f4f5 !important;
+  transition: transform 0.2s var(--orbit-ease), box-shadow 0.2s var(--orbit-ease), filter 0.2s;
+}
+
+.app-content button[class*="bg-cyan-"]:hover,
+.app-content button[class*="bg-blue-"]:hover,
+.app-content button[class*="bg-indigo-"]:hover,
+.app-content button[class*="bg-purple-"]:hover,
+.app-content button[class*="bg-violet-"]:hover,
+.app-content button:is([class*="bg-gradient-to-"], [class*="bg-linear-to-"]):not([class*="bg-clip-text"]):hover {
+  filter: brightness(1.18);
+}
+
+.app-content button[class*="bg-cyan-"]:active,
+.app-content button[class*="bg-blue-"]:active,
+.app-content button[class*="bg-indigo-"]:active,
+.app-content button[class*="bg-purple-"]:active,
+.app-content button[class*="bg-violet-"]:active,
+.app-content button:is([class*="bg-gradient-to-"], [class*="bg-linear-to-"]):not([class*="bg-clip-text"]):active {
+  transform: scale(0.96);
+  box-shadow: var(--orbit-pressed-shadow) !important;
+}
+
+/* Decorative blurred blobs fight the monochrome orbit backdrop. */
+.app-content [class*="blur-3xl"][class*="absolute"],
+.app-content [class*="blur-3xl"][class*="fixed"] {
+  display: none !important;
+}
+
+.app-content h1,
+.app-content h2 {
+  font-weight: 300;
+  letter-spacing: -0.025em;
+}
+
+.app-content h1 {
+  color: #f5f5f5;
+}
+
+/* Route fonts converge on the benchmark's Sora. */
+.app-content [class*="font-['Syne']"],
+.app-content [class*="font-['Inter']"],
+.app-content [class*="font-['DM_Sans']"],
+.app-content [class*="font-['Plus_Jakarta_Sans']"],
+.app-content [class*="font-['Space_Grotesk']"],
+.app-content [style*="Syne"],
+.app-content [style*="Inter"],
+.app-content [style*="DM Sans"],
+.app-content .font-display,
+.app-content .font-body {
+  font-family: "Sora", ui-sans-serif, system-ui, sans-serif !important;
+}
+
+.app-content [class*="text-cyan-"],
+.app-content [class*="text-blue-"],
+.app-content [class*="text-indigo-"],
+.app-content [class*="text-purple-"],
+.app-content [class*="text-[#5b7fff]" i],
+.app-content [class*="text-[#8c93f0]" i] {
+  color: #d4d4d8 !important;
+}
+
+.app-content input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]):not([class*="bg-transparent"]),
+.app-content textarea:not([class*="bg-transparent"]),
+.app-content select {
+  border-color: rgba(255, 255, 255, 0.08);
+  background-color: #050505;
+  box-shadow: var(--orbit-inset-shadow);
+  color: #ededed;
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+
+.app-content input::placeholder,
+.app-content textarea::placeholder {
+  color: #525252;
+}
+
+.app-content input:focus,
+.app-content textarea:focus,
+.app-content select:focus {
+  border-color: rgba(255, 255, 255, 0.25);
+  box-shadow: var(--orbit-inset-shadow), 0 0 38px rgba(255, 255, 255, 0.07);
+  outline-color: rgba(255, 255, 255, 0.3);
+}
+
+/* The page scroller hides its bar like SearchPage's lists. */
+.app-content {
+  scrollbar-width: none;
+}
+
+.app-content::-webkit-scrollbar {
+  display: none;
+}
+
+.app-content .ambient-glow,
+.app-content .ambient-glow + div {
+  display: none !important;
+}
+
+/* Orbit backdrop copied from SearchPage: three rings, orbiting dots, soft glow. */
+.orbit-backdrop {
+  position: fixed;
+  z-index: 0;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  pointer-events: none;
+  background: #000;
+}
+
+.orbit-backdrop-glow {
+  grid-area: 1 / 1;
+  width: 100%;
+  height: 100%;
+  opacity: 0.3;
+  background: radial-gradient(circle at 50% 30%, rgba(255, 255, 255, 0.07), transparent 55%);
+}
+
+.orbit-ring {
+  grid-area: 1 / 1;
+  position: relative;
+  width: calc(var(--size) * 1vmin);
+  height: calc(var(--size) * 1vmin);
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 9999px;
+  opacity: 0.3;
+  animation: orbit-ring-in 1.6s cubic-bezier(0.16, 1, 0.3, 1) calc(var(--n) * 0.18s) backwards;
+}
+
+.orbit-orbiter {
+  position: absolute;
+  inset: 0;
+  animation: orbit-spin var(--d) linear infinite;
+}
+
+.orbit-dot {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: #d4d4d4;
+  box-shadow: 0 0 14px 3px rgba(255, 255, 255, 0.35);
+  transform: translate(-50%, -50%);
+}
+
+.orbit-dot-lg {
+  width: 8px;
+  height: 8px;
+}
+
+@keyframes orbit-spin { to { transform: rotate(360deg); } }
+@keyframes orbit-ring-in { from { opacity: 0; transform: scale(0.55); } }
+@keyframes orbit-page-in { from { opacity: 0; transform: translateY(16px); } }
+/* Titles and rows avoid transforms: GSAP on the same element would bake them in. */
+@keyframes orbit-title-in { from { opacity: 0; filter: blur(8px); } }
+@keyframes orbit-row-in { from { opacity: 0; filter: blur(6px); } }
+@keyframes orbit-head-in { from { opacity: 0; transform: translateY(-24px); filter: blur(10px); } }
+
+.page-enter {
+  animation: orbit-page-in 0.7s var(--orbit-ease) backwards;
+}
+
+.page-enter h1:not(.reveal):not([class*="animate"]),
+.page-enter h2:not(.reveal):not([class*="animate"]) {
+  animation: orbit-title-in 0.6s var(--orbit-ease) 0.15s backwards;
+}
+
+.page-enter :is(li, [class*="grid-cols"] > *):not([data-row]):not(.reveal):not([class*="animate"]):not([class*="fu-"]):nth-child(-n + 10) {
+  animation: orbit-row-in 0.7s var(--orbit-ease) calc(0.25s + var(--orbit-i, 0) * 0.07s) backwards;
+}
+
+.page-enter :is(li, [class*="grid-cols"] > *):nth-child(2) { --orbit-i: 1; }
+.page-enter :is(li, [class*="grid-cols"] > *):nth-child(3) { --orbit-i: 2; }
+.page-enter :is(li, [class*="grid-cols"] > *):nth-child(4) { --orbit-i: 3; }
+.page-enter :is(li, [class*="grid-cols"] > *):nth-child(5) { --orbit-i: 4; }
+.page-enter :is(li, [class*="grid-cols"] > *):nth-child(6) { --orbit-i: 5; }
+.page-enter :is(li, [class*="grid-cols"] > *):nth-child(7) { --orbit-i: 6; }
+.page-enter :is(li, [class*="grid-cols"] > *):nth-child(8) { --orbit-i: 7; }
+.page-enter :is(li, [class*="grid-cols"] > *):nth-child(9) { --orbit-i: 8; }
+.page-enter :is(li, [class*="grid-cols"] > *):nth-child(10) { --orbit-i: 9; }
+
+.app-topbar {
+  animation: orbit-head-in 0.9s var(--orbit-ease) 0.2s backwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+  ::-webkit-scrollbar       { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.14); border-radius: 99px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.28); }
 
   @keyframes k-pulse  { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.4;transform:scale(.7)} }
   @keyframes k-floatA { 0%,100%{transform:translateY(0)}  50%{transform:translateY(-8px)} }

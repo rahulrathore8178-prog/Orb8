@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { FaInstagram, FaTwitter, FaYoutube } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
+import HeroOrbits from "../components/LandingPage/HeroOrbits";
 
 export default function OrbitLanding() {
   const [scrolled, setScrolled] = useState(false);
@@ -165,7 +166,7 @@ export default function OrbitLanding() {
           }}
         />
 
-        <div className="max-w-6xl mx-auto grid lg:grid-cols-2 gap-16 items-center relative">
+        <div className="max-w-6xl mx-auto grid md:grid-cols-2 gap-12 lg:gap-16 items-center relative">
           <div>
             <h1
               className="reveal font-display font-semibold text-4xl sm:text-5xl lg:text-6xl leading-[1.1] tracking-tight"
@@ -205,50 +206,7 @@ export default function OrbitLanding() {
           </div>
 
           {/* Orbit graphic */}
-          <div
-            className="reveal relative mx-auto w-full max-w-md aspect-square"
-            style={{ animationDelay: "0.25s" }}
-          >
-            <svg viewBox="0 0 400 400" className="w-full h-full">
-              <circle
-                cx="200"
-                cy="200"
-                r="165"
-                fill="none"
-                stroke="rgba(148,163,184,0.12)"
-              />
-              <circle
-                cx="200"
-                cy="200"
-                r="130"
-                fill="none"
-                stroke="rgba(148,163,184,0.14)"
-              />
-              <circle
-                cx="200"
-                cy="200"
-                r="90"
-                fill="none"
-                stroke="rgba(148,163,184,0.16)"
-              />
-
-              <g className="ring-3">
-                <circle cx="200" cy="35" r="9" fill="#c084fc" />
-              </g>
-              <g className="ring-2">
-                <circle cx="200" cy="70" r="9" fill="#2dd4bf" />
-              </g>
-              <g className="ring-1">
-                <circle cx="200" cy="110" r="9" fill="#fb923c" />
-              </g>
-            </svg>
-
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="core-pulse w-16 h-16 rounded-full bg-gradient-to-br from-orange-400 via-teal-400 to-violet-400 flex items-center justify-center font-display font-semibold text-slate-950 text-sm">
-                You
-              </div>
-            </div>
-          </div>
+          <HeroOrbits />
         </div>
       </section>
 

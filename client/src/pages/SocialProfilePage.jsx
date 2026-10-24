@@ -4,15 +4,17 @@ import { ImageCard, TextCard } from "../components/SocialProfile/SocialImageCard
 import { ArticleCard, QuoteCard } from "../components/SocialProfile/SocialQouteArticleCard";
 import { apiUrl } from "../utilites/DashboardHelper";
 import { getAuthHeaders } from "../utilites/communityHelper";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import axios from "axios";
 import { FaCamera, FaEdit, FaHeart, FaSave, FaTimes } from "react-icons/fa";
 import { FiMessageCircle } from "react-icons/fi";
 import PostPreview from "../components/SocialProfile/postPreview";
+import InsightsPanel from "../components/SocialProfile/InsightsPanel";
+import { raised } from "../utilites/cssUtility";
 import { useDispatch, useSelector } from "react-redux";
 import { FaSearch, FaUserCircle /* ...your existing icons */ } from "react-icons/fa";
 import { fetchFriendRequests, fetchFriends } from "../redux/slices/friendsSlice";
-import { Archive, BarChart3, GripVertical, Lock, Maximize2, RotateCcw, ShieldBan, Trash2 } from "lucide-react";
+import { Archive, BarChart3, Check, GripVertical, Lock, Maximize2, RotateCcw, ShieldBan, Trash2, X } from "lucide-react";
 import { setPosts } from "../redux/slices/feedSlice";
 import {
     closestCenter,
@@ -149,14 +151,17 @@ function LinkRow({ label, url }) {
 export default function SocialProfileSection() {
     const [activeTab, setActiveTab] = useState("Posts");
     const { userId } = useParams();
+    const navigate = useNavigate();
     const storedUser = getStoredUser();
     const isOwnProfile = !userId || userId === storedUser?.id;
     const [currentUser, setCurrentUser] = useState(isOwnProfile ? storedUser : null);
     const friends = useSelector(state => state.friends.friends);
+    const incomingFriendRequests = useSelector(state => state.friends.friendRequests);
+    const requestsLoading = useSelector(state => state.friends.isLoading);
+    const requestsError = useSelector(state => state.friends.error);
     const friendsCount = currentUser?.friends?.length || 0;
-    // console.log('friendsCount', friendsCount);
-    const friendRequests = currentUser?.friendRequests?.length || 0;
-    // console.log('requests', currentUser?.friendRequests);
+    const pendingFollowRequestCount = currentUser?.followRequests?.length || 0;
+    const friendRequestCount = currentUser?.friendRequests?.length ?? incomingFriendRequests.length;
     const [isEditingUsername, setIsEditingUsername] = useState(false);
     const [editedUsername, setEditedUsername] = useState('');
     const [isEditingBio, setIsEditingBio] = useState(false);
@@ -168,6 +173,14 @@ export default function SocialProfileSection() {
     const [postsLoading, setPostsLoading] = useState(true);
     const [showPostPreview, setShowPostPreview] = useState(false);
     const [selectedPostIndex, setSelectedPostIndex] = useState(0);
+    const [actingOnRequestId, setActingOnRequestId] = useState(null);
+    const [incomingFollowRequests, setIncomingFollowRequests] = useState([]);
+    const [followRequestsLoading, setFollowRequestsLoading] = useState(false);
+    const [followRequestsError, setFollowRequestsError] = useState(null);
+    const [actingOnFollowRequestId, setActingOnFollowRequestId] = useState(null);
+    const [profileConnections, setProfileConnections] = useState([]);
+    const [connectionsLoading, setConnectionsLoading] = useState(false);
+    const [connectionsError, setConnectionsError] = useState(null);
     const [friendSearch, setFriendSearch] = useState("");
     const friendsListRef = useRef(null);
     const [profileGridLayout, setProfileGridLayout] = useState([]);
@@ -218,14 +231,16 @@ export default function SocialProfileSection() {
     }, [activeTab, postsLoading]);
 
     const TABS = [
-        { label: 'Posts', count: userPosts?.length ?? 0 },
+        { label: 'Posts', value: 'Posts', count: userPosts?.length ?? 0 },
+        { label: 'Orbiters', value: 'Followers', count: currentUser?.followersCount ?? currentUser?.followers?.length ?? 0 },
+        { label: 'Orbits', value: 'Following', count: currentUser?.followingCount ?? currentUser?.following?.length ?? 0 },
+        { label: 'Constellations', value: 'Friends', count: friendsCount },
         ...(isOwnProfile ? [
             { label: 'Saved', count: null },
             { label: 'Archived', count: null },
             { label: 'Insights', count: null },
         ] : []),
-        { label: 'Friends', count: friendsCount },
-        { label: 'Requests', count: friendRequests },
+        ...(isOwnProfile ? [{ label: 'Requests', count: friendRequestCount + pendingFollowRequestCount }] : []),
     ];
 
     const rootRef = useRef(null);
@@ -523,11 +538,62 @@ export default function SocialProfileSection() {
     };
 
     const orderedPosts = useMemo(() => {
-        if (!isOwnProfile || activeTab !== 'Posts' || profileGridLayout.length === 0) return userPosts;
+        if (activeTab !== 'Posts' || profileGridLayout.length === 0) return userPosts;
         const positions = new Map(profileGridLayout.map((item, index) => [item.post, index]));
         return [...userPosts].sort((left, right) =>
             (positions.get(left.id) ?? Number.MAX_SAFE_INTEGER) - (positions.get(right.id) ?? Number.MAX_SAFE_INTEGER));
-    }, [activeTab, isOwnProfile, profileGridLayout, userPosts]);
+    }, [activeTab, profileGridLayout, userPosts]);
+
+    const resolveFriendRequest = async (request, accept) => {
+        if (actingOnRequestId) return;
+        setActingOnRequestId(request._id);
+        setError(null);
+        try {
+            await axios.post(
+                `${apiUrl}/api/social/friend-request/${request._id}/${accept ? 'accept' : 'reject'}`,
+                {},
+                { withCredentials: true, headers: getAuthHeaders() },
+            );
+            setCurrentUser(user => user ? {
+                ...user,
+                friendRequests: (user.friendRequests || []).filter(item => String(item._id) !== String(request._id)),
+                friends: accept
+                    ? [...(user.friends || []), request.from._id]
+                    : user.friends || [],
+            } : user);
+            dispatch(fetchFriendRequests());
+            if (accept) dispatch(fetchFriends());
+        } catch (requestError) {
+            setError(requestError.response?.data?.message || `Failed to ${accept ? 'accept' : 'reject'} friend request.`);
+        } finally {
+            setActingOnRequestId(null);
+        }
+    };
+
+    const resolveFollowRequest = async (requester, accept) => {
+        if (actingOnFollowRequestId) return;
+        setActingOnFollowRequestId(requester._id);
+        setFollowRequestsError(null);
+        try {
+            await axios.patch(`${apiUrl}/api/social/follow-requests/${requester._id}`, { accept }, {
+                withCredentials: true,
+                headers: getAuthHeaders(),
+            });
+            setIncomingFollowRequests(requests => requests.filter(request => String(request._id) !== String(requester._id)));
+            setCurrentUser(user => user ? {
+                ...user,
+                followRequests: (user.followRequests || []).filter(id => String(id) !== String(requester._id)),
+                followers: accept ? [...(user.followers || []), requester._id] : user.followers || [],
+                followersCount: accept
+                    ? (user.followersCount ?? user.followers?.length ?? 0) + 1
+                    : (user.followersCount ?? user.followers?.length ?? 0),
+            } : user);
+        } catch (requestError) {
+            setFollowRequestsError(requestError.response?.data?.message || `Failed to ${accept ? 'accept' : 'decline'} follow request.`);
+        } finally {
+            setActingOnFollowRequestId(null);
+        }
+    };
 
     // delete function
     const handleDelete = async (postId) => {
@@ -552,6 +618,47 @@ export default function SocialProfileSection() {
             dispatch(fetchFriendRequests());
         }
     }, [activeTab, dispatch]);
+
+    useEffect(() => {
+        if (!isOwnProfile || activeTab !== 'Requests') return undefined;
+        let active = true;
+        setFollowRequestsLoading(true);
+        setFollowRequestsError(null);
+        axios.get(`${apiUrl}/api/social/follow-requests`, {
+            withCredentials: true,
+            headers: getAuthHeaders(),
+        }).then(response => {
+            if (active) setIncomingFollowRequests(response.data.requests || []);
+        }).catch(requestError => {
+            if (active) setFollowRequestsError(requestError.response?.data?.message || 'Failed to load follow requests.');
+        }).finally(() => {
+            if (active) setFollowRequestsLoading(false);
+        });
+        return () => { active = false; };
+    }, [activeTab, isOwnProfile]);
+
+    useEffect(() => {
+        if (!['Followers', 'Following'].includes(activeTab)) return undefined;
+        const profileId = userId || storedUser?.id;
+        if (!profileId) return undefined;
+
+        let active = true;
+        setConnectionsLoading(true);
+        setConnectionsError(null);
+        axios.get(`${apiUrl}/api/social/users/${profileId}/${activeTab.toLowerCase()}`, {
+            withCredentials: true,
+            headers: getAuthHeaders(),
+        }).then(response => {
+            if (active) setProfileConnections(response.data.users || []);
+        }).catch(connectionError => {
+            if (!active) return;
+            setProfileConnections([]);
+            setConnectionsError(connectionError.response?.data?.message || `Failed to load ${activeTab.toLowerCase()}.`);
+        }).finally(() => {
+            if (active) setConnectionsLoading(false);
+        });
+        return () => { active = false; };
+    }, [activeTab, userId, storedUser?.id]);
 
     // Page-open animation
     useEffect(() => {
@@ -621,6 +728,11 @@ export default function SocialProfileSection() {
     const handleTabClick = (tab) => {
         if (tab === activeTab) return;
 
+        const strip = tabsRef.current;
+        const target = strip?.querySelector(`[data-tab="${tab}"]`);
+        if (strip && target && strip.scrollWidth > strip.clientWidth) {
+            strip.scrollTo({ left: target.offsetLeft - (strip.clientWidth - target.offsetWidth) / 2, behavior: "smooth" });
+        }
         gsap.to(contentRef.current, {
             opacity: 0,
             y: 10,
@@ -649,9 +761,9 @@ export default function SocialProfileSection() {
     return (
         <div
             ref={rootRef}
-            className="relative min-h-screen w-full overflow-hidden bg-black text-white"
+            className="relative min-h-full w-full bg-black text-white"
         >
-            <div className="relative max-h-screen overflow-auto z-10 mx-auto max-w-6xl scrollbar-none px-3 sm:px-6 md:px-10 pb-12 sm:pb-16 md:pb-20 pt-8 sm:pt-12 md:pt-16">
+            <div className="relative z-10 mx-auto w-full max-w-6xl px-3 pb-12 pt-8 sm:px-6 sm:pb-16 sm:pt-12 md:px-10 md:pb-20">
                 {/* ---------------- Header ---------------- */}
                 <div ref={headerRef} className="flex flex-col sm:flex-row items-start justify-between gap-6 sm:gap-8">
                     <div className="flex flex-col sm:flex-row items-start gap-4 sm:gap-6 md:gap-8 w-full sm:w-auto">
@@ -778,8 +890,8 @@ export default function SocialProfileSection() {
                                 </div>
                             )}
                             <div className="mt-3 flex flex-wrap gap-4 text-xs text-white/55">
-                                <span>{currentUser?.followersCount ?? currentUser?.followers?.length ?? 0} followers</span>
-                                <span>{currentUser?.followingCount ?? currentUser?.following?.length ?? 0} following</span>
+                                <span>{currentUser?.followersCount ?? currentUser?.followers?.length ?? 0} Orbiters</span>
+                                <span>{currentUser?.followingCount ?? currentUser?.following?.length ?? 0} Orbits</span>
                             </div>
                             {isOwnProfile && (
                                 <button
@@ -824,21 +936,30 @@ export default function SocialProfileSection() {
                 {/* ---------------- Tabs ---------------- */}
                 <div
                     ref={tabsRef}
-                    className="mt-8 sm:mt-10 flex items-center justify-center gap-6 sm:gap-10 border-b border-white/10 pb-3 sm:pb-4"
+                    role="tablist"
+                    aria-label="Profile sections"
+                    className="-mx-3 mt-8 flex snap-x snap-mandatory items-center gap-2 overflow-x-auto px-3 pb-2 [mask-image:linear-gradient(to_right,transparent,#000_14px,#000_calc(100%-14px),transparent)] [scrollbar-width:none] sm:mx-0 sm:mt-10 sm:justify-center sm:px-0 sm:[mask-image:none] [&::-webkit-scrollbar]:hidden"
                 >
-                    {TABS.map(({ label, count }) => {
-                        const active = label === activeTab;
+                    {TABS.map(({ label, count, value = label }) => {
+                        const active = value === activeTab;
                         return (
                             <button
-                                key={label}
-                                data-tab={label}
-                                onClick={() => handleTabClick(label)}
-                                className={`relative pb-2 text-sm sm:text-lg font-medium transition-colors whitespace-nowrap ${active ? 'font-bold text-white' : 'text-neutral-500 hover:text-neutral-300'
+                                key={value}
+                                type="button"
+                                role="tab"
+                                aria-selected={active}
+                                data-tab={value}
+                                onClick={() => handleTabClick(value)}
+                                className={`inline-flex shrink-0 snap-center items-center gap-2 whitespace-nowrap rounded-full border px-3.5 py-2 text-xs transition duration-300 active:scale-95 sm:text-sm ${active
+                                    ? `${raised} border-white/15 font-medium text-white`
+                                    : 'border-white/[0.07] bg-white/[0.03] text-neutral-400 hover:border-white/15 hover:text-neutral-100'
                                     }`}
                             >
-                                [ {label} {count} ]
-                                {active && (
-                                    <span className="underline-bar absolute -bottom-[17px] left-0 h-[2px] w-full bg-white" />
+                                {label}
+                                {count !== null && count !== undefined && (
+                                    <span className={`rounded-full px-1.5 py-px text-[10px] tabular-nums ${active ? 'bg-white/15 text-white' : 'bg-white/[0.06] text-neutral-500'}`}>
+                                        {count}
+                                    </span>
                                 )}
                             </button>
                         );
@@ -850,36 +971,76 @@ export default function SocialProfileSection() {
                         <p className="text-sm">Follow this private profile to see its posts.</p>
                     </div>
                 ) : activeTab === 'Insights' && isOwnProfile ? (
-                    <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
-                        {[
-                            ['Posts', insights?.posts || 0],
-                            ['Likes', insights?.likes || 0],
-                            ['Comments', insights?.comments || 0],
-                            ['Unique views', insights?.views || 0],
-                        ].map(([label, value]) => (
-                            <div key={label} className="rounded-lg border border-white/10 bg-[#111318] p-4">
-                                <div className="text-2xl font-bold text-white">{value.toLocaleString()}</div>
-                                <div className="mt-1 text-xs text-white/45">{label}</div>
-                            </div>
+                    <InsightsPanel insights={insights} loading={postsLoading && !insights} resolveImage={resolveImg} />
+                ) : activeTab === 'Followers' || activeTab === 'Following' ? (
+                    <div className="mt-5 divide-y divide-white/10 border-y border-white/10">
+                        <div className="py-4">
+                            <h3 className="text-sm font-semibold text-white">
+                                {activeTab === 'Followers' ? 'Orbiters' : 'Orbits'}
+                            </h3>
+                            <p className="mt-1 text-sm text-neutral-400">
+                                {activeTab === 'Followers'
+                                    ? 'People who follow your content are orbiting around your digital world.'
+                                    : "The people whose worlds you've chosen to keep up with."}
+                            </p>
+                            <p className="mt-1 text-xs italic text-neutral-500">
+                                {activeTab === 'Followers'
+                                    ? `Example: “You have ${(currentUser?.followersCount ?? currentUser?.followers?.length ?? 0).toLocaleString()} Orbiters.”`
+                                    : `Example: “You're in ${(currentUser?.followingCount ?? currentUser?.following?.length ?? 0).toLocaleString()} Orbits.”`}
+                            </p>
+                        </div>
+                        {connectionsLoading ? (
+                            <p className="py-8 text-center text-sm text-neutral-400">Loading {activeTab === 'Followers' ? 'Orbiters' : 'Orbits'}...</p>
+                        ) : connectionsError ? (
+                            <p role="status" className="py-8 text-center text-sm text-neutral-400">
+                                {connectionsError.includes('private')
+                                    ? 'This private profile’s connections are visible after your follow request is accepted.'
+                                    : connectionsError}
+                            </p>
+                        ) : profileConnections.length === 0 ? (
+                            <p className="py-8 text-center text-sm text-neutral-400">No {activeTab === 'Followers' ? 'Orbiters' : 'Orbits'} yet.</p>
+                        ) : profileConnections.map(person => (
+                            <button
+                                key={person._id}
+                                type="button"
+                                onClick={() => navigate(`/socialprofile/${person._id}`)}
+                                className="flex w-full items-center gap-3 py-3 text-left transition hover:bg-white/[0.03]"
+                            >
+                                {person.profilePic ? (
+                                    <img src={person.profilePic} alt="" className="h-11 w-11 shrink-0 rounded-full border border-white/10 object-cover" />
+                                ) : (
+                                    <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full border border-white/10 bg-white/5 text-sm font-semibold text-neutral-300">
+                                        {person.username?.charAt(0)?.toUpperCase() || '?'}
+                                    </span>
+                                )}
+                                <span className="min-w-0 flex-1">
+                                    <span className="block truncate text-sm font-semibold text-white">{person.username || 'Orbit member'}</span>
+                                    {person.bio && <span className="mt-1 block truncate text-xs text-neutral-500">{person.bio}</span>}
+                                </span>
+                            </button>
                         ))}
                     </div>
                 ) : activeTab === 'Friends' ? (
                     <div>
+                        <div className="mt-5 mb-4">
+                            <h3 className="text-sm font-semibold text-white">Constellations</h3>
+                            <p className="mt-1 text-sm text-neutral-400">Mutual connections who share your corner of the universe.</p>
+                        </div>
                         <div className="relative mb-4 sm:mb-6 mt-5 max-w-md mx-auto sm:mx-0">
                             <FaSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500" size={13} />
                             <input
                                 type="text"
                                 value={friendSearch}
                                 onChange={(e) => setFriendSearch(e.target.value)}
-                                placeholder="Search friends..."
+                                placeholder="Search your constellation..."
                                 className="w-full bg-transparent border border-white/10 rounded-full pl-9 pr-4 py-2 sm:py-2.5 text-sm text-white placeholder-gray-500 outline-none transition-colors focus:border-white/25"
                             />
                         </div>
 
                         {friends.length === 0 ? (
-                            <div className="text-center text-gray-400 text-sm sm:text-base">No friends yet.</div>
+                            <div className="text-center text-gray-400 text-sm sm:text-base">Your constellation is just beginning.</div>
                         ) : (
-                            <div ref={friendsListRef} className="flex flex-col divide-y divide-white/5 min-w-2xl mx-auto">
+                            <div ref={friendsListRef} className="flex min-w-0 w-full flex-col divide-y divide-white/5 mx-auto">
                                 {filteredFriends.map((friend) => (
                                     <div
                                         key={friend.id}
@@ -906,6 +1067,67 @@ export default function SocialProfileSection() {
                                     </div>
                                 ))}
                             </div>
+                        )}
+                    </div>
+                ) : activeTab === 'Requests' && isOwnProfile ? (
+                    <div className="mt-5 space-y-7">
+                        {requestsLoading || followRequestsLoading ? (
+                            <p className="py-8 text-center text-sm text-neutral-400">Loading requests...</p>
+                        ) : (requestsError || followRequestsError) ? (
+                            <p role="alert" className="py-5 text-center text-sm text-rose-300">{requestsError || followRequestsError}</p>
+                        ) : incomingFollowRequests.length === 0 && incomingFriendRequests.length === 0 ? (
+                            <p className="border-y border-white/10 py-8 text-center text-sm text-neutral-400">No pending requests.</p>
+                        ) : (
+                            <>
+                                {incomingFollowRequests.length > 0 && (
+                                    <section>
+                                        <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-neutral-500">Follow requests</h3>
+                                        <div className="divide-y divide-white/10 border-y border-white/10">
+                                            {incomingFollowRequests.map(requester => (
+                                                <div key={requester._id} className="flex flex-col gap-4 py-4 sm:flex-row sm:items-center">
+                                                    <button type="button" onClick={() => navigate(`/socialprofile/${requester._id}`)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
+                                                        {requester.profilePic ? (
+                                                            <img src={requester.profilePic} alt="" className="h-11 w-11 shrink-0 rounded-full border border-white/10 object-cover" />
+                                                        ) : (
+                                                            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full border border-white/10 bg-white/5 text-sm font-semibold text-neutral-300">{requester.username?.charAt(0)?.toUpperCase() || '?'}</span>
+                                                        )}
+                                                        <span className="min-w-0">
+                                                            <span className="block truncate text-sm font-semibold text-white">{requester.username || 'Orbit member'}</span>
+                                                            <span className="mt-1 block text-xs text-neutral-500">Requested to follow your private profile</span>
+                                                        </span>
+                                                    </button>
+                                                    <div className="flex gap-2 sm:shrink-0">
+                                                        <button type="button" onClick={() => resolveFollowRequest(requester, true)} disabled={Boolean(actingOnFollowRequestId)} className="inline-flex min-h-9 flex-1 items-center justify-center gap-2 bg-cyan-400 px-4 text-sm font-semibold text-black transition hover:bg-cyan-300 disabled:opacity-50 sm:flex-none"><Check size={15} /> Accept</button>
+                                                        <button type="button" onClick={() => resolveFollowRequest(requester, false)} disabled={Boolean(actingOnFollowRequestId)} className="inline-flex min-h-9 flex-1 items-center justify-center gap-2 border border-white/15 px-4 text-sm text-neutral-200 transition hover:bg-white/10 disabled:opacity-50 sm:flex-none"><X size={15} /> Decline</button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </section>
+                                )}
+                                {incomingFriendRequests.length > 0 && (
+                                    <section>
+                                        <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-neutral-500">Friend requests</h3>
+                                        <div className="divide-y divide-white/10 border-y border-white/10">
+                                            {incomingFriendRequests.map(request => {
+                                                const sender = request.from || {};
+                                                return (
+                                                    <div key={request._id} className="flex flex-col gap-4 py-4 sm:flex-row sm:items-center">
+                                                        <button type="button" onClick={() => sender._id && navigate(`/socialprofile/${sender._id}`)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
+                                                            {sender.profilePic ? <img src={sender.profilePic} alt="" className="h-11 w-11 shrink-0 rounded-full border border-white/10 object-cover" /> : <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full border border-white/10 bg-white/5 text-sm font-semibold text-neutral-300">{sender.username?.charAt(0)?.toUpperCase() || '?'}</span>}
+                                                            <span className="truncate text-sm font-semibold text-white">{sender.username || 'Unknown user'}</span>
+                                                        </button>
+                                                        <div className="flex gap-2 sm:shrink-0">
+                                                            <button type="button" onClick={() => resolveFriendRequest(request, true)} disabled={Boolean(actingOnRequestId)} className="inline-flex min-h-9 flex-1 items-center justify-center gap-2 bg-cyan-400 px-4 text-sm font-semibold text-black transition hover:bg-cyan-300 disabled:opacity-50 sm:flex-none"><Check size={15} /> Accept</button>
+                                                            <button type="button" onClick={() => resolveFriendRequest(request, false)} disabled={Boolean(actingOnRequestId)} className="inline-flex min-h-9 flex-1 items-center justify-center gap-2 border border-white/15 px-4 text-sm text-neutral-200 transition hover:bg-white/10 disabled:opacity-50 sm:flex-none"><X size={15} /> Decline</button>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </section>
+                                )}
+                            </>
                         )}
                     </div>
                 ) : (

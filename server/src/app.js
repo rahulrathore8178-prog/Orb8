@@ -16,6 +16,7 @@ const askIgrisRoutes = require('./routes/askigris.routes');
 const firebaseRoutes = require('./routes/firebase.routes');
 const orbitalRoutes = require('./routes/orbital.routes');
 const callRoutes = require('./routes/call.routes');
+const cosmicDiscoveryRoutes = require('./routes/cosmicDiscovery.routes');
 
 const app = express();
 
@@ -51,5 +52,6 @@ app.use('/api/askigris', askIgrisRoutes);
 app.use('/api/firebase', firebaseRoutes);
 app.use('/api/orbital', orbitalRoutes);
 app.use('/api/calls', callRoutes);
+app.use('/api/cosmic-discovery', cosmicDiscoveryRoutes);
 
 module.exports = app;
