@@ -4,7 +4,6 @@ import { BrowserRouter, Routes, Route, useParams, useNavigate, Navigate, useLoca
 import LoginPage from './pages/LoginPage.jsx'
 import RegisterationPage from './pages/RegisterationPage.jsx';
 import SignupPage from './pages/SignupPage.jsx';
-import SignupNextPage from './pages/SignupNextPage.jsx';
 import DashboardPage from './pages/DashboardPage.jsx';
 import LevelsPage from './pages/LevelsPage';
 import LanguagePage from './pages/LanguagePage.jsx';
@@ -37,37 +36,70 @@ import SearchPage from './pages/SearchPage.jsx';
 import OrbitalPage from './pages/OrbitalPage.jsx';
 import SettingsPage from './pages/SettingsPage.jsx'
 
+const AUTH_RECHECK_MS = 5 * 60 * 1000;
+let lastVerifiedAt = 0;
+
+// A fresh login must be verified once before it is trusted again.
+if (typeof window !== 'undefined') {
+  window.addEventListener('auth:user-updated', () => {
+    lastVerifiedAt = 0;
+  });
+}
+
+const hasFreshSession = () =>
+  Boolean(localStorage.getItem('token')) && Date.now() - lastVerifiedAt < AUTH_RECHECK_MS;
+
+function clearSession() {
+  lastVerifiedAt = 0;
+  localStorage.removeItem('user');
+  localStorage.removeItem('token');
+}
+
 function ProtectedRoute({ children }) {
-  const [isChecking, setIsChecking] = useState(true);
-  const [isAllowed, setIsAllowed] = useState(false);
+  const [isChecking, setIsChecking] = useState(() => !hasFreshSession());
+  const [isAllowed, setIsAllowed] = useState(() => hasFreshSession());
+  const [isSlow, setIsSlow] = useState(false);
 
   useEffect(() => {
+    if (hasFreshSession()) return undefined;
+
     let isActive = true;
+    const slowTimer = setTimeout(() => {
+      if (isActive) setIsSlow(true);
+    }, 6000);
 
     async function checkAuth() {
+      const token = localStorage.getItem('token');
       try {
         const apiUrl = import.meta.env.VITE_API_URL || '';
-        const token = localStorage.getItem('token');
-
         const response = await axios.get(`${apiUrl}/api/auth/user/me`, {
           withCredentials: true,
+          timeout: 70000,
           headers: token ? { Authorization: `Bearer ${token}` } : {}
         });
 
         if (!isActive) return;
         if (response.data?.user) {
           localStorage.setItem('user', JSON.stringify(response.data.user));
+          lastVerifiedAt = Date.now();
           setIsAllowed(true);
         } else {
-          localStorage.removeItem('user');
-          localStorage.removeItem('token');
+          clearSession();
           setIsAllowed(false);
         }
-      } catch {
+      } catch (error) {
         if (!isActive) return;
-        localStorage.removeItem('user');
-        localStorage.removeItem('token');
-        setIsAllowed(false);
+        const status = error.response?.status;
+        if (status === 401 || status === 403) {
+          clearSession();
+          setIsAllowed(false);
+        } else if (token && localStorage.getItem('user')) {
+          // Network drops and server cold starts must not sign anyone out.
+          console.warn('[AUTH] Session check failed, keeping the saved session:', error.message);
+          setIsAllowed(true);
+        } else {
+          setIsAllowed(false);
+        }
       } finally {
         if (isActive) setIsChecking(false);
       }
@@ -76,11 +108,14 @@ function ProtectedRoute({ children }) {
     checkAuth();
     return () => {
       isActive = false;
+      clearTimeout(slowTimer);
     };
   }, []);
   const fullScreen = true;
   const label = "ORBIT";
-  const subtext = "Loading your feed...";
+  const subtext = isSlow
+    ? "Waking the server up. The first visit can take up to a minute..."
+    : "Loading your feed...";
   const wrapperClass = fullScreen
     ? "fixed inset-0 z-50 bg-black"
     : "w-full";
@@ -231,7 +266,7 @@ function AppShell() {
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
             <Route path="/reset-password" element={<ResetPasswordPage />} />
             <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
-            <Route path="/next-step" element={<ProtectedRoute><SignupNextPage /></ProtectedRoute>} />
+            <Route path="/next-step" element={<Navigate to="/signup" replace />} />
             <Route
               path="/dashboard"
               element={(

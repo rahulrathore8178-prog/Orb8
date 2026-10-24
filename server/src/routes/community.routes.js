@@ -13,6 +13,7 @@ const {
   getPostImage,
   getPostVideo,
   discoverNearbyPeople,
+  stopSharingLocation,
   getPostVoiceNote,
   registerPostView,
   setPostArchived,
@@ -81,5 +82,6 @@ router.get('/insights', protect, getProfileInsights);
 
 // Discover people nearby
 router.post('/discover/nearby', protect, discoverNearbyPeople);
+router.delete('/discover/nearby', protect, stopSharingLocation);
 
 module.exports = router;

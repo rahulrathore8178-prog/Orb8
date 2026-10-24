@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo } from "react";
 import Header from '../components/LandingPage/Header.jsx';
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
@@ -8,7 +8,6 @@ import {
   FaClock,
   FaCrown,
   FaFilter,
-  FaFlag,
   FaGraduationCap,
   FaMedal,
   FaPlayCircle,
@@ -68,37 +67,6 @@ export default function Dashboard() {
     }
   ];
 
-  const fallbackLeaderboard = [
-    { rank: 1, name: "ProCoder123", xp: 5420, medal: "🥇" },
-    { rank: 2, name: "DevQueen99", xp: 5180, medal: "🥈" },
-    { rank: 3, name: "ByteMaster", xp: 5010, medal: "🥉" }
-  ];
-
-  function CourseMarketColumn() {
-    const spotlightCourses = ["python", "java", "claude", "aws"].map((key) => courseCatalog[key]);
-
-    return (
-      <div className="bg-[#1a2332] rounded-2xl p-5 border border-[#2a3a4a] shadow-lg">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-bold">Course Market Snapshot</h3>
-          <span className="text-xs text-gray-400">Live-style demo</span>
-        </div>
-        <div className="space-y-3">
-          {spotlightCourses.map((course) => (
-            <div key={course.id} className="rounded-xl border border-[#1f2a38] bg-[#141b24] p-3">
-              <div className="flex items-center justify-between mb-1">
-                <h4 className="font-semibold text-sm">{course.title}</h4>
-                <span className="text-[11px] text-cyan-300">{course.marketHotness}</span>
-              </div>
-              <div className="text-xs text-gray-400">Enrolled: {course.enrolled}</div>
-              <div className="text-xs text-gray-400">Salary: {course.salary}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const currentUser = useSelector(state => state.dashboard.currentUser);
@@ -114,12 +82,6 @@ export default function Dashboard() {
   const isEnrollingCourse = useSelector(state => state.dashboard.isEnrollingCourse);
   const friends = useSelector(state => state.dashboard.friends);
   const pendingRequestCount = useSelector(state => state.dashboard.pendingRequestCount);
-
-  const [weeklyGoals] = useState([
-    { title: "Complete 10 lessons", current: 7, total: 10 },
-    { title: "Earn 500 XP", current: 320, total: 500 },
-    { title: "Study 5 days", current: 3, total: 5 },
-  ]);
 
   const enrolledCourses = useMemo(
     () => learningOverview.enrolledCourses || [],
@@ -165,7 +127,7 @@ export default function Dashboard() {
               "⭐",
       isUser: player.userId === (currentUser?.id || currentUser?._id)
     }))
-    : fallbackLeaderboard;
+    : [];
 
   const languageProgressData = enrolledCourses.slice(0, 4).map((course) => ({
     id: course.id,
@@ -678,34 +640,6 @@ export default function Dashboard() {
                 ) : null}
               </div>
 
-              {/* Weekly Goals */}
-              <div className="bg-[#1a2332] rounded-2xl p-6 border border-[#2a3a4a] shadow-lg">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-xl font-bold flex items-center gap-2">
-                    <FaFlag className="text-emerald-400" /> Weekly Goals
-                  </h3>
-                </div>
-                <div className="space-y-4">
-                  {weeklyGoals.map((goal) => {
-                    const percent = Math.round((goal.current / goal.total) * 100);
-                    return (
-                      <div key={goal.title} className="bg-[#141b24] rounded-lg p-3 border border-[#1f2a38]">
-                        <div className="flex items-center justify-between text-sm mb-2">
-                          <span className="font-semibold">{goal.title}</span>
-                          <span className="text-gray-400">{goal.current}/{goal.total}</span>
-                        </div>
-                        <div className="w-full bg-[#0f1419] rounded-full h-2 overflow-hidden border border-[#1f2a38]">
-                          <div
-                            className="bg-linear-to-r from-emerald-400 to-cyan-400 h-full rounded-full"
-                            style={{ width: `${percent}%` }}
-                          ></div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
               {/*Upcoming lessons section*/}
               {/* <div className="bg-[#1a2332] rounded-2xl p-6 border border-[#2a3a4a] shadow-lg">
               <div className="flex items-center justify-between mb-4">
@@ -739,6 +673,11 @@ export default function Dashboard() {
                   <button className="text-cyan-400 text-xs font-bold hover:underline" type="button">VIEW ALL →</button>
                 </div>
                 <div className="space-y-3">
+                  {leaderboardData.length === 0 && (
+                    <div className="rounded-lg border border-[#1f2a38] bg-[#141b24] p-4 text-center text-sm text-gray-400">
+                      No rankings yet. Earn XP from lessons and challenges to appear here.
+                    </div>
+                  )}
                   {leaderboardData.map((player) => (
                     <div
                       key={`${player.rank}-${player.name}`}
@@ -812,8 +751,6 @@ export default function Dashboard() {
                   View Calendar
                 </button>
               </div>
-
-              <CourseMarketColumn />
 
               <div className="bg-[#1a2332] rounded-2xl p-6 border border-[#2a3a4a] shadow-lg">
                 <h3 className="text-lg font-bold mb-4 flex items-center gap-2">

@@ -17,8 +17,8 @@ export default function SignupProfile() {
     if (!token) navigate('/signup', { replace: true });
   }, [navigate]);
 
-  // Validation: Only enable if email and pw not empty
-  const valid = email.trim() && pw.length >= 6;
+  // Validation: the server requires a username of at least 3 characters.
+  const valid = name.trim().length >= 3 && email.trim() && pw.length >= 6;
 
   const handleSubmit = async e => {
    e.preventDefault();
@@ -27,7 +27,7 @@ export default function SignupProfile() {
   try {
     const apiUrl = import.meta.env.VITE_API_URL || "";
     const res = await axios.post(`${apiUrl}/api/auth/user/register`, {
-      username: name, // or use a separate username field
+      username: name.trim(),
       email,
       password: pw,
     }, {
@@ -86,10 +86,12 @@ export default function SignupProfile() {
           <input
             className="w-full bg-[#141b24] border border-[#1f2a38] text-white text-base p-3.5 rounded-lg font-semibold placeholder-gray-500 outline-none focus:border-cyan-500 transition"
             type="text"
-            placeholder="Name (optional)"
+            placeholder="Username (3+ characters)"
             value={name}
             onChange={e => setName(e.target.value)}
             autoComplete="off"
+            required
+            minLength={3}
           />
           <input
             className="w-full bg-[#141b24] border border-[#1f2a38] text-white text-base p-3.5 rounded-lg font-semibold placeholder-gray-500 outline-none focus:border-cyan-500 transition"

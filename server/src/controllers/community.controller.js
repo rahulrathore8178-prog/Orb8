@@ -869,34 +869,48 @@ async function getUserPosts(req, res) {
   }
 };
 
+const DISCOVER_FRESHNESS_MS = 30 * 60 * 1000;
+// 3 decimal places is roughly 110 m, so we never store an exact home location.
+const coarsenCoordinate = (value) => Math.round(value * 1000) / 1000;
+
 const discoverNearbyPeople = async (req, res) => {
   try {
-    const { lat, lng } = req.body;
+    const { lat, lng, consent } = req.body;
     const userId = req.user.id;
 
-    if (typeof lat !== 'number' || typeof lng !== 'number') {
+    if (consent !== true) {
+      return res.status(400).json({ message: 'Location sharing requires explicit consent' });
+    }
+
+    if (
+      typeof lat !== 'number' || typeof lng !== 'number' ||
+      !Number.isFinite(lat) || !Number.isFinite(lng) ||
+      Math.abs(lat) > 90 || Math.abs(lng) > 180
+    ) {
       return res.status(400).json({ message: 'Valid lat/lng required' });
     }
 
-    // tagging user's exact location along with the time stamp
+    const sharedLat = coarsenCoordinate(lat);
+    const sharedLng = coarsenCoordinate(lng);
+
     const user = await User.findById(userId);
-    user.location = { type: 'Point', coordinates: [lng, lat] };
+    user.location = { type: 'Point', coordinates: [sharedLng, sharedLat] };
     user.locationUpdatedAt = new Date();
     user.isDiscoverable = true;
     await user.save();
 
-    // 2. Find nearby discoverable users
+    // 2. Find nearby discoverable users who shared recently
     const nearbyUsers = await User.aggregate([
       {
         $geoNear: {
-          near: { type: 'Point', coordinates: [lng, lat] },
+          near: { type: 'Point', coordinates: [sharedLng, sharedLat] },
           distanceField: 'distance',
           maxDistance: 500, // meters
           spherical: true,
           query: {
             _id: { $ne: user._id },
             isDiscoverable: true,
-            // locationUpdatedAt: { $gte: new Date(Date.now() - 10 * 60 * 1000) }, // active in last 10 min
+            locationUpdatedAt: { $gte: new Date(Date.now() - DISCOVER_FRESHNESS_MS) },
           },
         },
       },
@@ -907,13 +921,28 @@ const discoverNearbyPeople = async (req, res) => {
           distance: { $round: ['$distance', 0] }, // meters, rounded
         },
       },
-      // { $limit: 50 },
     ]);
 
     res.status(200).json({ nearbyUsers });
   } catch (error) {
     console.error('finding nearby people error:', error);
-    return res.status(500).json({ message: error.message });
+    return res.status(500).json({ message: 'Failed to find nearby people' });
+  }
+};
+
+const stopSharingLocation = async (req, res) => {
+  try {
+    await User.updateOne(
+      { _id: req.user.id },
+      {
+        $set: { isDiscoverable: false },
+        $unset: { locationUpdatedAt: 1 },
+      }
+    );
+    return res.status(200).json({ message: 'Location sharing stopped' });
+  } catch (error) {
+    console.error('stop sharing location error:', error);
+    return res.status(500).json({ message: 'Failed to stop sharing location' });
   }
 };
 
@@ -1156,6 +1185,7 @@ module.exports = {
   getPostVideo,
   getPostVoiceNote,
   discoverNearbyPeople,
+  stopSharingLocation,
   registerPostView,
   setPostArchived,
   savePost,

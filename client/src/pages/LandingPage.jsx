@@ -227,11 +227,9 @@ export default function OrbitLanding() {
           <div className="mt-14 grid md:grid-cols-3 gap-6">
             {/* Personal */}
             <div className="group rounded-2xl border border-slate-800 bg-slate-900/40 overflow-hidden hover:border-orange-400/40 hover:-translate-y-1 transition-all duration-300">
-              <img
-                src="https://picsum.photos/seed/orbit-personal/500/360"
-                alt="Friends spending time together"
-                className="w-full h-44 object-cover"
-              />
+              <div className="relative grid h-44 w-full place-items-center overflow-hidden bg-linear-to-br from-orange-400/15 via-slate-900 to-slate-950" aria-hidden="true">
+                <Heart size={64} strokeWidth={1.2} className="text-orange-400/70" />
+              </div>
               <div className="p-6">
                 <div className="w-9 h-9 rounded-full bg-orange-400/10 flex items-center justify-center mb-4">
                   <Heart size={16} className="text-orange-400" />
@@ -252,11 +250,9 @@ export default function OrbitLanding() {
 
             {/* Professional */}
             <div className="group rounded-2xl border border-slate-800 bg-slate-900/40 overflow-hidden hover:border-teal-400/40 hover:-translate-y-1 transition-all duration-300">
-              <img
-                src="https://picsum.photos/seed/orbit-professional/500/360"
-                alt="Colleagues in a meeting"
-                className="w-full h-44 object-cover"
-              />
+              <div className="relative grid h-44 w-full place-items-center overflow-hidden bg-linear-to-br from-teal-400/15 via-slate-900 to-slate-950" aria-hidden="true">
+                <Briefcase size={64} strokeWidth={1.2} className="text-teal-400/70" />
+              </div>
               <div className="p-6">
                 <div className="w-9 h-9 rounded-full bg-teal-400/10 flex items-center justify-center mb-4">
                   <Briefcase size={16} className="text-teal-400" />
@@ -277,11 +273,9 @@ export default function OrbitLanding() {
 
             {/* Social */}
             <div className="group rounded-2xl border border-slate-800 bg-slate-900/40 overflow-hidden hover:border-violet-400/40 hover:-translate-y-1 transition-all duration-300">
-              <img
-                src="https://picsum.photos/seed/orbit-social/500/360"
-                alt="A crowd at a live event"
-                className="w-full h-44 object-cover"
-              />
+              <div className="relative grid h-44 w-full place-items-center overflow-hidden bg-linear-to-br from-violet-400/15 via-slate-900 to-slate-950" aria-hidden="true">
+                <Globe2 size={64} strokeWidth={1.2} className="text-violet-400/70" />
+              </div>
               <div className="p-6">
                 <div className="w-9 h-9 rounded-full bg-violet-400/10 flex items-center justify-center mb-4">
                   <Globe2 size={16} className="text-violet-400" />

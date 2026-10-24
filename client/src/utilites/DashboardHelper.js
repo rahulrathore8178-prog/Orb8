@@ -30,12 +30,6 @@ export const getUserIdentifier = (user) => {
 export const apiUrl =
     import.meta.env.VITE_API_URL?.replace(/\/+$/, "") || "http://localhost:5000";
 
-const fallbackLeaderboard = [
-    { rank: 1, name: "ProCoder123", xp: 5420, medal: "🥇" },
-    { rank: 2, name: "DevQueen99", xp: 5180, medal: "🥈" },
-    { rank: 3, name: "ByteMaster", xp: 5010, medal: "🥉" }
-];
-
 export const fetchLearningOverview = createAsyncThunk(
     'learning/fetchOverview',
     async (_, { rejectWithValue }) => {
@@ -52,7 +46,7 @@ export const fetchLearningOverview = createAsyncThunk(
                         totalUsers: 0
                     },
                     enrolledCourses: [],
-                    leaderboard: fallbackLeaderboard,
+                    leaderboard: [],
                     user: null
                 };
             };

@@ -28,7 +28,7 @@ import { apiUrl, getAuthHeaders } from '../../utilites/DashboardHelper';
 import { setCurrentUser } from '../../redux/slices/dashboardSlice';
 import { registerPushNotifications } from '../../notifications/registerPushNotifications';
 import { raised } from '../../utilites/cssUtility';
-import { ChevronRight, Settings, Users2Icon } from 'lucide-react';
+import { Settings } from 'lucide-react';
 
 const communityNavItems = [
   { key: 'home', label: 'Home', icon: FaHome, to: '/community', match: ['/community'] },
@@ -49,8 +49,6 @@ const lmsNavItems = [
   { key: 'profile', label: 'Profile', icon: FaMedal, to: '/profile', match: ['/profile'] },
   { key: 'progress', label: 'Progress', icon: FaChartLine, to: '/progress', match: ['/progress'] },
 ];
-
-const MODES = ['Social', 'Professional', 'Private'];
 
 function SidebarItem({ item, isActive, collapsed, onClick, iconOnly = false }) {
   const Icon = item.icon;
@@ -189,11 +187,7 @@ export default function AppSidebar() {
   const isMobileMenuOpen = useSelector((state) => state.sideBar.isMobileMenuOpen);
   const currentUser = useSelector((state) => state.dashboard.currentUser);
 
-  // Personality mode
-  const [activeMode, setActiveMode] = useState('Social');
-  const [isOpen, setIsOpen] = useState(false);
   const [isHeaderVisible, setIsHeaderVisible] = useState(true);
-  const containerRef = useRef(null);
   const lastTouchPosition = useRef(null);
 
   useEffect(() => {
@@ -235,26 +229,6 @@ export default function AppSidebar() {
     };
   }, []);
 
-  // closes the menu on outside tap/click — needed for mobile since there's no "mouse leave"
-  useEffect(() => {
-    const handleOutsideClick = (e) => {
-      if (containerRef.current && !containerRef.current.contains(e.target)) {
-        setIsOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleOutsideClick);
-    document.addEventListener('touchstart', handleOutsideClick);
-    return () => {
-      document.removeEventListener('mousedown', handleOutsideClick);
-      document.removeEventListener('touchstart', handleOutsideClick);
-    };
-  }, []);
-
-  const handleSelect = (mode) => {
-    setActiveMode(mode);
-    setIsOpen(false);
-  };
-
   const handleLogout = async () => {
     try {
       await axios.get(`${apiUrl}/api/auth/user/logout`, {
@@ -291,12 +265,12 @@ export default function AppSidebar() {
   const isActiveItem = (item) =>
     item.match.some((routePrefix) => location.pathname.startsWith(routePrefix));
 
-  const [dashboardMode, setDashboardMode] = useState(
+  const [storedMode, setStoredMode] = useState(
     localStorage.getItem('dashboardMode') || 'community'
   );
   useEffect(() => {
     const syncMode = () =>
-      setDashboardMode(localStorage.getItem('dashboardMode') || 'community');
+      setStoredMode(localStorage.getItem('dashboardMode') || 'community');
 
     window.addEventListener('storage', syncMode);
     window.addEventListener('dashboardModeChanged', syncMode); // custom event for same tab
@@ -305,8 +279,23 @@ export default function AppSidebar() {
       window.removeEventListener('dashboardModeChanged', syncMode);
     };
   }, []);
+
+  // The page you are on decides which menu you see, so the two can never disagree.
+  const matchesRoute = (items) => items.some(isActiveItem);
+  const dashboardMode = matchesRoute(lmsNavItems)
+    ? 'lms'
+    : matchesRoute(communityNavItems)
+      ? 'community'
+      : storedMode;
   const navItems = dashboardMode === 'community' ? communityNavItems : lmsNavItems;
   const pageLabel = [...communityNavItems, ...lmsNavItems].find(isActiveItem)?.label ?? 'Orbit';
+
+  const handleSwitchMode = (mode) => {
+    if (mode === dashboardMode) return;
+    localStorage.setItem('dashboardMode', mode);
+    window.dispatchEvent(new Event('dashboardModeChanged'));
+    handleNavigate(mode === 'community' ? '/community' : '/dashboard');
+  };
 
   return (
     <>
@@ -361,11 +350,19 @@ export default function AppSidebar() {
                   <button type="button" onClick={() => dispatch(setMobileMenuOpen(false))} className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-neutral-400 transition hover:bg-white/10 hover:text-white" aria-label="Close navigation menu"><FaTimes /></button>
                 </div>
 
-                <div ref={containerRef} className="relative mb-4">
-                  <button type="button" onClick={() => setIsOpen((previous) => !previous)} aria-expanded={isOpen} className="flex min-h-10 w-full items-center justify-between rounded-xl border border-white/10 bg-white/[0.04] px-3 text-sm text-neutral-200 transition hover:bg-white/[0.08]">
-                    <span>{activeMode}</span><ChevronRight size={18} className={`transition-transform ${isOpen ? 'rotate-90' : ''}`} />
-                  </button>
-                  {isOpen && <div className="absolute inset-x-0 top-full z-20 mt-1 overflow-hidden rounded-xl border border-white/10 bg-[#111111] shadow-xl">{MODES.map((mode) => <button key={mode} type="button" onClick={() => handleSelect(mode)} className={`w-full px-3 py-2.5 text-left text-sm transition ${activeMode === mode ? 'bg-white/10 text-white' : 'text-neutral-400 hover:bg-white/5 hover:text-white'}`}>{mode}</button>)}</div>}
+                <div role="tablist" aria-label="Section" className="mb-4 grid grid-cols-2 gap-1 rounded-xl border border-white/10 bg-white/[0.04] p-1">
+                  {[['community', 'Community'], ['lms', 'Learn']].map(([mode, label]) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      role="tab"
+                      aria-selected={dashboardMode === mode}
+                      onClick={() => handleSwitchMode(mode)}
+                      className={`min-h-10 rounded-lg px-3 text-sm font-medium transition ${dashboardMode === mode ? 'bg-white/12 text-white' : 'text-neutral-400 hover:bg-white/5 hover:text-white'}`}
+                    >
+                      {label}
+                    </button>
+                  ))}
                 </div>
 
                 <nav className="min-h-0 flex-1 overflow-y-auto" aria-label="Pages">
