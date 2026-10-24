@@ -39,29 +39,88 @@ if (!frontendUrl) {
   console.warn(`${TAG} FRONTEND_URL is not set, so post-login redirects will start with "undefined"`);
 }
 
+// The login token rides on this redirect, so only exact, known origins are allowed.
+const BUILT_IN_FRONTENDS = ['https://orb8-ochre.vercel.app'];
+const LOCAL_DEV_ORIGIN = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+
+const toOrigin = (value) => {
+  try {
+    return new URL(String(value)).origin;
+  } catch {
+    return null;
+  }
+};
+
+const allowedFrontends = new Set(
+  [frontendUrl, ...BUILT_IN_FRONTENDS, ...(process.env.ALLOWED_FRONTEND_ORIGINS || '').split(',')]
+    .map((value) => (value && value.trim() ? toOrigin(value.trim()) : null))
+    .filter(Boolean)
+);
+
+const isAllowedFrontend = (origin) => Boolean(origin) && (allowedFrontends.has(origin) || LOCAL_DEV_ORIGIN.test(origin));
+const defaultFrontend = () => toOrigin(frontendUrl) || frontendUrl;
+
+console.log(`${TAG} S0 allowed frontends`, { fallback: defaultFrontend() || 'UNSET', allowed: [...allowedFrontends], localhostAllowed: true });
+
+// Prefer the explicit ?return= from the client, then the Referer header.
+const pickFrontend = (req) => {
+  const fromQuery = toOrigin(req.query.return);
+  const fromReferer = toOrigin(req.headers.referer);
+  const candidates = [['query', fromQuery], ['referer', fromReferer]];
+  for (const [source, origin] of candidates) {
+    if (!origin) continue;
+    if (isAllowedFrontend(origin)) return { origin, source };
+    console.warn(`${TAG} ignoring frontend origin not on allowlist`, { source, origin });
+  }
+  return { origin: defaultFrontend(), source: 'env FRONTEND_URL' };
+};
+
+const frontendFromState = (req) => {
+  try {
+    const { fe } = jwt.verify(String(req.query.state || ''), process.env.JWT_SECRET);
+    if (isAllowedFrontend(fe)) return { origin: fe, source: 'state' };
+    console.warn(`${TAG} state carried an origin that is not allowed`, { fe });
+  } catch (error) {
+    console.warn(`${TAG} state missing or invalid, using env FRONTEND_URL`, { reason: error.message });
+  }
+  return { origin: defaultFrontend(), source: 'env FRONTEND_URL' };
+};
+
 if (isGoogleEnabled) {
   router.get(
     '/google',
     (req, res, next) => {
+      const frontend = pickFrontend(req);
       console.log(`${TAG} S1 /google hit`, {
         requestHost: requestOrigin(req),
         callbackSentToGoogle: `${requestOrigin(req)}/api/auth/google/callback`,
         referer: req.headers.referer || 'none',
-        frontendUrl,
+        returnParam: req.query.return || 'none',
+        returningUserTo: frontend.origin,
+        chosenFrom: frontend.source,
       });
-      next();
-    },
-    passport.authenticate('google', { scope: ['profile', 'email'] })
+
+      let state;
+      try {
+        state = jwt.sign({ fe: frontend.origin }, process.env.JWT_SECRET, { expiresIn: '10m' });
+      } catch (error) {
+        console.error(`${TAG} S1 could not sign state, will fall back to FRONTEND_URL`, { reason: error.message });
+      }
+      passport.authenticate('google', { scope: ['profile', 'email'], ...(state ? { state } : {}) })(req, res, next);
+    }
   );
 
   router.get(
     '/google/callback',
     (req, res, next) => {
+      req.frontend = frontendFromState(req);
       console.log(`${TAG} S2 /google/callback hit`, {
         requestHost: requestOrigin(req),
         queryKeys: Object.keys(req.query),
         googleError: req.query.error || null,
         googleErrorDescription: req.query.error_description || null,
+        returningUserTo: req.frontend.origin,
+        chosenFrom: req.frontend.source,
       });
       next();
     },
@@ -78,7 +137,7 @@ if (isGoogleEnabled) {
               ? `Add ${requestOrigin(req)}/api/auth/google/callback to Authorized redirect URIs in Google Cloud Console`
               : null,
           });
-          return res.redirect(`${frontendUrl}/login?error=oauth_failed`);
+          return res.redirect(`${req.frontend.origin}/login?error=oauth_failed`);
         }
         req.user = user;
         console.log(`${TAG} S3 authenticate OK`, { user: String(user._id) });
@@ -88,7 +147,8 @@ if (isGoogleEnabled) {
     (req, res) => {
       const token = jwt.sign({ id: req.user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
       const user = req.user;
-      const target = user.needsProfileCompletion == true ? `${frontendUrl}/signup` : `${frontendUrl}/community`;
+      const base = req.frontend.origin;
+      const target = user.needsProfileCompletion == true ? `${base}/signup` : `${base}/community`;
       console.log(`${TAG} S4 redirecting browser to frontend`, {
         user: String(user._id),
         needsProfileCompletion: Boolean(user.needsProfileCompletion),
