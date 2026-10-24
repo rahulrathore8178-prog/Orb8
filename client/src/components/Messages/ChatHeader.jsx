@@ -116,6 +116,8 @@ export function ChatHeader({
   setEmojiOpen,
   showToast,
   setContacts,
+  onVoiceCall,
+  onVideoCall,
 }) {
   return (
     <header className="flex-shrink-0 min-h-[68px] flex items-center gap-1 px-3 md:px-4 bg-black border-b border-slate-800 relative z-20">
@@ -213,14 +215,14 @@ export function ChatHeader({
               onClick={() => showToast(`Calling ${activeContact.name}…`)}
               aria-label="Voice call"
             >
-              <Phone className="w-[18px] h-[18px]" />
+              <Phone onClick={onVoiceCall}  className="w-[18px] h-[18px]" />
             </button>
             <button
               className="w-9 h-9 rounded-full flex items-center justify-center text-slate-400 hover:bg-slate-800 hover:text-slate-100"
               onClick={() => showToast(`Starting video call with ${activeContact.name}…`)}
               aria-label="Video call"
             >
-              <Video className="w-[18px] h-[18px]" />
+              <Video onClick={onVideoCall} className="w-[18px] h-[18px]" />
             </button>
             <div ref={moreWrapRef} className="relative">
               <button

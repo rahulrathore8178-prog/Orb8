@@ -68,7 +68,7 @@ exports.sendMessage = async (req, res) => {
 
 exports.getConversation = async (req, res) => {
     try {
-        console.log('req.user:', req.user); // ✅ add this
+        // console.log('req.user:', req.user); // ✅ add this
         const { recipientId } = req.params;
         const senderId = req.user.id;
 

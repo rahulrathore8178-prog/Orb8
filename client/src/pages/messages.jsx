@@ -6,6 +6,8 @@ import { InputBar } from "../components/Messages/ChatInput";
 import { Sidebar } from "../components/Messages/ContactList";
 import { useDispatch, useSelector } from "react-redux";
 import { addMessage, fetchContacts, fetchConversation, sendChatMessage, setActiveContact } from "../redux/slices/chatSlice";
+import { getDeviceId, useCall } from "../hooks/useCall";
+import { CallOverlay } from "../components/Messages/CallOverlay";
 
 export default function MessagesApp() {
   const isMobile = useIsMobile();
@@ -48,6 +50,10 @@ export default function MessagesApp() {
   const activeContact = contacts.find((c) => c.id === activeContactId) || null;
   const currentUser = useSelector((s) => s.dashboard.currentUser);
   const wsRef = useRef(null);
+  const {
+    call, muted, camOff, seconds, localStream, remoteStream,
+    startCall, acceptCall, rejectCall, endCall, toggleMute, toggleCam, handleCallSignal,
+  } = useCall({ wsRef, showToast });
 
   useEffect(() => {
     if (activeContactId) dispatch(fetchConversation(activeContactId));
@@ -63,6 +69,7 @@ export default function MessagesApp() {
 
     socket.onopen = () => {
       socket.send(JSON.stringify({ type: "register", token: localStorage.getItem('token') }));
+      socket.send(JSON.stringify({ type: "register", token: localStorage.getItem("token"), deviceId: getDeviceId() }));
     };
     socket.onmessage = (event) => {
       console.log("🔥 WS EVENT RECEIVED");
@@ -70,6 +77,7 @@ export default function MessagesApp() {
 
       try {
         const data = JSON.parse(event.data);
+        if (handleCallSignal(data)) return;
         console.log("🔥 PARSED DATA:", data);
         console.log('json data', JSON.stringify(null, 2));
 
@@ -343,6 +351,8 @@ export default function MessagesApp() {
           setEmojiOpen={setEmojiOpen}
           showToast={showToast}
           setContacts={() => { }}
+          onVoiceCall={() => startCall({ id: activeContact.id, name: activeContact.name }, "audio")}
+          onVideoCall={() => startCall({ id: activeContact.id, name: activeContact.name }, "video")}
         />
 
         <ChatArea
@@ -383,6 +393,12 @@ export default function MessagesApp() {
           />
         )}
       </main>
+      <CallOverlay
+        call={call} muted={muted} camOff={camOff} seconds={seconds}
+        localStream={localStream} remoteStream={remoteStream}
+        onAccept={acceptCall} onReject={rejectCall} onEnd={endCall}
+        onToggleMute={toggleMute} onToggleCam={toggleCam}
+      />
 
       {/* ---- Toasts ---- */}
       <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-100 flex flex-col items-center gap-2 pointer-events-none">
