@@ -7,12 +7,12 @@ const MAX_RADIUS_KM = 100;
 async function getRecommendations(req, res) {
   try {
     const viewer = await User.findById(req.user.id)
-      .select('preferences.content following blockedUsers isCosmicDiscoverable')
+      .select('preferences.content friends blockedUsers isCosmicDiscoverable')
       .lean();
 
     if (!viewer) return res.status(404).json({ message: 'User not found' });
 
-    const allowedPrivateAuthors = [...(viewer.following || []), viewer._id];
+    const allowedPrivateAuthors = [...(viewer.friends || []), viewer._id];
     const privateAuthors = await User.find({
       isPrivate: true,
       _id: { $nin: allowedPrivateAuthors },

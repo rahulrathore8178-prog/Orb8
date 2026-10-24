@@ -18,8 +18,8 @@ import Comments from './pages/CommentsModal.jsx';
 import SocialProfileSection from './pages/SocialProfilePage.jsx';
 import GlassFeed from './pages/LandinPageExperimental.jsx';
 import ExplorePage from './pages/ExplorePage.jsx';
-import AskIgris from './pages/askIgris.jsx';
-import RememberIgris from './pages/rememberIgris.jsx';
+import NotificationsPage from './pages/NotificationsPage.jsx';
+import AssistantPage from './pages/AssistantPage.jsx';
 import { onMessage } from './firebase';
 import { registerPushNotifications } from './notifications/registerPushNotifications';
 import OrbitalPage from './pages/OrbitalPage.jsx';
@@ -279,6 +279,14 @@ function AppShell() {
               )}
             />
             <Route
+              path="/notifications"
+              element={(
+                <ProtectedRoute>
+                  <NotificationsPage />
+                </ProtectedRoute>
+              )}
+            />
+            <Route
               path="/explore"
               element={(
                 <ProtectedRoute>
@@ -314,21 +322,15 @@ function AppShell() {
               )}
             />
             <Route
-              path="/askIgris"
+              path="/assistant"
               element={(
                 <ProtectedRoute>
-                  <AskIgris />
+                  <AssistantPage />
                 </ProtectedRoute>
               )}
             />
-            <Route
-              path="/rememberIgris"
-              element={(
-                <ProtectedRoute>
-                  <RememberIgris />
-                </ProtectedRoute>
-              )}
-            />
+            <Route path="/askIgris" element={<Navigate to="/assistant?tab=ask" replace />} />
+            <Route path="/rememberIgris" element={<Navigate to="/assistant?tab=teach" replace />} />
             <Route
               path="/friends"
               element={(

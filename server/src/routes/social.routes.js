@@ -9,19 +9,7 @@ router.use(protect);
 // Search users
 router.get('/search', socialController.searchUsers);
 
-// Follow, privacy, and blocking
-router.get('/follow-requests', socialController.getFollowRequests);
-router.get('/users/:userId/followers', (req, res, next) => {
-	req.params.connectionType = 'followers';
-	return socialController.getFollowConnections(req, res, next);
-});
-router.get('/users/:userId/following', (req, res, next) => {
-	req.params.connectionType = 'following';
-	return socialController.getFollowConnections(req, res, next);
-});
-router.post('/follow/:userId', socialController.followUser);
-router.delete('/follow/:userId', socialController.unfollowUser);
-router.patch('/follow-requests/:userId', socialController.resolveFollowRequest);
+// Privacy and blocking
 router.patch('/privacy', socialController.updatePrivacy);
 router.patch('/notification-preferences', socialController.updateNotificationPreferences);
 router.post('/block/:userId', socialController.blockUser);

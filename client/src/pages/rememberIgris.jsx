@@ -122,7 +122,7 @@ export default function RememberIgris({ onSend } = {}) {
     };
 
     return (
-        <div className="relative w-full h-screen min-h-screen bg-[#0b0b0d] flex items-center justify-center px-4 overflow-y-auto">
+        <div className="relative w-full h-full min-h-0 bg-[#0b0b0d] flex items-center justify-center px-4 overflow-y-auto">
             <div className="w-full max-w-xl flex flex-col items-start gap-3">
                 <div className="w-full flex items-center justify-center">
                     <h2 className="text-center text-zinc-200 text-2xl sm:text-3xl font-medium tracking-tight mb-1 select-none">

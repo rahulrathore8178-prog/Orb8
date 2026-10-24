@@ -929,7 +929,7 @@ export default function AskIgris({ onSend } = {}) {
     }, []);
 
     return (
-        <div className="relative w-full h-screen min-h-screen bg-black flex flex-col overflow-hidden">
+        <div className="relative w-full h-full min-h-0 bg-black flex flex-col overflow-hidden">
             <style>{`
                 @keyframes dotBounce {
                     0%, 80%, 100% { transform: translateY(0); opacity: .35; }
@@ -957,7 +957,7 @@ export default function AskIgris({ onSend } = {}) {
             <IconButton
                 label="Toggle sidebar"
                 onClick={() => setSidebarOpen((o) => !o)}
-                className="fixed top-3 right-3 sm:top-4 sm:right-4 z-50 w-9 h-9 bg-[#131316] border border-white/[0.08] hover:bg-white/[0.06]"
+                className="absolute top-3 right-3 sm:top-4 sm:right-4 z-30 w-11 h-11 bg-[#131316] border border-white/[0.08] hover:bg-white/[0.06]"
             >
                 <Menu className="w-[18px] h-[18px]" />
             </IconButton>
@@ -987,9 +987,6 @@ export default function AskIgris({ onSend } = {}) {
                 <h1 className="flex items-center gap-2 text-sm sm:text-base font-semibold tracking-tight text-zinc-200 shrink-0">
                     <span className="w-1.5 h-1.5 rounded-full bg-zinc-300/70" />
                     Ask Igris
-                </h1>
-                <h1 className="flex-1 text-center text-sm sm:text-base font-medium text-zinc-500 truncate px-3">
-                    Title
                 </h1>
             </header>
 
