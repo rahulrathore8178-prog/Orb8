@@ -30,14 +30,25 @@ router.get('/oauth/status', (req, res) => {
   res.json({ google: isGoogleEnabled });
 });
 
-const frontendUrl = process.env.FRONTEND_URL
+const frontendUrl = process.env.FRONTEND_URL;
+const TAG = '[GOOGLE-AUTH]';
+const requestOrigin = (req) => `${req.headers['x-forwarded-proto'] || req.protocol}://${req.headers['x-forwarded-host'] || req.headers.host}`;
+const maskToken = (token) => (token ? `${token.slice(0, 8)}...(${token.length} chars)` : 'none');
+
+if (!frontendUrl) {
+  console.warn(`${TAG} FRONTEND_URL is not set, so post-login redirects will start with "undefined"`);
+}
 
 if (isGoogleEnabled) {
   router.get(
     '/google',
     (req, res, next) => {
-      console.log('[AUTH] /google hit');
-      console.log('[AUTH] callback expected:', `${process.env.BACKEND_URL}/api/auth/google/callback`);
+      console.log(`${TAG} S1 /google hit`, {
+        requestHost: requestOrigin(req),
+        callbackSentToGoogle: `${requestOrigin(req)}/api/auth/google/callback`,
+        referer: req.headers.referer || 'none',
+        frontendUrl,
+      });
       next();
     },
     passport.authenticate('google', { scope: ['profile', 'email'] })
@@ -46,23 +57,44 @@ if (isGoogleEnabled) {
   router.get(
     '/google/callback',
     (req, res, next) => {
-      console.log('[AUTH] /google/callback hit');
-      console.log('[AUTH] query:', req.query);
+      console.log(`${TAG} S2 /google/callback hit`, {
+        requestHost: requestOrigin(req),
+        queryKeys: Object.keys(req.query),
+        googleError: req.query.error || null,
+        googleErrorDescription: req.query.error_description || null,
+      });
       next();
     },
-    passport.authenticate('google', {
-      session: false,
-      failureRedirect: `${frontendUrl}/login?error=oauth_failed`,
-    }),
+    (req, res, next) => {
+      passport.authenticate('google', { session: false }, (err, user, info) => {
+        if (err || !user) {
+          const googleReply = String(err?.oauthError?.data || '');
+          console.error(`${TAG} S3 authenticate FAILED`, {
+            name: err?.name || null,
+            message: err?.message || null,
+            googleReply: googleReply || null,
+            info: info || null,
+            hint: googleReply.includes('redirect_uri_mismatch')
+              ? `Add ${requestOrigin(req)}/api/auth/google/callback to Authorized redirect URIs in Google Cloud Console`
+              : null,
+          });
+          return res.redirect(`${frontendUrl}/login?error=oauth_failed`);
+        }
+        req.user = user;
+        console.log(`${TAG} S3 authenticate OK`, { user: String(user._id) });
+        return next();
+      })(req, res, next);
+    },
     (req, res) => {
       const token = jwt.sign({ id: req.user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
       const user = req.user;
-      console.log(`[AUTH] Google OAuth success user=${req.user._id}`);
-      if (user.needsProfileCompletion == true) {
-        return res.redirect(`${frontendUrl}/signup?token=${token}`);
-      }
-      console.log(`[AUTH] Google OAuth success, redirecting to ${frontendUrl}/community?token=${token}`);
-      return res.redirect(`${frontendUrl}/community?token=${token}`);
+      const target = user.needsProfileCompletion == true ? `${frontendUrl}/signup` : `${frontendUrl}/community`;
+      console.log(`${TAG} S4 redirecting browser to frontend`, {
+        user: String(user._id),
+        needsProfileCompletion: Boolean(user.needsProfileCompletion),
+        redirectTo: `${target}?token=${maskToken(token)}`,
+      });
+      return res.redirect(`${target}?token=${token}`);
     }
   );
 } else {
