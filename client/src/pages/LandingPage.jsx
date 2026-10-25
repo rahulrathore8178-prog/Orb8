@@ -3,8 +3,8 @@ import {
   Menu,
   X,
   Heart,
-  Briefcase,
-  Globe2,
+  Users,
+  Compass,
   Sparkles,
   ArrowRight,
   MessageCircle,
@@ -93,7 +93,7 @@ export default function OrbitLanding() {
 
           <nav className="hidden md:flex items-center gap-8">
             <a href="#orbits" className={navLink}>
-              Orbits
+              Features
             </a>
             <a href="#how" className={navLink}>
               How it works
@@ -128,7 +128,7 @@ export default function OrbitLanding() {
               className={navLink}
               onClick={() => setMobileOpen(false)}
             >
-              Orbits
+              Features
             </a>
             <a
               href="#how"
@@ -172,16 +172,16 @@ export default function OrbitLanding() {
               className="reveal font-display font-semibold text-4xl sm:text-5xl lg:text-6xl leading-[1.1] tracking-tight"
               style={{ animationDelay: "0.05s" }}
             >
-              Be all of yourself, in the right place each time
+              A social space built around the people you choose
             </h1>
 
             <p
               className="reveal mt-6 text-slate-400 text-lg max-w-md leading-relaxed"
               style={{ animationDelay: "0.2s" }}
             >
-              orb8 gives you three separate spaces under one login — close
-              friends, your career, and the wider internet — so nothing you
-              post ever lands in front of the wrong audience by accident.
+              Share with friends, join communities called Orbitals around what
+              you care about, message people directly, and find new people
+              nearby, only when you choose to be found.
             </p>
 
             <div
@@ -201,7 +201,7 @@ export default function OrbitLanding() {
               className="reveal mt-8 text-sm text-slate-500"
               style={{ animationDelay: "0.5s" }}
             >
-              3 separate spaces · 1 login · Igris AI included
+              Feed · Orbitals · Messages · Igris AI included
             </p>
           </div>
 
@@ -215,87 +215,81 @@ export default function OrbitLanding() {
         <div className="max-w-6xl mx-auto">
           <div className="max-w-xl">
             <h2 className="font-display font-semibold text-3xl sm:text-4xl tracking-tight">
-              Three orbits. One profile.
+              Three ways to connect
             </h2>
             <p className="mt-4 text-slate-400 leading-relaxed">
-              Each orbit has its own audience, its own tone, and its own
-              privacy rules. You choose which one a post goes to — orb8
-              makes sure it stays there.
+              Keep up with friends, join communities that match your
+              interests, and discover people you haven't met yet. You decide
+              who sees what.
             </p>
           </div>
 
           <div className="mt-14 grid md:grid-cols-3 gap-6">
             {/* Personal */}
             <div className="group rounded-2xl border border-slate-800 bg-slate-900/40 overflow-hidden hover:border-orange-400/40 hover:-translate-y-1 transition-all duration-300">
-              <img
-                src="https://picsum.photos/seed/orbit-personal/500/360"
-                alt="Friends spending time together"
-                className="w-full h-44 object-cover"
-              />
+              <div className="relative grid h-44 w-full place-items-center overflow-hidden bg-linear-to-br from-orange-400/15 via-slate-900 to-slate-950" aria-hidden="true">
+                <Heart size={64} strokeWidth={1.2} className="text-orange-400/70" />
+              </div>
               <div className="p-6">
                 <div className="w-9 h-9 rounded-full bg-orange-400/10 flex items-center justify-center mb-4">
                   <Heart size={16} className="text-orange-400" />
                 </div>
                 <h3 className="font-display font-semibold text-lg">
-                  Personal
+                  Friends
                 </h3>
                 <p className="mt-2 text-sm text-slate-400 leading-relaxed">
-                  Family, close friends, the people you don't perform for.
-                  Private by default and never searchable.
+                  Post to your feed, share photos and short videos, and chat
+                  one-to-one with the people you actually know.
                 </p>
                 <ul className="mt-4 space-y-1.5 text-sm text-slate-500">
-                  <li>Invite-only circle</li>
-                  <li>Not searchable</li>
+                  <li>Friend requests you control</li>
+                  <li>Direct messages</li>
                 </ul>
               </div>
             </div>
 
             {/* Professional */}
             <div className="group rounded-2xl border border-slate-800 bg-slate-900/40 overflow-hidden hover:border-teal-400/40 hover:-translate-y-1 transition-all duration-300">
-              <img
-                src="https://picsum.photos/seed/orbit-professional/500/360"
-                alt="Colleagues in a meeting"
-                className="w-full h-44 object-cover"
-              />
+              <div className="relative grid h-44 w-full place-items-center overflow-hidden bg-linear-to-br from-teal-400/15 via-slate-900 to-slate-950" aria-hidden="true">
+                <Users size={64} strokeWidth={1.2} className="text-teal-400/70" />
+              </div>
               <div className="p-6">
                 <div className="w-9 h-9 rounded-full bg-teal-400/10 flex items-center justify-center mb-4">
-                  <Briefcase size={16} className="text-teal-400" />
+                  <Users size={16} className="text-teal-400" />
                 </div>
                 <h3 className="font-display font-semibold text-lg">
-                  Professional
+                  Orbitals
                 </h3>
                 <p className="mt-2 text-sm text-slate-400 leading-relaxed">
-                  Your work, your network, the projects you want people to
-                  find. Built for credibility, not chaos.
+                  Communities built around a topic or a crowd. Start one, join
+                  one, and post to it or to your own feed.
                 </p>
                 <ul className="mt-4 space-y-1.5 text-sm text-slate-500">
-                  <li>Verified work history</li>
-                  <li>Public by choice</li>
+                  <li>Public or private</li>
+                  <li>Request to join private ones</li>
                 </ul>
               </div>
             </div>
 
             {/* Social */}
             <div className="group rounded-2xl border border-slate-800 bg-slate-900/40 overflow-hidden hover:border-violet-400/40 hover:-translate-y-1 transition-all duration-300">
-              <img
-                src="https://picsum.photos/seed/orbit-social/500/360"
-                alt="A crowd at a live event"
-                className="w-full h-44 object-cover"
-              />
+              <div className="relative grid h-44 w-full place-items-center overflow-hidden bg-linear-to-br from-violet-400/15 via-slate-900 to-slate-950" aria-hidden="true">
+                <Compass size={64} strokeWidth={1.2} className="text-violet-400/70" />
+              </div>
               <div className="p-6">
                 <div className="w-9 h-9 rounded-full bg-violet-400/10 flex items-center justify-center mb-4">
-                  <Globe2 size={16} className="text-violet-400" />
+                  <Compass size={16} className="text-violet-400" />
                 </div>
                 <h3 className="font-display font-semibold text-lg">
-                  Social
+                  Explore
                 </h3>
                 <p className="mt-2 text-sm text-slate-400 leading-relaxed">
-                  Communities and interests, the loud open internet. Follow
-                  what you love without it following you home.
+                  Search for people, find communities beyond your circle, and
+                  see who's nearby.
                 </p>
                 <ul className="mt-4 space-y-1.5 text-sm text-slate-500">
-                  <li>Topic-based feeds</li>
-                  <li>Anonymous option</li>
+                  <li>Nearby is opt-in and expires in 30 minutes</li>
+                  <li>Stop sharing any time</li>
                 </ul>
               </div>
             </div>
@@ -314,23 +308,23 @@ export default function OrbitLanding() {
             {[
               {
                 n: "1",
-                t: "Set up one profile",
-                d: "Sign up once with your name and a photo. This is the you that ties your orbits together, never shown publicly.",
+                t: "Create your profile",
+                d: "Sign up with email or Google, pick a username and add a photo. That's all you need to start.",
               },
               {
                 n: "2",
-                t: "Open your orbits",
-                d: "Turn on Personal, Professional, and Social as you need them, each with its own audience from the start.",
+                t: "Find your people",
+                d: "Search for friends, join Orbitals that match your interests, and follow what's happening in your feed.",
               },
               {
                 n: "3",
-                t: "Post into the right one",
-                d: "Every post and message stays inside the orbit you sent it to. Nothing crosses over by accident.",
+                t: "Share and talk",
+                d: "Post photos and videos to your feed or an Orbital, and message friends directly.",
               },
               {
                 n: "4",
-                t: "Bring in Igris AI",
-                d: "Turn on the AI assistant to catch mismatched posts before they publish and draft captions in your voice.",
+                t: "Ask Igris",
+                d: "Chat with the built-in AI assistant, and teach it your own notes and files so it remembers them.",
               },
             ].map((step) => (
               <div key={step.n}>
@@ -360,19 +354,17 @@ export default function OrbitLanding() {
               <Sparkles size={17} className="text-slate-200" />
             </div>
             <h2 className="font-display font-semibold text-3xl sm:text-4xl tracking-tight max-w-md">
-              Igris AI reads the room before you post
+              Igris AI is an assistant that learns what you teach it
             </h2>
             <p className="mt-5 text-slate-400 leading-relaxed max-w-md">
-              Igris AI is the AI built into orb8. It knows which orbit you're
-              posting in, not just what you typed — so it can flag a
-              personal joke about to go out on your Professional feed, help
-              write a caption that fits the space you're in, and answer
-              questions about your account any time.
+              Igris AI is the assistant built into orb8. Ask it questions in
+              a chat, share an image for it to describe, or upload your own
+              files so it can remember them and answer from them later.
             </p>
             <ul className="mt-6 space-y-2 text-sm text-slate-500">
-              <li>Checks a post's tone against its orbit before it's live</li>
-              <li>Drafts captions and replies in your own voice</li>
-              <li>Answers account and settings questions, day or night</li>
+              <li>Chat history you can search and reopen</li>
+              <li>Describes images you send it</li>
+              <li>Remembers the files you upload</li>
             </ul>
           </div>
 
@@ -386,15 +378,14 @@ export default function OrbitLanding() {
 
             <div className="mt-5 space-y-4">
               <div className="ml-auto max-w-[80%] rounded-2xl rounded-tr-sm bg-slate-800 px-4 py-2.5 text-sm text-slate-200">
-                Caption for this photo — keep it professional
+                What did the notes I uploaded say about my trip plans?
               </div>
               <div className="max-w-[85%] rounded-2xl rounded-tl-sm bg-slate-800/60 border border-slate-800 px-4 py-2.5 text-sm text-slate-300">
-                How about: "Grateful for a great year leading the design
-                team — here's to what's next." Want it shorter?
+                Igris answers from the files you've taught it, so you don't
+                have to dig through them yourself.
               </div>
-              <div className="max-w-[85%] rounded-2xl rounded-tl-sm bg-slate-800/60 border border-teal-400/30 px-4 py-2.5 text-sm text-slate-300">
-                Heads up — this photo looks more Personal than Professional.
-                Post it to Personal instead?
+              <div className="ml-auto max-w-[80%] rounded-2xl rounded-tr-sm bg-slate-800 px-4 py-2.5 text-sm text-slate-200">
+                Describe this photo for me
               </div>
             </div>
           </div>
@@ -408,8 +399,8 @@ export default function OrbitLanding() {
             Find your orbit
           </h2>
           <p className="mt-4 text-slate-400">
-            Set up your first orbit in a couple of minutes. No credit card,
-            no crossover.
+            Create your profile in a couple of minutes. No credit card
+            needed.
           </p>
           <button  onClick={() => navigate("/login")} className="mt-8 inline-flex items-center gap-2 px-20 py-3.5 rounded-full bg-gradient-to-r from-orange-400 via-teal-400 to-violet-400 text-slate-950 font-medium hover:opacity-90 transition-opacity">
             Get started
@@ -424,7 +415,7 @@ export default function OrbitLanding() {
           <div>
             <span className="font-display font-bold text-lg">orb8</span>
             <p className="mt-3 text-sm text-slate-500 max-w-xs leading-relaxed">
-              Personal. Professional. Social. Kept separate, on purpose.
+              Friends, communities and discovery, on your terms.
             </p>
             <div className="mt-5 flex gap-4 text-slate-500">
               <FaInstagram size={18} className="hover:text-slate-200 transition-colors cursor-pointer" />
@@ -438,9 +429,9 @@ export default function OrbitLanding() {
             <div>
               <p className="text-slate-300 mb-3">Product</p>
               <ul className="space-y-2 text-slate-500">
-                <li>Personal</li>
-                <li>Professional</li>
-                <li>Social</li>
+                <li>Feed</li>
+                <li>Orbitals</li>
+                <li>Explore</li>
                 <li>Igris AI</li>
               </ul>
             </div>

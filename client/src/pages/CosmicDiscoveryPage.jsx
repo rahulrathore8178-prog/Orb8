@@ -186,7 +186,7 @@ export default function CosmicDiscoveryPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#0b1012] px-4 py-7 text-white sm:px-7 sm:py-10">
+    <main className="min-h-full bg-[#0b1012] px-4 py-7 text-white sm:px-7 sm:py-10">
       <div className="mx-auto max-w-6xl">
         <header className="border-b border-white/10 pb-6">
           <div className="flex items-center gap-3">

@@ -240,7 +240,7 @@ export default function SettingsPage() {
                 <div className="flex items-center justify-between gap-5 border-y border-white/10 py-5">
                   <div>
                     <p className="text-sm font-semibold">Protect your posts</p>
-                    <p className="mt-1 max-w-md text-sm leading-6 text-neutral-400">{user?.isPrivate ? 'Only approved followers can see your posts.' : 'Anyone can see your public posts.'}</p>
+                    <p className="mt-1 max-w-md text-sm leading-6 text-neutral-400">{user?.isPrivate ? 'Only your friends can see your posts.' : 'Anyone can see your public posts.'}</p>
                   </div>
                   <button
                     type="button"

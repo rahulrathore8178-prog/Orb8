@@ -99,6 +99,7 @@ const userSchema = new mongoose.Schema(
       index: true,
     },
     streakCount: { type: Number, default: 0, min: 0 },
+    lastActiveDay: { type: String, default: null },
     notifications: { type: [notificationSchema], default: [] },
     badges: { type: [earnedBadgeSchema], default: [] },
     friends: {

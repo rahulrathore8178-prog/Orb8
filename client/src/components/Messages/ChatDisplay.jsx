@@ -15,7 +15,7 @@ const ChatDisplay = ({ msgs = [], contact, newMsgIds, MessageBubble }) => {
       style={{ overscrollBehavior: "contain" }}
     >
       <div className="mb-2 text-center">
-        <span className="rounded-full border border-[#1e1e2c] bg-black px-3 py-1 text-[11px] text-[#33334a]">
+        <span className="rounded-full border border-[#1e1e2c] bg-black px-3 py-1 text-xs text-[#9a9ab5]">
           Today
         </span>
       </div>

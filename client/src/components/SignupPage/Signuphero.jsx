@@ -241,7 +241,7 @@ export default function SignupHero() {
             <CloseIcon />
           </button>
           {!isCompletingProfile && (
-            <button type="button" onClick={() => navigate("/login")} className="rounded-full border border-white/10 px-3.5 py-1.5 text-[11px] font-semibold tracking-wide text-[#8891A0] transition-colors hover:border-white/20 hover:text-[#E7EAEF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5B7FFF]/50">
+            <button type="button" onClick={() => navigate("/login")} className="rounded-full border border-white/10 px-3.5 py-1.5 text-xs font-semibold tracking-wide text-[#9AA3B2] transition-colors hover:border-white/20 hover:text-[#E7EAEF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5B7FFF]/50">
               LOG IN
             </button>
           )}
@@ -299,7 +299,7 @@ export default function SignupHero() {
               minLength={3}
               className="peer w-full rounded-xl border border-white/10 bg-[#0D1117] px-4 pb-2 pt-5 text-[15px] font-medium text-[#E7EAEF] outline-none transition-colors focus:border-[#5B7FFF]/60 focus:ring-2 focus:ring-[#5B7FFF]/15"
             />
-            <label htmlFor="username" className={`pointer-events-none absolute left-4 font-medium transition-all duration-150 ${focusedField === "username" ? "text-[#7C97FF]" : "text-[#5B6472]"} ${usernameShrink ? "top-3.5 text-[11px]" : "top-1/2 -translate-y-1/2 text-[15px]"}`}>
+            <label htmlFor="username" className={`pointer-events-none absolute left-4 font-medium transition-all duration-150 ${focusedField === "username" ? "text-[#7C97FF]" : "text-[#8C96A6]"} ${usernameShrink ? "top-3.5 text-xs" : "top-1/2 -translate-y-1/2 text-[15px]"}`}>
               Username
             </label>
           </div>
@@ -320,7 +320,7 @@ export default function SignupHero() {
                 required
                 className="peer w-full rounded-xl border border-white/10 bg-[#0D1117] px-4 pb-2 pt-5 text-[15px] font-medium text-[#E7EAEF] outline-none transition-colors focus:border-[#5B7FFF]/60 focus:ring-2 focus:ring-[#5B7FFF]/15"
               />
-              <label htmlFor="email" className={`pointer-events-none absolute left-4 font-medium transition-all duration-150 ${focusedField === "email" ? "text-[#7C97FF]" : "text-[#5B6472]"} ${emailShrink ? "top-3.5 text-[11px]" : "top-1/2 -translate-y-1/2 text-[15px]"}`}>
+              <label htmlFor="email" className={`pointer-events-none absolute left-4 font-medium transition-all duration-150 ${focusedField === "email" ? "text-[#7C97FF]" : "text-[#8C96A6]"} ${emailShrink ? "top-3.5 text-xs" : "top-1/2 -translate-y-1/2 text-[15px]"}`}>
                 Email address
               </label>
             </div>
@@ -338,7 +338,7 @@ export default function SignupHero() {
               minLength={6}
               className="peer w-full rounded-xl border border-white/10 bg-[#0D1117] px-4 pb-2 pt-5 pr-11 text-[15px] font-medium text-[#E7EAEF] outline-none transition-colors focus:border-[#5B7FFF]/60 focus:ring-2 focus:ring-[#5B7FFF]/15"
             />
-            <label htmlFor="password" className={`pointer-events-none absolute left-4 font-medium transition-all duration-150 ${focusedField === "password" ? "text-[#7C97FF]" : "text-[#5B6472]"} ${passwordShrink ? "top-3.5 text-[11px]" : "top-1/2 -translate-y-1/2 text-[15px]"}`}>
+            <label htmlFor="password" className={`pointer-events-none absolute left-4 font-medium transition-all duration-150 ${focusedField === "password" ? "text-[#7C97FF]" : "text-[#8C96A6]"} ${passwordShrink ? "top-3.5 text-xs" : "top-1/2 -translate-y-1/2 text-[15px]"}`}>
               Password
             </label>
             <button type="button" tabIndex={-1} onClick={() => setShowPassword((s) => !s)} aria-label={showPassword ? "Hide password" : "Show password"} className="absolute right-3 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-[#5B6472] transition-colors hover:text-[#8891A0] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5B7FFF]/50">
@@ -358,7 +358,7 @@ export default function SignupHero() {
                 required
                 className="peer w-full rounded-xl border border-white/10 bg-[#0D1117] px-4 pb-2 pt-5 pr-11 text-[15px] font-medium text-[#E7EAEF] outline-none transition-colors focus:border-[#5B7FFF]/60 focus:ring-2 focus:ring-[#5B7FFF]/15"
               />
-              <label htmlFor="confirmPassword" className={`pointer-events-none absolute left-4 font-medium transition-all duration-150 ${focusedField === "confirm" ? "text-[#7C97FF]" : "text-[#5B6472]"} ${confirmShrink ? "top-3.5 text-[11px]" : "top-1/2 -translate-y-1/2 text-[15px]"}`}>
+              <label htmlFor="confirmPassword" className={`pointer-events-none absolute left-4 font-medium transition-all duration-150 ${focusedField === "confirm" ? "text-[#7C97FF]" : "text-[#8C96A6]"} ${confirmShrink ? "top-3.5 text-xs" : "top-1/2 -translate-y-1/2 text-[15px]"}`}>
                 Confirm password
               </label>
               <button type="button" tabIndex={-1} onClick={() => setShowConfirmPassword((s) => !s)} aria-label={showConfirmPassword ? "Hide password" : "Show password"} className="absolute right-3 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-[#5B6472] transition-colors hover:text-[#8891A0] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5B7FFF]/50">
@@ -381,11 +381,11 @@ export default function SignupHero() {
           <>
             <div ref={collectField} className="my-6 flex w-full items-center">
               <div className="flex-1 border-t border-white/10" />
-              <span className="mx-3 text-[11px] font-medium uppercase tracking-wider text-[#5B6472]">or continue with</span>
+              <span className="mx-3 text-xs font-medium uppercase tracking-wider text-[#8C96A6]">or continue with</span>
               <div className="flex-1 border-t border-white/10" />
             </div>
             <div ref={collectField} className="flex w-full gap-4">
-              <button type="button" onClick={() => { if (googleEnabled) window.location.href = `${apiUrl}/api/auth/google`; }} disabled={!googleEnabled} className={`flex h-[46px] flex-1 items-center justify-center gap-2.5 rounded-xl border text-[14px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5B7FFF]/50 ${googleEnabled ? "border-white/10 bg-[#0D1117] text-[#E7EAEF] hover:border-white/20 hover:bg-[#151B24]" : "cursor-not-allowed border-white/5 bg-[#0D1117]/60 text-[#5B6472]"}`}>
+              <button type="button" onClick={() => { if (googleEnabled) window.location.href = `${apiUrl}/api/auth/google?return=${encodeURIComponent(window.location.origin)}`; }} disabled={!googleEnabled} className={`flex h-[46px] flex-1 items-center justify-center gap-2.5 rounded-xl border text-[14px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5B7FFF]/50 ${googleEnabled ? "border-white/10 bg-[#0D1117] text-[#E7EAEF] hover:border-white/20 hover:bg-[#151B24]" : "cursor-not-allowed border-white/5 bg-[#0D1117]/60 text-[#5B6472]"}`}>
                 <GoogleIcon />
                 Continue with Google
               </button>

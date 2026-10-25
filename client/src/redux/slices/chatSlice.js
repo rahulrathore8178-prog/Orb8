@@ -16,6 +16,13 @@ export const fetchContacts = createAsyncThunk('chat/fetchContacts', async (_, { 
       headers: getAuthHeaders()
     });
     // normalize to simple contact objects expected by UI
+    let unreadByContact = {};
+    try {
+      const unreadRes = await axios.get(`${apiUrl}/api/chat/unread`, { withCredentials: true, headers: getAuthHeaders() });
+      unreadByContact = unreadRes.data?.byContact || {};
+    } catch {
+      // Contacts still load without counts.
+    }
     return (res.data.friends || []).map(f => ({
       id: f._id,
       name: f.username,
@@ -23,7 +30,8 @@ export const fetchContacts = createAsyncThunk('chat/fetchContacts', async (_, { 
       color: '#6C63FF',
       lastMsg: '',
       time: '',
-      unread: 0,
+      unread: unreadByContact[f._id] || 0,
+      unreadCount: unreadByContact[f._id] || 0,
       online: true,
       profilePic: f.profilePic || ''
     }));

@@ -628,7 +628,7 @@ export default function CreateOrbitalModal({
 
 /* ------------------------------ Small avatar ------------------------------ */
 function Avatar({ user, small = false }) {
-    const size = small ? "h-6 w-6 text-[10px]" : "h-8 w-8 text-xs";
+    const size = small ? "h-6 w-6 text-xs" : "h-8 w-8 text-xs";
     return user.avatar ? (
         <img src={user.avatar} alt="" className={`${size} rounded-full object-cover`} />
     ) : (

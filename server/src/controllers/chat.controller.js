@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const Message = require('../models/messages.model');
 const User = require('../models/user.model');
 const { Post } = require('../models/post.model');
+const { recordSocialActivity } = require('../utils/habit');
 
 const formatMessage = (message) => ({
     id: String(message._id),
@@ -50,6 +51,7 @@ exports.sendMessage = async (req, res) => {
             content: text,
             type: sharedPost ? 'shared_post' : 'chat_message',
             sharedPost: sharedPost?._id || null,
+            read: false,
         });
         await saved.populate({
             path: 'sharedPost',
@@ -59,6 +61,7 @@ exports.sendMessage = async (req, res) => {
 
         const message = formatMessage(saved);
         req.app.get('publishChatMessage')?.(recipientId, message);
+        recordSocialActivity(senderId);
         return res.status(201).json({ success: true, message });
     } catch (error) {
         console.error('Send message error:', error);
@@ -93,9 +96,29 @@ exports.getConversation = async (req, res) => {
             .limit(50)
             .lean();
 
+        // Opening a conversation is what marks it read.
+        await Message.updateMany(
+            { senderId: recipientObjId, recipientId: senderId, read: false },
+            { $set: { read: true } }
+        );
+
         res.json({ success: true, messages: messages.reverse().map(formatMessage) });
     } catch (error) {
         console.error('error fetching msg history', error);
         res.status(500).json({ success: false, error: 'failed to fetch msg' });
     };
+};
+
+exports.getUnread = async (req, res) => {
+    try {
+        const rows = await Message.aggregate([
+            { $match: { recipientId: new mongoose.Types.ObjectId(req.user.id), read: false } },
+            { $group: { _id: '$senderId', count: { $sum: 1 } } },
+        ]);
+        const byContact = Object.fromEntries(rows.map(row => [String(row._id), row.count]));
+        return res.json({ total: rows.reduce((sum, row) => sum + row.count, 0), byContact });
+    } catch (error) {
+        console.error('unread messages error:', error);
+        return res.status(500).json({ message: 'Failed to load unread messages' });
+    }
 };

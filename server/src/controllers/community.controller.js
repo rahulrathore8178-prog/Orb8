@@ -7,6 +7,7 @@ const { uploadBufferToDrive } = require('../utils/driveUpload');
 const { deleteFileFromDrive } = require('../utils/driveUpload');
 const { streamFileFromDrive } = require('../utils/driveUpload');
 const axios = require("axios");
+const { recordSocialActivity } = require('../utils/habit');
 
 const PYTHON_API_URL = process.env.PYTHON_API_URL || 'http://localhost:8000';
 
@@ -198,6 +199,7 @@ async function createPost(req, res) {
         });
     }
 
+    recordSocialActivity(req.user.id);
     return res.status(201).json({
       message: 'Post created successfully',
       post: {
@@ -278,9 +280,9 @@ async function getFeed(req, res) {
       isArchived: { $ne: true },
     };
 
-    const viewer = await User.findById(req.user.id).select('following blockedUsers savedPosts').lean();
+    const viewer = await User.findById(req.user.id).select('friends blockedUsers savedPosts').lean();
     if (!viewer) return res.status(404).json({ message: 'User not found' });
-    const allowedPrivateAuthors = [...(viewer.following || []), viewer._id];
+    const allowedPrivateAuthors = [...(viewer.friends || []), viewer._id];
     const hiddenPrivateUsers = await User.find({
       isPrivate: true,
       _id: { $nin: allowedPrivateAuthors },
@@ -420,7 +422,7 @@ async function getPost(req, res) {
     const postId = req.params.postId;
 
     const post = await Post.findById(postId)
-      .populate('author', 'username profilePic league level totalXp isPrivate followers blockedUsers')
+      .populate('author', 'username profilePic league level totalXp isPrivate friends blockedUsers')
       .populate('comments.author', 'username profilePic')
       .populate('comments.likes', '_id')
       .populate('comments.replies.author', 'username profilePic')
@@ -432,9 +434,9 @@ async function getPost(req, res) {
     const viewer = await User.findById(req.user.id).select('blockedUsers').lean();
     const authorBlockedViewer = post.author.blockedUsers?.some(id => String(id) === String(req.user.id));
     const viewerBlockedAuthor = viewer?.blockedUsers?.some(id => String(id) === String(post.author._id));
-    const followsAuthor = post.author.followers?.some(id => String(id) === String(req.user.id));
+    const isAuthorFriend = post.author.friends?.some(id => String(id) === String(req.user.id));
     if (authorBlockedViewer || viewerBlockedAuthor
-      || (post.author.isPrivate && !followsAuthor && String(post.author._id) !== String(req.user.id))) {
+      || (post.author.isPrivate && !isAuthorFriend && String(post.author._id) !== String(req.user.id))) {
       return res.status(404).json({ message: 'Post not found' });
     }
     const replies = post.comments.reduce((acc, comment) => {
@@ -536,6 +538,7 @@ async function toggleLike(req, res) {
 
       console.log('post.likes:', post.likes);
 
+      recordSocialActivity(userId);
       return res.status(200).json({
         message: 'Post liked',
         likesCount: post.likes.length,
@@ -603,6 +606,7 @@ async function addComment(req, res) {
 
     const newComment = post.comments[post.comments.length - 1];
 
+    recordSocialActivity(req.user.id);
     return res.status(201).json({
       message: 'Comment added',
       comment: {
@@ -787,14 +791,14 @@ async function getUserPosts(req, res) {
     const isOwner = String(userId) === String(req.user.id);
     if (!isOwner) {
       const [viewer, profileOwner] = await Promise.all([
-        User.findById(req.user.id).select('following blockedUsers').lean(),
+        User.findById(req.user.id).select('friends blockedUsers').lean(),
         User.findById(userId).select('isPrivate blockedUsers').lean(),
       ]);
       if (!profileOwner) return res.status(404).json({ message: 'User not found' });
       const isBlocked = viewer?.blockedUsers?.some(id => String(id) === String(userId))
         || profileOwner.blockedUsers?.some(id => String(id) === String(req.user.id));
       const canView = !profileOwner.isPrivate
-        || viewer?.following?.some(id => String(id) === String(userId));
+        || viewer?.friends?.some(id => String(id) === String(userId));
       if (isBlocked || !canView) return res.status(403).json({ message: 'This profile is private' });
     }
     const filter = { author: userId, isActive: true };
@@ -869,34 +873,48 @@ async function getUserPosts(req, res) {
   }
 };
 
+const DISCOVER_FRESHNESS_MS = 30 * 60 * 1000;
+// 3 decimal places is roughly 110 m, so we never store an exact home location.
+const coarsenCoordinate = (value) => Math.round(value * 1000) / 1000;
+
 const discoverNearbyPeople = async (req, res) => {
   try {
-    const { lat, lng } = req.body;
+    const { lat, lng, consent } = req.body;
     const userId = req.user.id;
 
-    if (typeof lat !== 'number' || typeof lng !== 'number') {
+    if (consent !== true) {
+      return res.status(400).json({ message: 'Location sharing requires explicit consent' });
+    }
+
+    if (
+      typeof lat !== 'number' || typeof lng !== 'number' ||
+      !Number.isFinite(lat) || !Number.isFinite(lng) ||
+      Math.abs(lat) > 90 || Math.abs(lng) > 180
+    ) {
       return res.status(400).json({ message: 'Valid lat/lng required' });
     }
 
-    // tagging user's exact location along with the time stamp
+    const sharedLat = coarsenCoordinate(lat);
+    const sharedLng = coarsenCoordinate(lng);
+
     const user = await User.findById(userId);
-    user.location = { type: 'Point', coordinates: [lng, lat] };
+    user.location = { type: 'Point', coordinates: [sharedLng, sharedLat] };
     user.locationUpdatedAt = new Date();
     user.isDiscoverable = true;
     await user.save();
 
-    // 2. Find nearby discoverable users
+    // 2. Find nearby discoverable users who shared recently
     const nearbyUsers = await User.aggregate([
       {
         $geoNear: {
-          near: { type: 'Point', coordinates: [lng, lat] },
+          near: { type: 'Point', coordinates: [sharedLng, sharedLat] },
           distanceField: 'distance',
           maxDistance: 500, // meters
           spherical: true,
           query: {
             _id: { $ne: user._id },
             isDiscoverable: true,
-            // locationUpdatedAt: { $gte: new Date(Date.now() - 10 * 60 * 1000) }, // active in last 10 min
+            locationUpdatedAt: { $gte: new Date(Date.now() - DISCOVER_FRESHNESS_MS) },
           },
         },
       },
@@ -907,13 +925,28 @@ const discoverNearbyPeople = async (req, res) => {
           distance: { $round: ['$distance', 0] }, // meters, rounded
         },
       },
-      // { $limit: 50 },
     ]);
 
     res.status(200).json({ nearbyUsers });
   } catch (error) {
     console.error('finding nearby people error:', error);
-    return res.status(500).json({ message: error.message });
+    return res.status(500).json({ message: 'Failed to find nearby people' });
+  }
+};
+
+const stopSharingLocation = async (req, res) => {
+  try {
+    await User.updateOne(
+      { _id: req.user.id },
+      {
+        $set: { isDiscoverable: false },
+        $unset: { locationUpdatedAt: 1 },
+      }
+    );
+    return res.status(200).json({ message: 'Location sharing stopped' });
+  } catch (error) {
+    console.error('stop sharing location error:', error);
+    return res.status(500).json({ message: 'Failed to stop sharing location' });
   }
 };
 
@@ -1156,6 +1189,7 @@ module.exports = {
   getPostVideo,
   getPostVoiceNote,
   discoverNearbyPeople,
+  stopSharingLocation,
   registerPostView,
   setPostArchived,
   savePost,

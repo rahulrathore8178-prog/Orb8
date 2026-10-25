@@ -70,7 +70,11 @@ const DiscoverPage = () => {
   // This was the bug: isLoading was a function *parameter* (silently bound
   // to React's props object, which is always truthy), not real state — so
   // the skeleton branch never turned off. It's now actual component state.
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
+  // Nothing about the user's location is read or sent until they opt in.
+  const [isSharing, setIsSharing] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const isSharingRef = useRef(false);
 
   function getUserLocation() {
     return new Promise((resolve, reject) => {
@@ -86,38 +90,65 @@ const DiscoverPage = () => {
           });
         },
         (error) => reject(error),
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        { enableHighAccuracy: false, timeout: 10000, maximumAge: 0 }
       );
     });
   }
 
   async function updateLocationAndDiscover() {
     setIsLoading(true);
+    setErrorMessage('');
     try {
       const { lat, lng } = await getUserLocation();
 
       const res = await fetch(`${apiUrl}/api/community/discover/nearby`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify({ lat, lng }),
+        body: JSON.stringify({ lat, lng, consent: true }),
       });
+      if (!res.ok) throw new Error('Request failed');
 
       const data = await res.json();
       dispatch(setNearbyUsers((data && data.nearbyUsers) || []));
+      isSharingRef.current = true;
+      setIsSharing(true);
     } catch (err) {
       console.error("Location error:", err);
-      // Without this, a permission-denied / timeout error left nearbyUsers
-      // untouched and isLoading stuck true — screen spins forever. Falling
-      // back to [] lets the empty state show instead.
       dispatch(setNearbyUsers([]));
+      setErrorMessage(
+        err?.code === 1
+          ? 'Location permission was blocked. Allow it in your browser settings to use Discover.'
+          : 'We could not get your location. Please try again.'
+      );
     } finally {
       setIsLoading(false);
     }
   }
 
+  async function stopSharing() {
+    isSharingRef.current = false;
+    setIsSharing(false);
+    dispatch(setNearbyUsers([]));
+    try {
+      await fetch(`${apiUrl}/api/community/discover/nearby`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+      });
+    } catch (err) {
+      console.error('Stop sharing error:', err);
+    }
+  }
+
+  // Leaving the page ends sharing, so no one stays visible by accident.
   useEffect(() => {
-    updateLocationAndDiscover();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => {
+      if (!isSharingRef.current) return;
+      fetch(`${apiUrl}/api/community/discover/nearby`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+        keepalive: true,
+      }).catch(() => {});
+    };
   }, []);
 
   const users = nearbyUsers ?? [];
@@ -158,35 +189,70 @@ const DiscoverPage = () => {
     // navigate(`/profile/${user._id}`); // preferred if react-router is set up
     window.location.href = `/socialprofile/${user._id}`;
   };
-  console.log("Nearby users:", users);
 
   return (
-    <div className="min-h-screen bg-[#0b0b0d] px-4 py-6 sm:px-6 sm:py-10">
+    <div className="min-h-full bg-[#0b0b0d] px-4 py-6 sm:px-6 sm:py-10">
       <div className="mx-auto w-full max-w-md sm:max-w-lg">
         {/* Header */}
+        {isSharing && (
         <div className="mb-5 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="relative flex h-2 w-2">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#8c93f0] opacity-60" />
               <span className="relative inline-flex h-2 w-2 rounded-full bg-[#8c93f0]" />
             </span>
-            <h1 className="text-[11px] font-medium uppercase tracking-[0.18em] text-zinc-500">
+            <h1 className="text-xs font-medium uppercase tracking-[0.18em] text-zinc-400">
               {isLoading ? "Searching nearby" : `${users.length} nearby`}
             </h1>
           </div>
 
-          <button
-            onClick={handleReload}
-            disabled={isLoading}
-            aria-label="Reload nearby users"
-            className="rounded-full border border-zinc-800 p-2 text-zinc-400 transition-colors hover:border-zinc-700 hover:text-zinc-200 active:bg-zinc-900 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8c93f0]/50 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b0b0d]"
-          >
-            <RotateCw ref={reloadIconRef} className="h-3.5 w-3.5" strokeWidth={2} />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={stopSharing}
+              className="min-h-10 rounded-full border border-zinc-800 px-3 text-xs font-medium text-zinc-300 transition-colors hover:border-zinc-700 hover:bg-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8c93f0]/50"
+            >
+              Stop sharing
+            </button>
+            <button
+              onClick={handleReload}
+              disabled={isLoading}
+              aria-label="Reload nearby users"
+              className="grid h-10 w-10 place-items-center rounded-full border border-zinc-800 text-zinc-400 transition-colors hover:border-zinc-700 hover:text-zinc-200 active:bg-zinc-900 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8c93f0]/50 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b0b0d]"
+            >
+              <RotateCw ref={reloadIconRef} className="h-3.5 w-3.5" strokeWidth={2} />
+            </button>
+          </div>
         </div>
+        )}
+
+        {/* Opt-in */}
+        {!isSharing && (
+          <div className="flex flex-col items-center gap-4 py-16 text-center">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full border border-zinc-800 text-zinc-500">
+              <Radar className="h-6 w-6" strokeWidth={1.5} />
+            </div>
+            <div className="space-y-2">
+              <h1 className="text-base font-semibold text-zinc-100">Find people near you</h1>
+              <p className="text-sm text-zinc-400">
+                Share your approximate location to see people within 500 m who are also sharing.
+                You show up to them only while you are on this page, and never for longer than 30 minutes.
+              </p>
+            </div>
+            {errorMessage && (
+              <p role="alert" className="text-sm text-red-300">{errorMessage}</p>
+            )}
+            <button
+              onClick={updateLocationAndDiscover}
+              disabled={isLoading}
+              className="min-h-11 rounded-full bg-[#8c93f0] px-5 text-sm font-semibold text-black transition hover:bg-[#a0a6f5] disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8c93f0]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b0b0d]"
+            >
+              {isLoading ? 'Getting location...' : 'Share my location'}
+            </button>
+          </div>
+        )}
 
         {/* Loading skeleton */}
-        {isLoading && (
+        {isSharing && isLoading && (
           <ul className="divide-y divide-zinc-900">
             {Array.from({ length: 6 }).map((_, i) => (
               <li key={i} className="flex items-center gap-3 py-3.5">
@@ -198,14 +264,14 @@ const DiscoverPage = () => {
         )}
 
         {/* Empty state */}
-        {!isLoading && users.length === 0 && (
+        {isSharing && !isLoading && users.length === 0 && (
           <div className="flex flex-col items-center gap-4 py-20 text-center">
             <div className="flex h-14 w-14 items-center justify-center rounded-full border border-zinc-800 text-zinc-600">
               <Radar className="h-6 w-6" strokeWidth={1.5} />
             </div>
             <div className="space-y-1">
               <p className="text-sm font-medium text-zinc-300">No nearby users found</p>
-              <p className="text-sm text-zinc-500">Try again from a different location</p>
+              <p className="text-sm text-zinc-400">Nobody else is sharing nearby right now. Check back in a bit.</p>
             </div>
             <button
               onClick={handleReload}
@@ -217,7 +283,7 @@ const DiscoverPage = () => {
         )}
 
         {/* List */}
-        {!isLoading && users.length > 0 && (
+        {isSharing && !isLoading && users.length > 0 && (
           <ul ref={listRef} className="divide-y divide-zinc-900">
             {users.map((u, i) => (
               <li key={u._id} data-row>

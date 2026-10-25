@@ -10,6 +10,7 @@ const { checkAndAwardBadges } = require('./badge.controller');
 const { sendOtpEmail } = require('../utils/mailer');
 const post = require('../models/post.model');
 const { uploadBufferToDrive } = require('../utils/driveUpload');
+const { currentStreak, dayKey, getDailyPrompt } = require('../utils/habit');
 const { OAuth2Client } = require('google-auth-library');
 const googleClient = new OAuth2Client();
 
@@ -60,13 +61,11 @@ function buildUserPayload(user) {
     email: user.email,
     profilePic: user.profilePic || '',
     bio: user.bio || '',
+    createdAt: user.createdAt,
     notifications: (user.notifications || []).slice(-10).reverse(),
     friends: user.friends || [],
     friendRequests: user.friendRequests || [],
     isPrivate: user.isPrivate ?? true,
-    followers: user.followers || [],
-    following: user.following || [],
-    followRequests: user.followRequests || [],
     blockedUsers: user.blockedUsers || [],
     profileGridLayout: user.profileGridLayout || [],
     savedCollections: user.savedCollections || [],
@@ -331,7 +330,65 @@ async function getNotifications(req, res) {
     }
 
     const notifications = (user.notifications || []).slice(-20).reverse();
-    return res.status(200).json({ notifications });
+    const unreadCount = (user.notifications || []).filter(item => !item.isRead).length;
+    return res.status(200).json({ notifications, unreadCount });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+}
+
+const CHECKLIST_DAYS = 7;
+
+async function getHabit(req, res) {
+  try {
+    const user = await userModel.findById(req.user.id).select('streakCount lastActiveDay');
+    if (!user) {
+      return res.status(404).json({ message: 'User not found.' });
+    }
+    return res.status(200).json({
+      streakCount: currentStreak(user),
+      activeToday: user.lastActiveDay === dayKey(),
+      prompt: getDailyPrompt(),
+    });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+}
+
+async function getChecklist(req, res) {
+  try {
+    const user = await userModel.findById(req.user.id).select('profilePic bio friends createdAt');
+    if (!user) {
+      return res.status(404).json({ message: 'User not found.' });
+    }
+
+    const hasPosted = await post.Post.exists({ author: user._id, isActive: true });
+    const items = [
+      { key: 'photo', label: 'Add a profile photo', done: Boolean(user.profilePic), to: '/profile' },
+      { key: 'bio', label: 'Write a short bio', done: Boolean(user.bio && user.bio.trim()), to: '/profile' },
+      { key: 'friend', label: 'Connect with a friend', done: (user.friends || []).length > 0, to: '/explore?tab=search' },
+      { key: 'post', label: 'Share your first post', done: Boolean(hasPosted), to: '/community?compose=1' },
+    ];
+
+    const ageDays = Math.floor((Date.now() - new Date(user.createdAt).getTime()) / 86400000);
+    return res.status(200).json({
+      items,
+      completed: items.filter(item => item.done).length,
+      total: items.length,
+      daysLeft: Math.max(0, CHECKLIST_DAYS - ageDays),
+    });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+}
+
+async function markAllNotificationsRead(req, res) {
+  try {
+    await userModel.updateOne(
+      { _id: req.user.id },
+      { $set: { 'notifications.$[].isRead': true } }
+    );
+    return res.status(200).json({ unreadCount: 0 });
   } catch (error) {
     return res.status(500).json({ message: error.message });
   }
@@ -352,7 +409,8 @@ async function markNotificationRead(req, res) {
 
     return res.status(200).json({
       message: 'Notification updated.',
-      notifications: (user.notifications || []).slice(-20).reverse()
+      notifications: (user.notifications || []).slice(-20).reverse(),
+      unreadCount: (user.notifications || []).filter(item => !item.isRead).length
     });
   } catch (error) {
     return res.status(500).json({ message: error.message });
@@ -413,7 +471,7 @@ async function getPublicProfile(req, res) {
     }
 
     const user = await userModel.findById(userId)
-      .select('username profilePic bio totalXp level league streakCount badges friends isPrivate followers following followRequests blockedUsers profileGridLayout')
+      .select('username profilePic bio totalXp level league streakCount badges friends isPrivate blockedUsers profileGridLayout')
       .populate('badges.badge')
       .populate('friends', 'username profilePic');
 
@@ -424,7 +482,7 @@ async function getPublicProfile(req, res) {
     // Relationship between the logged-in user and the profile being viewed
     const me = req.user.id.toString();
     const them = userId.toString();
-    const viewer = await userModel.findById(me).select('following blockedUsers');
+    const viewer = await userModel.findById(me).select('blockedUsers');
     const isBlocked = user.blockedUsers.some(id => String(id) === me)
       || viewer?.blockedUsers?.some(id => String(id) === them);
     if (isBlocked) return res.status(404).json({ message: 'User not found.' });
@@ -454,12 +512,7 @@ async function getPublicProfile(req, res) {
         badges: user.badges || [],
         friendStatus,
         isPrivate: user.isPrivate,
-        followersCount: user.followers.length,
-        followingCount: user.following.length,
-        followStatus: user.followers.some(id => String(id) === me)
-          ? 'following'
-          : user.followRequests.some(id => String(id) === me) ? 'requested' : 'none',
-        canViewPosts: !user.isPrivate || user.followers.some(id => String(id) === me) || me === them,
+        canViewPosts: !user.isPrivate || friendStatus === 'friends' || friendStatus === 'self',
         profileGridLayout: user.profileGridLayout || [],
       },
     });
@@ -648,6 +701,9 @@ module.exports = {
   uploadProfileImage,
   getNotifications,
   markNotificationRead,
+  markAllNotificationsRead,
+  getChecklist,
+  getHabit,
   updateStreak,
   claimReward,
   forgotPassword,

@@ -10,6 +10,8 @@ import { FaCamera, FaEdit, FaHeart, FaSave, FaTimes } from "react-icons/fa";
 import { FiMessageCircle } from "react-icons/fi";
 import PostPreview from "../components/SocialProfile/postPreview";
 import InsightsPanel from "../components/SocialProfile/InsightsPanel";
+import EmptyState from "../components/shared/EmptyState";
+import { useFeedback } from "../components/shared/Feedback";
 import { raised } from "../utilites/cssUtility";
 import { useDispatch, useSelector } from "react-redux";
 import { FaSearch, FaUserCircle /* ...your existing icons */ } from "react-icons/fa";
@@ -152,6 +154,7 @@ export default function SocialProfileSection() {
     const [activeTab, setActiveTab] = useState("Posts");
     const { userId } = useParams();
     const navigate = useNavigate();
+    const { confirm } = useFeedback();
     const storedUser = getStoredUser();
     const isOwnProfile = !userId || userId === storedUser?.id;
     const [currentUser, setCurrentUser] = useState(isOwnProfile ? storedUser : null);
@@ -160,7 +163,6 @@ export default function SocialProfileSection() {
     const requestsLoading = useSelector(state => state.friends.isLoading);
     const requestsError = useSelector(state => state.friends.error);
     const friendsCount = currentUser?.friends?.length || 0;
-    const pendingFollowRequestCount = currentUser?.followRequests?.length || 0;
     const friendRequestCount = currentUser?.friendRequests?.length ?? incomingFriendRequests.length;
     const [isEditingUsername, setIsEditingUsername] = useState(false);
     const [editedUsername, setEditedUsername] = useState('');
@@ -174,20 +176,14 @@ export default function SocialProfileSection() {
     const [showPostPreview, setShowPostPreview] = useState(false);
     const [selectedPostIndex, setSelectedPostIndex] = useState(0);
     const [actingOnRequestId, setActingOnRequestId] = useState(null);
-    const [incomingFollowRequests, setIncomingFollowRequests] = useState([]);
-    const [followRequestsLoading, setFollowRequestsLoading] = useState(false);
-    const [followRequestsError, setFollowRequestsError] = useState(null);
-    const [actingOnFollowRequestId, setActingOnFollowRequestId] = useState(null);
-    const [profileConnections, setProfileConnections] = useState([]);
-    const [connectionsLoading, setConnectionsLoading] = useState(false);
-    const [connectionsError, setConnectionsError] = useState(null);
     const [friendSearch, setFriendSearch] = useState("");
     const friendsListRef = useRef(null);
     const [profileGridLayout, setProfileGridLayout] = useState([]);
     const gridRef = useRef(null);
     const [gridCellSize, setGridCellSize] = useState(0);
     const [insights, setInsights] = useState(null);
-    const [followStatus, setFollowStatus] = useState('none');
+    const [friendStatus, setFriendStatus] = useState('none');
+    const [isUpdatingConnection, setIsUpdatingConnection] = useState(false);
     const [canViewPosts, setCanViewPosts] = useState(true);
     const dispatch = useDispatch();
     const sensors = useSensors(
@@ -232,15 +228,13 @@ export default function SocialProfileSection() {
 
     const TABS = [
         { label: 'Posts', value: 'Posts', count: userPosts?.length ?? 0 },
-        { label: 'Orbiters', value: 'Followers', count: currentUser?.followersCount ?? currentUser?.followers?.length ?? 0 },
-        { label: 'Orbits', value: 'Following', count: currentUser?.followingCount ?? currentUser?.following?.length ?? 0 },
-        { label: 'Constellations', value: 'Friends', count: friendsCount },
+        { label: 'Friends', value: 'Friends', count: friendsCount },
         ...(isOwnProfile ? [
             { label: 'Saved', count: null },
             { label: 'Archived', count: null },
             { label: 'Insights', count: null },
         ] : []),
-        ...(isOwnProfile ? [{ label: 'Requests', count: friendRequestCount + pendingFollowRequestCount }] : []),
+        ...(isOwnProfile ? [{ label: 'Requests', count: friendRequestCount }] : []),
     ];
 
     const rootRef = useRef(null);
@@ -343,7 +337,7 @@ export default function SocialProfileSection() {
                     post: String(item.post),
                     gridSize: item.gridSize,
                 })));
-                setFollowStatus(userData.followStatus || 'none');
+                setFriendStatus(userData.friendStatus || 'none');
                 setCanViewPosts(userData.canViewPosts !== false);
 
                 if (isOwnProfile) {
@@ -455,19 +449,36 @@ export default function SocialProfileSection() {
         }
     };
 
-    const updateFollow = async () => {
-        const method = followStatus === 'following' || followStatus === 'requested' ? 'delete' : 'post';
-        const response = await axios({
-            method,
-            url: `${apiUrl}/api/social/follow/${userId}`,
-            withCredentials: true,
-            headers: getAuthHeaders(),
-        });
-        setFollowStatus(response.data.status);
+    const updateConnection = async () => {
+        if (isUpdatingConnection) return;
+        if (friendStatus === 'friends' && !(await confirm({ title: 'Remove this friend?', confirmLabel: 'Remove', destructive: true }))) return;
+        setIsUpdatingConnection(true);
+        setError(null);
+        const config = { withCredentials: true, headers: getAuthHeaders() };
+        try {
+            if (friendStatus === 'friends') {
+                await axios.delete(`${apiUrl}/api/social/friends/${userId}`, config);
+                setFriendStatus('none');
+                setCanViewPosts(!currentUser?.isPrivate);
+            } else if (friendStatus === 'request_sent') {
+                await axios.delete(`${apiUrl}/api/social/friend-request/${userId}`, config);
+                setFriendStatus('none');
+            } else {
+                // Sending to someone who already asked us is accepted automatically.
+                const response = await axios.post(`${apiUrl}/api/social/friend-request/${userId}`, {}, config);
+                const nowFriends = response.data?.status === 'friends';
+                setFriendStatus(nowFriends ? 'friends' : 'request_sent');
+                if (nowFriends) setCanViewPosts(true);
+            }
+        } catch (requestError) {
+            setError(requestError.response?.data?.message || 'Could not update this connection.');
+        } finally {
+            setIsUpdatingConnection(false);
+        }
     };
 
     const blockProfile = async () => {
-        if (!confirm('Block this user? You will no longer see each other.')) return;
+        if (!(await confirm({ title: 'Block this user?', message: 'You will no longer see each other.', confirmLabel: 'Block', destructive: true }))) return;
         await axios.post(`${apiUrl}/api/social/block/${userId}`, {}, {
             withCredentials: true,
             headers: getAuthHeaders(),
@@ -571,34 +582,9 @@ export default function SocialProfileSection() {
         }
     };
 
-    const resolveFollowRequest = async (requester, accept) => {
-        if (actingOnFollowRequestId) return;
-        setActingOnFollowRequestId(requester._id);
-        setFollowRequestsError(null);
-        try {
-            await axios.patch(`${apiUrl}/api/social/follow-requests/${requester._id}`, { accept }, {
-                withCredentials: true,
-                headers: getAuthHeaders(),
-            });
-            setIncomingFollowRequests(requests => requests.filter(request => String(request._id) !== String(requester._id)));
-            setCurrentUser(user => user ? {
-                ...user,
-                followRequests: (user.followRequests || []).filter(id => String(id) !== String(requester._id)),
-                followers: accept ? [...(user.followers || []), requester._id] : user.followers || [],
-                followersCount: accept
-                    ? (user.followersCount ?? user.followers?.length ?? 0) + 1
-                    : (user.followersCount ?? user.followers?.length ?? 0),
-            } : user);
-        } catch (requestError) {
-            setFollowRequestsError(requestError.response?.data?.message || `Failed to ${accept ? 'accept' : 'decline'} follow request.`);
-        } finally {
-            setActingOnFollowRequestId(null);
-        }
-    };
-
     // delete function
     const handleDelete = async (postId) => {
-        if (!confirm('Delete this post?')) return;
+        if (!(await confirm({ title: 'Delete this post?', message: 'This cannot be undone.', confirmLabel: 'Delete', destructive: true }))) return;
         try {
             // console.log(postId)
             await axios.delete(`${apiUrl}/api/community/posts/${postId}`, {
@@ -619,47 +605,6 @@ export default function SocialProfileSection() {
             dispatch(fetchFriendRequests());
         }
     }, [activeTab, dispatch]);
-
-    useEffect(() => {
-        if (!isOwnProfile || activeTab !== 'Requests') return undefined;
-        let active = true;
-        setFollowRequestsLoading(true);
-        setFollowRequestsError(null);
-        axios.get(`${apiUrl}/api/social/follow-requests`, {
-            withCredentials: true,
-            headers: getAuthHeaders(),
-        }).then(response => {
-            if (active) setIncomingFollowRequests(response.data.requests || []);
-        }).catch(requestError => {
-            if (active) setFollowRequestsError(requestError.response?.data?.message || 'Failed to load follow requests.');
-        }).finally(() => {
-            if (active) setFollowRequestsLoading(false);
-        });
-        return () => { active = false; };
-    }, [activeTab, isOwnProfile]);
-
-    useEffect(() => {
-        if (!['Followers', 'Following'].includes(activeTab)) return undefined;
-        const profileId = userId || storedUser?.id;
-        if (!profileId) return undefined;
-
-        let active = true;
-        setConnectionsLoading(true);
-        setConnectionsError(null);
-        axios.get(`${apiUrl}/api/social/users/${profileId}/${activeTab.toLowerCase()}`, {
-            withCredentials: true,
-            headers: getAuthHeaders(),
-        }).then(response => {
-            if (active) setProfileConnections(response.data.users || []);
-        }).catch(connectionError => {
-            if (!active) return;
-            setProfileConnections([]);
-            setConnectionsError(connectionError.response?.data?.message || `Failed to load ${activeTab.toLowerCase()}.`);
-        }).finally(() => {
-            if (active) setConnectionsLoading(false);
-        });
-        return () => { active = false; };
-    }, [activeTab, userId, storedUser?.id]);
 
     // Page-open animation
     useEffect(() => {
@@ -891,8 +836,7 @@ export default function SocialProfileSection() {
                                 </div>
                             )}
                             <div className="mt-3 flex flex-wrap gap-4 text-xs text-white/55">
-                                <span>{currentUser?.followersCount ?? currentUser?.followers?.length ?? 0} Orbiters</span>
-                                <span>{currentUser?.followingCount ?? currentUser?.following?.length ?? 0} Orbits</span>
+                                <span>{friendsCount} {friendsCount === 1 ? 'friend' : 'friends'}</span>
                             </div>
                             {isOwnProfile && (
                                 <button
@@ -914,14 +858,21 @@ export default function SocialProfileSection() {
                     >
                         <button
                             type="button"
-                            onClick={updateFollow}
-                            className={`flex-1 rounded-lg px-4 py-2 text-xs font-semibold transition-all active:scale-[0.97] sm:min-w-[140px] sm:flex-none sm:py-2.5 sm:text-sm ${followStatus === 'none' ? 'bg-cyan-600 hover:bg-cyan-700' : 'bg-gray-700 hover:bg-gray-600'}`}
+                            onClick={updateConnection}
+                            disabled={isUpdatingConnection}
+                            className={`flex-1 rounded-lg px-4 py-2 text-xs font-semibold transition-all active:scale-[0.97] disabled:opacity-60 sm:min-w-[140px] sm:flex-none sm:py-2.5 sm:text-sm ${friendStatus === 'none' || friendStatus === 'request_received' ? 'bg-cyan-600 hover:bg-cyan-700' : 'bg-gray-700 hover:bg-gray-600'}`}
                         >
-                            {followStatus === 'following' ? 'Following' : followStatus === 'requested' ? 'Requested' : 'Follow'}
+                            {friendStatus === 'friends' ? 'Friends' : friendStatus === 'request_sent' ? 'Requested' : friendStatus === 'request_received' ? 'Accept request' : 'Connect'}
                         </button>
-                        <button className="flex-1 rounded-lg bg-cyan-600 px-4 py-2 text-xs font-semibold transition-all hover:bg-cyan-700 active:scale-[0.97] sm:min-w-[140px] sm:flex-none sm:py-2.5 sm:text-sm">
-                            Send Message
-                        </button>
+                        {friendStatus === 'friends' && (
+                            <button
+                                type="button"
+                                onClick={() => navigate('/messages')}
+                                className="flex-1 rounded-lg bg-cyan-600 px-4 py-2 text-xs font-semibold transition-all hover:bg-cyan-700 active:scale-[0.97] sm:min-w-[140px] sm:flex-none sm:py-2.5 sm:text-sm"
+                            >
+                                Message
+                            </button>
+                        )}
                         <button type="button" onClick={blockProfile} className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 text-white/55 hover:bg-white/5 hover:text-red-400" aria-label="Block user">
                             <ShieldBan size={17} />
                         </button>
@@ -958,7 +909,7 @@ export default function SocialProfileSection() {
                             >
                                 {label}
                                 {count !== null && count !== undefined && (
-                                    <span className={`rounded-full px-1.5 py-px text-[10px] tabular-nums ${active ? 'bg-white/15 text-white' : 'bg-white/[0.06] text-neutral-500'}`}>
+                                    <span className={`rounded-full px-1.5 py-px text-xs tabular-nums ${active ? 'bg-white/15 text-white' : 'bg-white/[0.06] text-neutral-400'}`}>
                                         {count}
                                     </span>
                                 )}
@@ -969,63 +920,15 @@ export default function SocialProfileSection() {
                 {!canViewPosts && !isOwnProfile && activeTab === 'Posts' ? (
                     <div className="mt-16 flex flex-col items-center gap-3 text-center text-white/50">
                         <Lock size={24} />
-                        <p className="text-sm">Follow this private profile to see its posts.</p>
+                        <p className="text-sm">Connect with this person to see their posts.</p>
                     </div>
                 ) : activeTab === 'Insights' && isOwnProfile ? (
                     <InsightsPanel insights={insights} loading={postsLoading && !insights} resolveImage={resolveImg} />
-                ) : activeTab === 'Followers' || activeTab === 'Following' ? (
-                    <div className="mt-5 divide-y divide-white/10 border-y border-white/10">
-                        <div className="py-4">
-                            <h3 className="text-sm font-semibold text-white">
-                                {activeTab === 'Followers' ? 'Orbiters' : 'Orbits'}
-                            </h3>
-                            <p className="mt-1 text-sm text-neutral-400">
-                                {activeTab === 'Followers'
-                                    ? 'People who follow your content are orbiting around your digital world.'
-                                    : "The people whose worlds you've chosen to keep up with."}
-                            </p>
-                            <p className="mt-1 text-xs italic text-neutral-500">
-                                {activeTab === 'Followers'
-                                    ? `Example: “You have ${(currentUser?.followersCount ?? currentUser?.followers?.length ?? 0).toLocaleString()} Orbiters.”`
-                                    : `Example: “You're in ${(currentUser?.followingCount ?? currentUser?.following?.length ?? 0).toLocaleString()} Orbits.”`}
-                            </p>
-                        </div>
-                        {connectionsLoading ? (
-                            <p className="py-8 text-center text-sm text-neutral-400">Loading {activeTab === 'Followers' ? 'Orbiters' : 'Orbits'}...</p>
-                        ) : connectionsError ? (
-                            <p role="status" className="py-8 text-center text-sm text-neutral-400">
-                                {connectionsError.includes('private')
-                                    ? 'This private profile’s connections are visible after your follow request is accepted.'
-                                    : connectionsError}
-                            </p>
-                        ) : profileConnections.length === 0 ? (
-                            <p className="py-8 text-center text-sm text-neutral-400">No {activeTab === 'Followers' ? 'Orbiters' : 'Orbits'} yet.</p>
-                        ) : profileConnections.map(person => (
-                            <button
-                                key={person._id}
-                                type="button"
-                                onClick={() => navigate(`/socialprofile/${person._id}`)}
-                                className="flex w-full items-center gap-3 py-3 text-left transition hover:bg-white/[0.03]"
-                            >
-                                {person.profilePic ? (
-                                    <img src={person.profilePic} alt="" className="h-11 w-11 shrink-0 rounded-full border border-white/10 object-cover" />
-                                ) : (
-                                    <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full border border-white/10 bg-white/5 text-sm font-semibold text-neutral-300">
-                                        {person.username?.charAt(0)?.toUpperCase() || '?'}
-                                    </span>
-                                )}
-                                <span className="min-w-0 flex-1">
-                                    <span className="block truncate text-sm font-semibold text-white">{person.username || 'Orbit member'}</span>
-                                    {person.bio && <span className="mt-1 block truncate text-xs text-neutral-500">{person.bio}</span>}
-                                </span>
-                            </button>
-                        ))}
-                    </div>
                 ) : activeTab === 'Friends' ? (
                     <div>
                         <div className="mt-5 mb-4">
-                            <h3 className="text-sm font-semibold text-white">Constellations</h3>
-                            <p className="mt-1 text-sm text-neutral-400">Mutual connections who share your corner of the universe.</p>
+                            <h3 className="text-sm font-semibold text-white">Friends</h3>
+                            <p className="mt-1 text-sm text-neutral-400">Your constellation: people you have connected with.</p>
                         </div>
                         <div className="relative mb-4 sm:mb-6 mt-5 max-w-md mx-auto sm:mx-0">
                             <FaSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500" size={13} />
@@ -1033,13 +936,18 @@ export default function SocialProfileSection() {
                                 type="text"
                                 value={friendSearch}
                                 onChange={(e) => setFriendSearch(e.target.value)}
-                                placeholder="Search your constellation..."
+                                placeholder="Search friends..."
                                 className="w-full bg-transparent border border-white/10 rounded-full pl-9 pr-4 py-2 sm:py-2.5 text-sm text-white placeholder-gray-500 outline-none transition-colors focus:border-white/25"
                             />
                         </div>
 
                         {friends.length === 0 ? (
-                            <div className="text-center text-gray-400 text-sm sm:text-base">Your constellation is just beginning.</div>
+                            <EmptyState
+                                title="No friends yet"
+                                description={isOwnProfile ? 'Connect with people to see them here.' : 'This person has not added any friends yet.'}
+                                actionLabel={isOwnProfile ? 'Find people' : undefined}
+                                onAction={() => navigate('/explore?tab=search')}
+                            />
                         ) : (
                             <div ref={friendsListRef} className="flex min-w-0 w-full flex-col divide-y divide-white/5 mx-auto">
                                 {filteredFriends.map((friend) => (
@@ -1072,40 +980,14 @@ export default function SocialProfileSection() {
                     </div>
                 ) : activeTab === 'Requests' && isOwnProfile ? (
                     <div className="mt-5 space-y-7">
-                        {requestsLoading || followRequestsLoading ? (
+                        {requestsLoading ? (
                             <p className="py-8 text-center text-sm text-neutral-400">Loading requests...</p>
-                        ) : (requestsError || followRequestsError) ? (
-                            <p role="alert" className="py-5 text-center text-sm text-rose-300">{requestsError || followRequestsError}</p>
-                        ) : incomingFollowRequests.length === 0 && incomingFriendRequests.length === 0 ? (
+                        ) : requestsError ? (
+                            <p role="alert" className="py-5 text-center text-sm text-rose-300">{requestsError}</p>
+                        ) : incomingFriendRequests.length === 0 ? (
                             <p className="border-y border-white/10 py-8 text-center text-sm text-neutral-400">No pending requests.</p>
                         ) : (
                             <>
-                                {incomingFollowRequests.length > 0 && (
-                                    <section>
-                                        <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-neutral-500">Follow requests</h3>
-                                        <div className="divide-y divide-white/10 border-y border-white/10">
-                                            {incomingFollowRequests.map(requester => (
-                                                <div key={requester._id} className="flex flex-col gap-4 py-4 sm:flex-row sm:items-center">
-                                                    <button type="button" onClick={() => navigate(`/socialprofile/${requester._id}`)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
-                                                        {requester.profilePic ? (
-                                                            <img src={requester.profilePic} alt="" className="h-11 w-11 shrink-0 rounded-full border border-white/10 object-cover" />
-                                                        ) : (
-                                                            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full border border-white/10 bg-white/5 text-sm font-semibold text-neutral-300">{requester.username?.charAt(0)?.toUpperCase() || '?'}</span>
-                                                        )}
-                                                        <span className="min-w-0">
-                                                            <span className="block truncate text-sm font-semibold text-white">{requester.username || 'Orbit member'}</span>
-                                                            <span className="mt-1 block text-xs text-neutral-500">Requested to follow your private profile</span>
-                                                        </span>
-                                                    </button>
-                                                    <div className="flex gap-2 sm:shrink-0">
-                                                        <button type="button" onClick={() => resolveFollowRequest(requester, true)} disabled={Boolean(actingOnFollowRequestId)} className="inline-flex min-h-9 flex-1 items-center justify-center gap-2 bg-cyan-400 px-4 text-sm font-semibold text-black transition hover:bg-cyan-300 disabled:opacity-50 sm:flex-none"><Check size={15} /> Accept</button>
-                                                        <button type="button" onClick={() => resolveFollowRequest(requester, false)} disabled={Boolean(actingOnFollowRequestId)} className="inline-flex min-h-9 flex-1 items-center justify-center gap-2 border border-white/15 px-4 text-sm text-neutral-200 transition hover:bg-white/10 disabled:opacity-50 sm:flex-none"><X size={15} /> Decline</button>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </section>
-                                )}
                                 {incomingFriendRequests.length > 0 && (
                                     <section>
                                         <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-neutral-500">Friend requests</h3>
@@ -1135,7 +1017,12 @@ export default function SocialProfileSection() {
                     postsLoading ? (
                         <div className="text-center text-gray-400 text-sm sm:text-base">Loading posts...</div>
                     ) : userPosts.length === 0 ? (
-                        <div className="text-center text-gray-400 text-sm sm:text-base">No posts yet.</div>
+                        <EmptyState
+                            title="No posts yet"
+                            description={isOwnProfile ? 'Share your first photo or video.' : undefined}
+                            actionLabel={isOwnProfile ? 'Create a post' : undefined}
+                            onAction={() => navigate('/community?compose=1')}
+                        />
                     ) : (
                         <div ref={contentRef} className="mt-5 sm:mt-7">
                             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={reorderGrid}>
@@ -1303,7 +1190,7 @@ function SortableProfileTile({
                     <button type="button" onClick={(event) => { event.stopPropagation(); onDelete(post.id); }} className="p-1 hover:text-red-400" aria-label="Delete post"><Trash2 size={13} /></button>
                 </div>
             )}
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex items-center justify-center gap-3 px-2 py-2 text-[10px] font-medium text-white sm:gap-4 sm:text-xs">
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex items-center justify-center gap-3 px-2 py-2 text-xs font-medium text-white sm:gap-4 sm:text-xs">
                 <span className="flex items-center gap-1"><FaHeart size={11} />{post.likesCount || 0}</span>
                 <span className="flex items-center gap-1"><FiMessageCircle size={11} />{post.commentsCount || 0}</span>
                 <span className="flex items-center gap-1"><BarChart3 size={11} />{post.views || 0}</span>

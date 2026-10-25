@@ -51,21 +51,23 @@
  */
 
 import React from "react";
+import axios from "axios";
+import { useNavigate } from "react-router-dom";
+import { useDispatch } from "react-redux";
 import {
   Menu,
   ArrowLeft,
   Search,
   X,
-  Phone,
-  Video,
   MoreVertical,
   ChevronDown,
   User,
-  BellOff,
-  Trash2,
   Ban,
 } from "lucide-react";
 import { colorForName, initials, relativeLastSeen } from "../../utilites/ChatHelper";
+import { apiUrl, getAuthHeaders } from "../../utilites/DashboardHelper";
+import { useFeedback } from "../shared/Feedback";
+import { fetchContacts, setActiveContact } from "../../redux/slices/chatSlice";
 // import { relativeLastSeen } from "./helpers";
 // import { colorForName, initials } from "./helpers";
  
@@ -119,6 +121,29 @@ export function ChatHeader({
   onVoiceCall,
   onVideoCall,
 }) {
+  const navigate = useNavigate();
+  const dispatch = useDispatch();
+  const { toast, confirm } = useFeedback();
+
+  const blockContact = async () => {
+    setMoreMenuOpen(false);
+    const approved = await confirm({
+      title: `Block ${activeContact.name}?`,
+      message: 'You will no longer see each other or be able to message.',
+      confirmLabel: 'Block',
+      destructive: true,
+    });
+    if (!approved) return;
+    try {
+      await axios.post(`${apiUrl}/api/social/block/${activeContactId}`, {}, { withCredentials: true, headers: getAuthHeaders() });
+      dispatch(setActiveContact(null));
+      dispatch(fetchContacts());
+      toast(`${activeContact.name} has been blocked`);
+    } catch (error) {
+      toast(error.response?.data?.message || 'Could not block this person. Please try again.', 'error');
+    }
+  };
+
   return (
     <header className="flex-shrink-0 min-h-[68px] flex items-center gap-1 px-3 md:px-4 bg-black border-b border-slate-800 relative z-20">
       <button
@@ -204,7 +229,7 @@ export function ChatHeader({
 
           <div className="flex items-center gap-0.5 shrink-0">
             <button
-              className="w-9 h-9 rounded-full flex items-center justify-center text-slate-400 hover:bg-slate-800 hover:text-slate-100"
+              className="w-11 h-11 rounded-full flex items-center justify-center text-slate-400 hover:bg-slate-800 hover:text-slate-100"
               onClick={() => setChatSearchOpen(true)}
               aria-label="Search in conversation"
             >
@@ -226,7 +251,7 @@ export function ChatHeader({
             </button>
             <div ref={moreWrapRef} className="relative">
               <button
-                className="w-9 h-9 rounded-full flex items-center justify-center text-slate-400 hover:bg-slate-800 hover:text-slate-100"
+                className="w-11 h-11 rounded-full flex items-center justify-center text-slate-400 hover:bg-slate-800 hover:text-slate-100"
                 onClick={() => {
                   setMoreMenuOpen((v) => !v);
                   setSwitcherOpen(false);
@@ -239,45 +264,20 @@ export function ChatHeader({
               {moreMenuOpen && (
                 <div className="popover-anim absolute right-0 top-[calc(100%+8px)] w-52 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl p-1.5 z-50">
                   <button
-                    className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm font-medium hover:bg-slate-700/70"
+                    className="w-full min-h-11 flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm font-medium hover:bg-slate-700/70"
                     onClick={() => {
-                      showToast(`Viewing ${activeContactId.name}'s profile`);
                       setMoreMenuOpen(false);
+                      navigate(`/socialprofile/${activeContactId}`);
                     }}
                   >
-                    <User className="w-4 h-4 text-slate-400" /> View contact
-                  </button>
-                  <button
-                    className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm font-medium hover:bg-slate-700/70"
-                    onClick={() => {
-                      showToast(`Notifications muted for ${activeContactId.name}`);
-                      setMoreMenuOpen(false);
-                    }}
-                  >
-                    <BellOff className="w-4 h-4 text-slate-400" /> Mute notifications
+                    <User className="w-4 h-4 text-slate-400" /> View profile
                   </button>
                   <div className="h-px bg-slate-700 my-1.5 mx-1" />
                   <button
-                    className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm font-medium text-rose-400 hover:bg-slate-700/70"
-                    onClick={() => {
-                      if (window.confirm(`Clear all messages with ${activeContactId.name}? This can't be undone.`)) {
-                        setContacts((prev) =>
-                          prev.map((c) => (c.id === activeContactId.id ? { ...c, messages: [], lastMessage: "" } : c))
-                        );
-                      }
-                      setMoreMenuOpen(false);
-                    }}
+                    className="w-full min-h-11 flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm font-medium text-rose-400 hover:bg-slate-700/70"
+                    onClick={blockContact}
                   >
-                    <Trash2 className="w-4 h-4 text-rose-400" /> Clear chat
-                  </button>
-                  <button
-                    className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm font-medium text-rose-400 hover:bg-slate-700/70"
-                    onClick={() => {
-                      showToast(`${activeContactId.name} has been blocked`);
-                      setMoreMenuOpen(false);
-                    }}
-                  >
-                    <Ban className="w-4 h-4 text-rose-400" /> Block contact
+                    <Ban className="w-4 h-4 text-rose-400" /> Block
                   </button>
                 </div>
               )}

@@ -5,7 +5,7 @@ import {
   FaLock,
   FaGlobe
 } from 'react-icons/fa';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import {
   setContent,
@@ -29,6 +29,10 @@ import CapsulePostModal from '../components/Comments/CapsulePostModal';
 import { Plus } from 'lucide-react';
 import ComposerCard from '../components/CommunityFeed/ComposerCard';
 import FilmPostCard from '../components/CommunityFeed/FilmPostCard';
+import ChecklistBanner from '../components/Layout/ChecklistBanner';
+import DailyPrompt from '../components/Layout/DailyPrompt';
+import EmptyState from '../components/shared/EmptyState';
+import { useFeedback } from '../components/shared/Feedback';
 import CreateOrbitalModal from '../components/Orbital/CreateOrbitalModal';
 import gsap from 'gsap';
 /* ─── Constants ───────────────────────────────────────────────── */
@@ -176,6 +180,15 @@ export default function CommunityPage() {
   const underlineRef = useRef(null);
   const lastScrollPos = useRef(0);
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { toast, confirm } = useFeedback();
+
+  // The mobile bottom bar's Create button arrives here as ?compose=1.
+  useEffect(() => {
+    if (searchParams.get('compose') !== '1') return;
+    setShowComposer(true);
+    setSearchParams({}, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   // Crossfading ambient backdrop
   const [bgA, setBgA] = useState('');
@@ -316,14 +329,18 @@ export default function CommunityPage() {
   };
 
   const handleDelete = async (postId) => {
-    if (!confirm('Delete this post?')) return;
+    const approved = await confirm({ title: 'Delete this post?', message: 'This cannot be undone.', confirmLabel: 'Delete', destructive: true });
+    if (!approved) return;
     try {
       await axios.delete(`${apiUrl}/api/community/posts/${postId}`, {
         withCredentials: true,
         headers: getAuthHeaders(),
       });
       dispatch(setPosts((prev) => prev.filter((p) => p.id !== postId)));
-    } catch (err) { console.error('Delete error:', err); }
+    } catch (err) {
+      console.error('Delete error:', err);
+      toast('Could not delete this post. Please try again.', 'error');
+    }
   };
 
   const handleCapsulePost = async (file, caption = '') => {
@@ -381,9 +398,20 @@ export default function CommunityPage() {
   };
 
   const openOrbital = (orbitalId) => {
-    // console.log('openOrbital clicked', orbitalId);
     navigate(`/orbital/${orbitalId}`);
-    console.log('openOrbital clicked', orbitalId);
+  };
+
+  const joinOrbital = async (orbital) => {
+    try {
+      const response = await axios.post(`${apiUrl}/api/orbital/${orbital._id}/join`, {}, {
+        withCredentials: true,
+        headers: getAuthHeaders(),
+      });
+      toast(response.data?.message || 'Done');
+      getOrbitals();
+    } catch (error) {
+      toast(error.response?.data?.message || 'Could not join. Please try again.', 'error');
+    }
   };
 
   return (
@@ -444,7 +472,7 @@ export default function CommunityPage() {
                   }}
                   type="button"
                   onClick={() => dispatch(setActiveFeedType(tab.value))}
-                  className={`relative whitespace-nowrap px-2 pb-3 text-sm font-medium transition-colors sm:text-base lg:text-lg ${active
+                  className={`relative min-h-11 whitespace-nowrap px-2 pb-3 text-sm font-medium transition-colors sm:text-base lg:text-lg ${active
                     ? 'font-bold text-white'
                     : 'text-neutral-500 hover:text-neutral-300'
                     }`}
@@ -459,16 +487,21 @@ export default function CommunityPage() {
             />
           </div>
 
+          <ChecklistBanner />
+          <DailyPrompt onAnswer={() => setShowComposer(true)} />
+
           <div
             ref={scrollRef}
             className="flex-1 overflow-y-scroll snap-y snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           >
             {posts.length === 0 && !isLoading ? (
               <div className="h-full flex items-center justify-center">
-                <div className="text-center">
-                  <div className="text-[60px] mb-4">👩‍💻</div>
-                  <p className="text-white/60 text-[15px] font-['Plus_Jakarta_Sans']">No posts yet — be the first to share!</p>
-                </div>
+                <EmptyState
+                  title="Your feed is quiet"
+                  description="Share something, or connect with friends to see what they post."
+                  actionLabel="Create a post"
+                  onAction={() => setShowComposer(true)}
+                />
               </div>
             ) : (
               posts.map((post, i) => (
@@ -534,7 +567,7 @@ export default function CommunityPage() {
                     }`}
                 >
                   <span className="flex items-center gap-[8px] text-[12px] text-[#aaaaaa]">
-                    <span className="w-[20px] h-[20px] flex items-center justify-center rounded-[6px] bg-white/[0.05] text-[10px] shadow-[0_1px_2px_rgba(0,0,0,0.35)]">
+                    <span className="w-[20px] h-[20px] flex items-center justify-center rounded-[6px] bg-white/[0.05] text-xs shadow-[0_1px_2px_rgba(0,0,0,0.35)]">
                       {row.icon}
                     </span>
                     {row.label}
@@ -563,7 +596,7 @@ export default function CommunityPage() {
 
             <div className="flex flex-col gap-[10px]">
               {trendingOrbitals.length === 0 && (
-                <div className="text-[12px] text-[#777777] text-center py-[12px]">
+                <div className="text-sm text-[#aaaaaa] text-center py-[12px]">
                   No trending orbitals yet
                 </div>
               )}
@@ -582,7 +615,7 @@ export default function CommunityPage() {
                     <div className="text-[13px] font-semibold text-[#e8f0fe] truncate">
                       {orbital.name}
                     </div>
-                    <div className="flex items-center gap-[8px] text-[11px] text-[#aaaaaa] mt-[2px]">
+                    <div className="flex items-center gap-[8px] text-xs text-[#aaaaaa] mt-[2px]">
                       <span className="flex items-center gap-[4px]">
                         <FaUsers className="text-[10px]" />
                         {orbital.memberCount}
@@ -600,7 +633,11 @@ export default function CommunityPage() {
 
                   <button
                     type="button"
-                    className="shrink-0 px-[14px] py-[6px] rounded-[10px] text-[11px] font-semibold text-[#e8f0fe] bg-[#161616] shadow-[5px_5px_10px_rgba(0,0,0,0.65),-3px_-3px_8px_rgba(255,255,255,0.05)] transition-all duration-150 hover:text-white active:shadow-[inset_3px_3px_6px_rgba(0,0,0,0.7),inset_-2px_-2px_5px_rgba(255,255,255,0.04)]"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      joinOrbital(orbital);
+                    }}
+                    className="shrink-0 min-h-11 px-[14px] py-[6px] rounded-[10px] text-xs font-semibold text-[#e8f0fe] bg-[#161616] shadow-[5px_5px_10px_rgba(0,0,0,0.65),-3px_-3px_8px_rgba(255,255,255,0.05)] transition-all duration-150 hover:text-white active:shadow-[inset_3px_3px_6px_rgba(0,0,0,0.7),inset_-2px_-2px_5px_rgba(255,255,255,0.04)]"
                   >
                     {orbital.visibility === 'private' ? 'Request' : 'Join'}
                   </button>
@@ -618,8 +655,8 @@ export default function CommunityPage() {
 
             <div className="flex flex-col gap-[10px]">
               {myOrbitals.length === 0 && (
-                <div className="text-[12px] text-[#777777] text-center py-[12px]">
-                  No trending orbitals yet
+                <div className="text-sm text-[#aaaaaa] text-center py-[12px]">
+                  You have not joined any Orbitals yet
                 </div>
               )}
 
@@ -637,7 +674,7 @@ export default function CommunityPage() {
                     <div className="text-[13px] font-semibold text-[#e8f0fe] truncate">
                       {orbital.name}
                     </div>
-                    <div className="flex items-center gap-[8px] text-[11px] text-[#aaaaaa] mt-[2px]">
+                    <div className="flex items-center gap-[8px] text-xs text-[#aaaaaa] mt-[2px]">
                       <span className="flex items-center gap-[4px]">
                         <FaUsers className="text-[10px]" />
                         {orbital.memberCount}
@@ -655,9 +692,13 @@ export default function CommunityPage() {
 
                   <button
                     type="button"
-                    className="shrink-0 px-[14px] py-[6px] rounded-[10px] text-[11px] font-semibold text-[#e8f0fe] bg-[#161616] shadow-[5px_5px_10px_rgba(0,0,0,0.65),-3px_-3px_8px_rgba(255,255,255,0.05)] transition-all duration-150 hover:text-white active:shadow-[inset_3px_3px_6px_rgba(0,0,0,0.7),inset_-2px_-2px_5px_rgba(255,255,255,0.04)]"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      openOrbital(orbital._id);
+                    }}
+                    className="shrink-0 min-h-11 px-[14px] py-[6px] rounded-[10px] text-xs font-semibold text-[#e8f0fe] bg-[#161616] shadow-[5px_5px_10px_rgba(0,0,0,0.65),-3px_-3px_8px_rgba(255,255,255,0.05)] transition-all duration-150 hover:text-white active:shadow-[inset_3px_3px_6px_rgba(0,0,0,0.7),inset_-2px_-2px_5px_rgba(255,255,255,0.04)]"
                   >
-                    {orbital.visibility === 'private' ? 'Request' : 'Join'}
+                    Open
                   </button>
                 </div>
               ))}
@@ -671,7 +712,7 @@ export default function CommunityPage() {
         onClick={() => {
           setShowComposer(true);
         }}
-        className="fixed bottom-8 right-8 w-14 h-14 rounded-full bg-gradient-to-br from-[#858585] to-[#656565] text-black flex items-center justify-center shadow-[0_4px_24px_#a6a6a6] z-50 transition-all duration-300 ease-out hover:shadow-[0_6px_32px_#a6a6a6] hover:scale-110 active:scale-95 ring-2 ring-[#858585] hover:ring-[#a6a6a6]"
+        className="fixed bottom-8 right-8 hidden md:flex w-14 h-14 rounded-full bg-gradient-to-br from-[#858585] to-[#656565] text-black items-center justify-center shadow-[0_4px_24px_#a6a6a6] z-50 transition-all duration-300 ease-out hover:shadow-[0_6px_32px_#a6a6a6] hover:scale-110 active:scale-95 ring-2 ring-[#858585] hover:ring-[#a6a6a6]"
         aria-label="New post"
       >
         <Plus size={26} strokeWidth={2.5} />

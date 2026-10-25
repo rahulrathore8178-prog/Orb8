@@ -7,7 +7,7 @@ function protect(req, res, next) {
     const token = req.cookies?.token || bearerToken;
 
     if (!token) {
-      console.warn('[AUTH] No token found in request');
+      console.warn(`[AUTH] No token found in request ${req.method} ${req.originalUrl}`);
       return res.status(401).json({ message: 'Unauthorized. Please login first.' });
     }
 
@@ -23,7 +23,7 @@ function protect(req, res, next) {
     };
     return next();
   } catch (error) {
-    console.error('[AUTH] Token verification failed:', error.message);
+    console.error(`[AUTH] Token verification failed on ${req.method} ${req.originalUrl}:`, error.message);
     return res.status(401).json({ message: 'Invalid or expired session.' });
   }
 }
