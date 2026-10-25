@@ -27,6 +27,8 @@ router.delete("/deleteorbital/:orbitalId", loadOrbital, requireAdmin, orbital.de
 router.use("/:orbitalId", loadOrbital);
 router.get("/:orbitalId", orbital.getOrbital);
 router.patch("/:orbitalId", requireAdmin, orbital.updateOrbital);
+router.patch("/:orbitalId/image", requireAdmin, orbitalImageUpload, orbital.updateOrbitalImage);
+router.delete("/:orbitalId/image", requireAdmin, orbital.removeOrbitalImage);
 
 // membership
 router.post("/:orbitalId/join", membership.joinOrbital);

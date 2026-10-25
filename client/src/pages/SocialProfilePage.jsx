@@ -273,6 +273,7 @@ export default function SocialProfileSection() {
                         headers: getAuthHeaders()
                     }
                 );
+                console.log('Fetched user posts:', res.data);
                 const posts = activeTab === 'Saved'
                     ? (res.data.savedPosts || []).map(item => ({
                         ...item.post,
@@ -281,8 +282,6 @@ export default function SocialProfileSection() {
                     }))
                     : (res.data.posts || []);
                 setUserPosts(posts);
-                // console.log('userPosts', res?.data?.id)
-                // setPostId(res?.id)
             } catch (err) {
                 console.error('Failed to fetch user posts:', err);
                 setUserPosts([]);

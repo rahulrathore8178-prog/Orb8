@@ -115,7 +115,7 @@ const postSchema = new mongoose.Schema({
   });
 
 // Indexes for performance
-postSchema.index({ createdAt: -1 });
+postSchema.index({ user:1, createdAt: -1 });
 postSchema.index({ author: 1, createdAt: -1 });
 postSchema.index({ likes: 1 });
 

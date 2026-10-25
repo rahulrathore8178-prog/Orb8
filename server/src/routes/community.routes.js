@@ -8,6 +8,7 @@ const {
   deletePost,
   deleteComment,
   getUserPosts,
+  getUserOrbitals,
   commentReply,
   likeComment,
   getPostImage,
@@ -53,6 +54,9 @@ router.patch('/posts/:postId/archive', protect, setPostArchived);
 
 // Get user's posts
 router.get('/users/:userId/posts', protect, getUserPosts);
+
+// Orbitals a user belongs to
+router.get('/users/:userId/orbitals', protect, getUserOrbitals);
 
 // Like/Unlike a post
 router.post('/posts/:postId/like', protect, toggleLike);

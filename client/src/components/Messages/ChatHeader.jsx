@@ -116,6 +116,10 @@ export function ChatHeader({
   setMoreMenuOpen,
   moreWrapRef,
   setEmojiOpen,
+  showToast,
+  setContacts,
+  onVoiceCall,
+  onVideoCall,
 }) {
   const navigate = useNavigate();
   const dispatch = useDispatch();
@@ -230,6 +234,20 @@ export function ChatHeader({
               aria-label="Search in conversation"
             >
               <Search className="w-[18px] h-[18px]" />
+            </button>
+            <button
+              className="w-9 h-9 rounded-full flex items-center justify-center text-slate-400 hover:bg-slate-800 hover:text-slate-100"
+              onClick={() => showToast(`Calling ${activeContact.name}…`)}
+              aria-label="Voice call"
+            >
+              <Phone onClick={onVoiceCall}  className="w-[18px] h-[18px]" />
+            </button>
+            <button
+              className="w-9 h-9 rounded-full flex items-center justify-center text-slate-400 hover:bg-slate-800 hover:text-slate-100"
+              onClick={() => showToast(`Starting video call with ${activeContact.name}…`)}
+              aria-label="Video call"
+            >
+              <Video onClick={onVideoCall} className="w-[18px] h-[18px]" />
             </button>
             <div ref={moreWrapRef} className="relative">
               <button

@@ -7,7 +7,7 @@ const {
 } = require("../models/orbitalMember.model.js");
 const { Post } = require("../models/post.model.js");
 const { asyncHandler } = require("../utils/asyncHandler.js");
-const { uploadBufferToDrive, streamFileFromDrive } = require("../utils/driveUpload.js");
+const { uploadBufferToDrive, streamFileFromDrive, deleteFileFromDrive } = require("../utils/driveUpload.js");
 const sharp = require('sharp');
 
 const isDuplicateKey = (err) => err?.code === 11000;
@@ -166,6 +166,61 @@ const deleteOrbital = asyncHandler(async (req, res) => {
     res.json({ success: true, message: "Orbital deleted" });
 });
 
+// Drive file id from a stored image url (".../d/<id>" or ".../image/<id>"), so old images can be cleaned up
+const driveIdFromUrl = (url) => {
+    const m = String(url || '').match(/\/(?:d|image)\/([A-Za-z0-9_-]+)/);
+    return m ? m[1] : null;
+};
+
+const removeOldOrbitalImage = async (url) => {
+    const fileId = driveIdFromUrl(url);
+    if (!fileId) return;
+    try {
+        await deleteFileFromDrive(fileId);
+    } catch (err) {
+        console.warn('[ORBITAL IMAGE] Could not delete old image:', err.message); // never fail the request over cleanup
+    }
+};
+
+// PATCH /api/orbital/:orbitalId/image  (admin) multipart field "media", same as create
+const updateOrbitalImage = asyncHandler(async (req, res) => {
+    if (!req.file?.buffer) {
+        return res.status(400).json({ success: false, message: 'No image uploaded. Use field name "media".' });
+    }
+
+    let processedImageBuffer;
+    try {
+        processedImageBuffer = await sharp(req.file.buffer)
+            .rotate()
+            .resize({ width: 800, height: 800, fit: 'inside' })
+            .webp({ quality: 85 })
+            .toBuffer();
+    } catch (err) {
+        console.error('[ORBITAL IMAGE] Sharp error:', err);
+        return res.status(500).json({ success: false, message: 'Image transform failed' });
+    }
+
+    const fileName = `orbital-${req.orbital._id}-${Date.now()}.webp`;
+    const uploaded = await uploadBufferToDrive(processedImageBuffer, fileName, 'image/webp');
+
+    const previousImage = req.orbital.image;
+    req.orbital.image = uploaded.publicUrl;
+    await req.orbital.save();
+    await removeOldOrbitalImage(previousImage);
+
+    res.json({ success: true, orbital: req.orbital });
+});
+
+// DELETE /api/orbital/:orbitalId/image  (admin)
+const removeOrbitalImage = asyncHandler(async (req, res) => {
+    const previousImage = req.orbital.image;
+    req.orbital.image = '';
+    await req.orbital.save();
+    await removeOldOrbitalImage(previousImage);
+
+    res.json({ success: true, orbital: req.orbital });
+});
+
 module.exports = {
     streamOrbitalImage,
     createOrbital,
@@ -173,5 +228,7 @@ module.exports = {
     getMyOrbitals,
     getAllOrbitals,
     updateOrbital,
+    updateOrbitalImage,
+    removeOrbitalImage,
     deleteOrbital,
 };

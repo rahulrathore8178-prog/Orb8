@@ -180,6 +180,7 @@ export default function Capsules({ onAddCapsule, onOpenCapsule, onRevive }) {
   const dispatch = useDispatch();
   const { toast, confirm } = useFeedback();
   const storedUser = getStoredUser();
+  console.log('capsule from redux state:', capsule);
 
 
   useEffect(() => {

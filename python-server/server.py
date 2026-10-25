@@ -295,7 +295,11 @@ async def describe_image_endpoint(
 if __name__ == "__main__":
     # Check if "serve" was passed as an argument (e.g., python main.py serve)
     if len(sys.argv) > 1 and sys.argv[1] == "serve":
-        uvicorn.run("main:app", port=8000, reload=True)
+        uvicorn.run(
+            "server:app",
+            host="0.0.0.0",
+            port=int(os.environ.get("PORT", 8000)),
+        )
         
     else:
         # Otherwise, default to processing the stdin JSON request

@@ -11,7 +11,7 @@ const { VISIBILITY } = require('../models/orbital.model.js')
 
 const getJoinRequests = asyncHandler(async (req, res) => {
     const requests = await OrbitalMember.find({ orbital: req.orbital._id, status: STATUS.PENDING })
-        .populate("user", "username fullName avatar")
+        .populate("user", "username fullName avatar profilePic")
         .sort({ createdAt: 1 })
         .lean();
 
@@ -117,7 +117,7 @@ const getMembers = asyncHandler(async (req, res) => {
     const limit = Math.min(parseInt(req.query.limit) || 20, 50);
 
     const members = await OrbitalMember.find({ orbital: req.orbital._id, status: STATUS.ACTIVE })
-        .populate("user", "username fullName avatar")
+        .populate("user", "username fullName avatar profilePic")
         .sort({ role: 1, createdAt: 1 })
         .skip((page - 1) * limit)
         .limit(limit)

@@ -55,8 +55,11 @@ exports.sendMessage = async (req, res) => {
         });
         await saved.populate({
             path: 'sharedPost',
-            select: 'content image video author',
-            populate: { path: 'author', select: 'username profilePic' },
+            select: 'content image video author orbital',
+            populate: [
+                { path: 'author', select: 'username profilePic' },
+                { path: 'orbital', select: 'name image' },
+            ],
         });
 
         const message = formatMessage(saved);
@@ -89,8 +92,11 @@ exports.getConversation = async (req, res) => {
         })
             .populate({
                 path: 'sharedPost',
-                select: 'content image video author',
-                populate: { path: 'author', select: 'username profilePic' },
+                select: 'content image video author orbital',
+                populate: [
+                    { path: 'author', select: 'username profilePic' },
+                    { path: 'orbital', select: 'name image' },
+                ],
             })
             .sort({ timestamp: -1 })
             .limit(50)
