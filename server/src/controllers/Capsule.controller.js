@@ -263,6 +263,7 @@ const getFriendsCapsules = async (req, res) => {
       deleteAt: { $gt: new Date() },
     })
       .populate('user', 'username profilePic')
+      .populate('viewers', 'username profilePic')
       .populate('comments.author', 'username profilePic')
       .populate('comments.replies.author', 'username profilePic')
 

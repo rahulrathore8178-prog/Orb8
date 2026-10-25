@@ -279,6 +279,7 @@ export default function SocialProfileSection() {
                         headers: getAuthHeaders()
                     }
                 );
+                console.log('Fetched user posts:', res.data);
                 const posts = activeTab === 'Saved'
                     ? (res.data.savedPosts || []).map(item => ({
                         ...item.post,

@@ -178,6 +178,7 @@ export default function Capsules({ onAddCapsule, onOpenCapsule, onRevive }) {
   const capsule = useSelector(state => state.capsule?.capsule ?? []);
   const dispatch = useDispatch();
   const storedUser = getStoredUser();
+  console.log('capsule from redux state:', capsule);
 
 
   useEffect(() => {
