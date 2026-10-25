@@ -1,5 +1,7 @@
 const { Post, Comment } = require('../models/post.model');
 const User = require('../models/user.model');
+const mongoose = require('mongoose');
+const { OrbitalMember, STATUS: ORBITAL_STATUS } = require('../models/orbitalMember.model');
 const sharp = require('sharp');
 const path = require('path');
 const fs = require('fs').promises;
@@ -423,6 +425,7 @@ async function getPost(req, res) {
 
     const post = await Post.findById(postId)
       .populate('author', 'username profilePic league level totalXp isPrivate friends blockedUsers')
+      .populate('orbital', 'name image visibility')
       .populate('comments.author', 'username profilePic')
       .populate('comments.likes', '_id')
       .populate('comments.replies.author', 'username profilePic')
@@ -460,6 +463,10 @@ async function getPost(req, res) {
       content: post.content,
       image: post.image,
       video: post.video || '',
+      // set when the post belongs to an orbital
+      orbital: post.orbital && post.orbital.name
+        ? { id: String(post.orbital._id), name: post.orbital.name, image: post.orbital.image || '', visibility: post.orbital.visibility }
+        : null,
       likes: post.likes.map(id => String(id)),
       comments: post.comments.map(comment => ({
         id: String(comment._id),
@@ -873,6 +880,70 @@ async function getUserPosts(req, res) {
   }
 };
 
+/**
+ * Orbitals a user is an active member of.
+ * GET /api/community/users/:userId/orbitals
+ * Own profile: every orbital, each with the user's `role`.
+ * Someone else's: same privacy gate as their posts; private orbitals only if the viewer is also a member.
+ * Items carry `author` (the creator) instead of `role`, matching the Orbital shape OrbitalCard expects.
+ */
+async function getUserOrbitals(req, res) {
+  try {
+    const userId = req.params.userId || req.user.id;
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ message: 'Invalid user ID.' });
+    }
+
+    const viewerId = String(req.user.id);
+    const isOwner = String(userId) === viewerId;
+
+    if (!isOwner) {
+      const [viewer, profileOwner] = await Promise.all([
+        User.findById(viewerId).select('friends blockedUsers').lean(),
+        User.findById(userId).select('isPrivate blockedUsers').lean(),
+      ]);
+      if (!profileOwner) return res.status(404).json({ message: 'User not found' });
+      const isBlocked = viewer?.blockedUsers?.some(id => String(id) === String(userId))
+        || profileOwner.blockedUsers?.some(id => String(id) === viewerId);
+      const canView = !profileOwner.isPrivate
+        || viewer?.friends?.some(id => String(id) === String(userId));
+      if (isBlocked || !canView) return res.status(403).json({ message: 'This profile is private' });
+    }
+
+    const memberships = await OrbitalMember.find({ user: userId, status: ORBITAL_STATUS.ACTIVE })
+      .populate({
+        path: 'orbital',
+        select: 'name description visibility memberCount image creator',
+        populate: { path: 'creator', select: 'username profilePic' },
+      })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    let visible = memberships.filter(m => m.orbital);
+
+    if (!isOwner) {
+      const privateIds = visible.filter(m => m.orbital.visibility === 'private').map(m => m.orbital._id);
+      const viewerMemberships = privateIds.length
+        ? await OrbitalMember.find({ user: viewerId, status: ORBITAL_STATUS.ACTIVE, orbital: { $in: privateIds } })
+            .select('orbital')
+            .lean()
+        : [];
+      const allowed = new Set(viewerMemberships.map(m => String(m.orbital)));
+      visible = visible.filter(m => m.orbital.visibility !== 'private' || allowed.has(String(m.orbital._id)));
+    }
+
+    const orbitals = visible.map(({ orbital, role }) => {
+      const { creator, ...rest } = orbital;
+      return isOwner ? { ...rest, role } : { ...rest, author: creator };
+    });
+
+    return res.status(200).json({ success: true, orbitals });
+  } catch (error) {
+    console.error('Get user orbitals error:', error);
+    return res.status(500).json({ message: error.message });
+  }
+}
+
 const DISCOVER_FRESHNESS_MS = 30 * 60 * 1000;
 // 3 decimal places is roughly 110 m, so we never store an exact home location.
 const coarsenCoordinate = (value) => Math.round(value * 1000) / 1000;
@@ -1039,7 +1110,10 @@ const getSavedPosts = async (req, res) => {
       .populate({
         path: 'savedPosts.post',
         match: { isActive: true, isArchived: { $ne: true } },
-        populate: { path: 'author', select: 'username profilePic' },
+        populate: [
+          { path: 'author', select: 'username profilePic' },
+          { path: 'orbital', select: 'name image' },
+        ],
       })
       .select('savedPosts')
       .lean();
@@ -1184,6 +1258,7 @@ module.exports = {
   deletePost,
   deleteComment,
   getUserPosts,
+  getUserOrbitals,
   commentReply,
   likeComment,
   getPostVideo,

@@ -55,8 +55,11 @@ exports.sendMessage = async (req, res) => {
         });
         await saved.populate({
             path: 'sharedPost',
-            select: 'content image video author',
-            populate: { path: 'author', select: 'username profilePic' },
+            select: 'content image video author orbital',
+            populate: [
+                { path: 'author', select: 'username profilePic' },
+                { path: 'orbital', select: 'name image' },
+            ],
         });
 
         const message = formatMessage(saved);
@@ -71,7 +74,7 @@ exports.sendMessage = async (req, res) => {
 
 exports.getConversation = async (req, res) => {
     try {
-        // console.log('req.user:', req.user); // ✅ add this
+        console.log('req.user:', req.user); // ✅ add this
         const { recipientId } = req.params;
         const senderId = req.user.id;
 
@@ -89,8 +92,11 @@ exports.getConversation = async (req, res) => {
         })
             .populate({
                 path: 'sharedPost',
-                select: 'content image video author',
-                populate: { path: 'author', select: 'username profilePic' },
+                select: 'content image video author orbital',
+                populate: [
+                    { path: 'author', select: 'username profilePic' },
+                    { path: 'orbital', select: 'name image' },
+                ],
             })
             .sort({ timestamp: -1 })
             .limit(50)

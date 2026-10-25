@@ -282,8 +282,6 @@ export default function SocialProfileSection() {
                     }))
                     : (res.data.posts || []);
                 setUserPosts(posts);
-                // console.log('userPosts', res?.data?.id)
-                // setPostId(res?.id)
             } catch (err) {
                 console.error('Failed to fetch user posts:', err);
                 setUserPosts([]);
