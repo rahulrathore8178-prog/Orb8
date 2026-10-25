@@ -13,7 +13,7 @@ import {
     Search,
     MessageSquare,
 } from "lucide-react";
-import { apiUrl, getAuthHeaders } from "../utilites/DashboardHelper";
+import { apiUrl, getAuthHeaders, pythonApiUrl } from "../utilites/DashboardHelper";
 import gsap from "gsap";
 import axios from "axios";
 import { getStoredUser } from "../utilites/communityHelper";
@@ -554,11 +554,11 @@ function Composer({
             />
         </div>
     );
-}
+};
 
 export default function AskIgris({ onSend } = {}) {
     // conversation state
-    const IGRIS_API_URL = `${apiUrl}/api/askigris`;
+    const IGRIS_API_URL = `${pythonApiUrl}/askPrompt`;
     const [messages, setMessages] = useState([]); // { id, role, text, attachment?, isError? }
     const [text, setText] = useState("");
     const [attachment, setAttachment] = useState(null); // { name, size, kind: 'image' | 'pdf', preview? }
@@ -589,7 +589,7 @@ export default function AskIgris({ onSend } = {}) {
         // console.log('Fetching token:', token);
         console.log('Fetching Igris history for user ID:', currentUserId);
         try {
-            const response = await axios.get(`${IGRIS_API_URL}/history/${currentUserId}`, {
+            const response = await axios.get(`${pythonApiUrl}/history/${currentUserId}`, {
                 withCredentials: true,
                 headers: getAuthHeaders(),
             });
@@ -617,7 +617,7 @@ export default function AskIgris({ onSend } = {}) {
 
         console.log("IgrisHistory id:", chat._id);
         try {
-            const response = await axios.get(`${IGRIS_API_URL}/history/${currentUserId}/${chat._id}`, {
+            const response = await axios.get(`${pythonApiUrl}/history/${currentUserId}/${chat._id}`, {
                 headers: getAuthHeaders(),
             });
             const history = response.data?.chatHistory || [];
@@ -812,13 +812,13 @@ export default function AskIgris({ onSend } = {}) {
 
                 const token = localStorage.getItem("token");
 
-                const res = await axios.post(`${IGRIS_API_URL}/describe_image`, requestBody, {
+                const res = await axios.post(`${pythonApiUrl}/describe_image`, requestBody, {
                     headers: { Authorization: `Bearer ${token}` },
                 });
                 data = res.data;
             } else {
                 // ---- text branch: JSON via fetch ----
-                const res = await fetch(`${IGRIS_API_URL}/askPrompt`, {
+                const res = await fetch(`${pythonApiUrl}/askPrompt`, {
                     method: "POST",
                     credentials: "include",
                     headers: {
