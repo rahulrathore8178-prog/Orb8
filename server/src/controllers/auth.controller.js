@@ -563,7 +563,6 @@ async function forgotPassword(req, res) {
     const user = await userModel.findOne({ email: email.toLowerCase().trim() });
     // Always return success to prevent email enumeration
     if (!user) {
-      console.log(`[AUTH] Forgot password attempt for non-existent email: ${email}`);
       return res.status(200).json({ message: 'If that email exists, an OTP has been sent.' });
     }
 
@@ -574,27 +573,16 @@ async function forgotPassword(req, res) {
     user.resetOtpAttempts = 0;
     await user.save();
 
-    console.log(`[AUTH] Password reset requested for ${email}. OTP: ${otp}`);
-
-    // Send the OTP via email when SMTP is configured; never fail the request on email errors.
-    let emailSent = false;
+    // Keep the same response whether delivery succeeds or the account exists.
     try {
       const result = await sendOtpEmail(user.email, otp);
-      emailSent = result.sent;
-      if (emailSent) {
-        console.log(`[AUTH] OTP email sent successfully to ${email}`);
-      } else {
-        console.warn(`[AUTH] Email provider not configured. Showing OTP in response for development.`);
-      }
+      if (!result.sent) console.warn('[AUTH] Password reset email provider is not configured.');
     } catch (mailError) {
-      console.error(`[AUTH] Error sending reset OTP to ${email}:`, mailError.message);
+      console.error('[AUTH] Password reset email delivery failed:', mailError.message);
     }
 
     return res.status(200).json({
-      message: 'If that email exists, an OTP has been sent.',
-      // Only expose the OTP in the response outside production (so dev works without SMTP).
-      // This allows testing without email configuration.
-      otp: process.env.NODE_ENV !== 'production' && !emailSent ? otp : undefined
+      message: 'If that email exists, an OTP has been sent.'
     });
   } catch (error) {
     console.error('[AUTH] Forgot password error:', error);

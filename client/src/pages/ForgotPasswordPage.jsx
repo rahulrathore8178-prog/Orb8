@@ -2,12 +2,11 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useDispatch, useSelector } from 'react-redux';
-import { setError } from '../redux/slices/postSlice';
-import { setDevToken, setEmail, setLoading, setSent } from '../redux/slices/forgotPasswordSlice';
+import { setDevToken, setEmail, setError, setLoading, setSent } from '../redux/slices/forgotPasswordSlice';
 
 export default function ForgotPasswordPage() {
   const navigate = useNavigate();
-  const apiUrl = import.meta.env.VITE_API_URL || '';
+  const apiUrl = (import.meta.env.VITE_API_URL || 'https://orb8-6bfm.onrender.com').replace(/\/+$/, '');
   const dispatch = useDispatch();
   const email = useSelector(state => state.forgotPassword.email);
   const error = useSelector(state => state.forgotPassword.error);
@@ -20,7 +19,7 @@ export default function ForgotPasswordPage() {
     dispatch(setError(''));
     dispatch(setLoading(true));
     try {
-      const res = await axios.post(`${apiUrl}/api/otp/send`, { email });
+      const res = await axios.post(`${apiUrl}/api/auth/user/forgot-password`, { email });
       dispatch(setSent(true));
       if (res.data?.otp) dispatch(setDevToken(res.data.otp));
     } catch (err) {
