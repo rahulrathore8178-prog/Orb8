@@ -5,7 +5,7 @@ import axios from 'axios';
 export default function ResetPasswordPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const apiUrl = import.meta.env.VITE_API_URL || '';
+  const apiUrl = (import.meta.env.VITE_API_URL || 'https://orb8-6bfm.onrender.com').replace(/\/+$/, '');
 
   const [email, setEmail] = useState(location.state?.email || '');
   const [otp, setOtp] = useState('');
@@ -32,7 +32,7 @@ export default function ResetPasswordPage() {
     }
     setLoading(true);
     try {
-      await axios.post(`${apiUrl}/api/otp/verify`, { email, otp, newPassword });
+      await axios.post(`${apiUrl}/api/auth/user/reset-password`, { email, otp, newPassword });
       setDone(true);
     } catch (err) {
       setError(err.response?.data?.message || 'Invalid or expired OTP.');
