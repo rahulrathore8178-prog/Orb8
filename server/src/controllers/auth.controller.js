@@ -149,17 +149,24 @@ async function loginUser(req, res) {
   }
 };
 
-// google mobile 
+// googleMobile
 async function googleMobile(req, res) {
-  try {
-    const { idToken } = req.body;
-    if (!idToken) return res.status(400).json({ message: 'idToken is required.' });
+  const { idToken } = req.body || {};
+  if (!idToken) return res.status(400).json({ message: 'idToken is required.' });
 
+  let payload;
+  try {
     const ticket = await googleClient.verifyIdToken({
       idToken,
       audience: [process.env.GOOGLE_WEB_CLIENT_ID, process.env.GOOGLE_IOS_CLIENT_ID].filter(Boolean),
     });
-    const payload = ticket.getPayload();
+    payload = ticket.getPayload();
+  } catch (error) {
+    console.error('Google token verify failed:', error.message);
+    return res.status(401).json({ message: 'Invalid Google token.' });
+  }
+
+  try {
     if (!payload?.email || !payload.email_verified) {
       return res.status(401).json({ message: 'Google account email is not verified.' });
     }
@@ -168,13 +175,15 @@ async function googleMobile(req, res) {
     let user = await userModel.findOne({ email });
 
     if (!user) {
-      // Create it the same way your existing /api/auth/google callback does
-      // (username/password placeholders, googleId field, etc.).
       user = await userModel.create({
         email,
         googleId: payload.sub,
+        needsProfileCompletion: true, // explicit; do not rely on the schema default
         notifications: [{ title: 'Welcome to Orb8', detail: 'Your feed is ready.' }],
       });
+    } else if (!user.googleId) {
+      user.googleId = payload.sub; // link an existing email/password account
+      await user.save();
     }
 
     const token = signToken(user._id);
@@ -184,11 +193,11 @@ async function googleMobile(req, res) {
       message: 'Google login successful.',
       token,
       user: buildUserPayload(user),
-      // must match the condition your web flow uses to send people to complete-profile
-      profileComplete: !user.needsProfileCompletion,
+      profileComplete: user.needsProfileCompletion !== true,
     });
   } catch (error) {
-    return res.status(401).json({ message: 'Invalid Google token.' });
+    console.error('googleMobile error:', error);
+    return res.status(500).json({ message: 'Something went wrong. Please try again.' });
   }
 }
 
@@ -637,40 +646,51 @@ async function resetPassword(req, res) {
 }
 
 
+// completeProfile
+const USERNAME_RE = /^[a-zA-Z0-9_.]{3,20}$/;
+
 const completeProfile = async (req, res) => {
   try {
-    const { username, password, bio } = req.body;
+    const { password, bio } = req.body || {};
+    const username = typeof req.body?.username === 'string' ? req.body.username.trim() : '';
 
-    if (!username || username.trim().length < 3) {
-      return res.status(400).json({ message: 'Username must be at least 3 characters' });
+    if (!USERNAME_RE.test(username)) {
+      return res.status(400).json({ message: 'Username must be 3-20 characters: letters, numbers, _ or .' });
     }
-    if (!password || password.length < 6) {
+    if (typeof password !== 'string' || password.length < 6) {
       return res.status(400).json({ message: 'Password must be at least 6 characters' });
     }
-    if (bio && bio.length > 150) {
+    if (bio !== undefined && (typeof bio !== 'string' || bio.length > 150)) {
       return res.status(400).json({ message: 'Bio must be 150 characters or less' });
     }
-
-    const taken = await userModel.findOne({ username: username.trim(), _id: { $ne: req.user.id } });
-    if (taken) return res.status(409).json({ message: 'Username already taken' });
 
     const user = await userModel.findById(req.user.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    user.username = username.trim();
+    // This endpoint sets a password without the old one, so only allow it once.
+    if (user.needsProfileCompletion !== true) {
+      return res.status(403).json({ message: 'Profile is already completed' });
+    }
+
+    const taken = await userModel
+      .findOne({ username, _id: { $ne: user._id } })
+      .collation({ locale: 'en', strength: 2 }); // case-insensitive
+    if (taken) return res.status(409).json({ message: 'Username already taken' });
+
+    user.username = username;
     user.password = await bcrypt.hash(password, 10);
-    if (bio !== undefined) user.bio = bio.trim();
-    if (req.file) user.profilePic = /* same value your profile-update route stores, e.g. `/uploads/${req.file.filename}` */
+    if (typeof bio === 'string') user.bio = bio.trim();
+    if (req.file) {
+      user.profilePic = `/uploads/${req.file.filename}`; // use the same value your profile-update route stores
+    }
     user.needsProfileCompletion = false;
     await user.save();
 
-    return res.status(200).json({
-      message: 'Profile completed',
-      user: buildUserPayload(user), // full payload, same as login
-    });
+    return res.status(200).json({ message: 'Profile completed', user: buildUserPayload(user) });
   } catch (err) {
+    if (err?.code === 11000) return res.status(409).json({ message: 'Username already taken' });
     console.error('Complete profile error:', err);
-    return res.status(500).json({ message: err.message });
+    return res.status(500).json({ message: 'Something went wrong. Please try again.' });
   }
 };
 
