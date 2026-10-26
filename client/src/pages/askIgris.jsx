@@ -589,7 +589,7 @@ export default function AskIgris({ onSend } = {}) {
         // console.log('Fetching token:', token);
         console.log('Fetching Igris history for user ID:', currentUserId);
         try {
-            const response = await axios.get(`${pythonApiUrl}/history/${currentUserId}`, {
+            const response = await axios.get(`${apiUrl}/api/askigris/history/${currentUserId}`, {
                 withCredentials: true,
                 headers: getAuthHeaders(),
             });

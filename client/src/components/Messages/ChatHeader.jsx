@@ -63,6 +63,7 @@ import {
   ChevronDown,
   User,
   Ban,
+  Phone,
 } from "lucide-react";
 import { colorForName, initials, relativeLastSeen } from "../../utilites/ChatHelper";
 import { apiUrl, getAuthHeaders } from "../../utilites/DashboardHelper";
