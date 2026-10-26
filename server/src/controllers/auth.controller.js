@@ -156,6 +156,11 @@ async function googleMobile(req, res) {
 
   let payload;
   try {
+    try {
+      const aud = JSON.parse(Buffer.from(idToken.split('.')[1], 'base64url').toString()).aud;
+      console.log('token aud:', aud);
+      console.log('server expects:', JSON.stringify(process.env.GOOGLE_WEB_CLIENT_ID));
+    } catch { }
     const ticket = await googleClient.verifyIdToken({
       idToken,
       audience: [process.env.GOOGLE_WEB_CLIENT_ID, process.env.GOOGLE_IOS_CLIENT_ID].filter(Boolean),
