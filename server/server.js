@@ -46,6 +46,12 @@ const clients = new Map();
       }
     });
 
+    // Generic push to one user: { type: 'messages-read' | 'message-edited', ... }
+    app.set('publishChatEvent', (userId, payload) => {
+      const socket = clients.get(String(userId));
+      if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(payload));
+    });
+
     wss.on('connection', (socket) => {
       socket.isAlive = true;
       socket.on('pong', () => { socket.isAlive = true; });

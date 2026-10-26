@@ -3,7 +3,8 @@ const {
   createPost, 
   getFeed, 
   getPost,
-  toggleLike, 
+  toggleLike,
+  editPostCaption, 
   addComment,
   deletePost,
   deleteComment,
@@ -32,6 +33,9 @@ const router = express.Router();
 
 // Get feed (paginated)
 router.get('/feed', protect, getFeed);
+
+// Edit post caption
+router.patch('/posts/:postId/caption', protect, editPostCaption);
 
 // Proxy image from Drive
 router.get('/posts/image/:fileId', getPostImage);

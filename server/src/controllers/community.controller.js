@@ -238,7 +238,6 @@ async function createPost(req, res) {
 
 
 async function deletePost(req, res) {
-  console.log('Deleting post with ID:', req.params.postId);
   try {
     const post = await Post.findById(req.params.postId);
     if (!post) {
@@ -269,6 +268,70 @@ async function deletePost(req, res) {
   }
 
 };
+
+// Edit Post Caption
+async function editPostCaption(req, res) {
+  try {
+    const { postId } = req.params;
+    const { content } = req.body;
+
+    const post = await Post.findById(postId);
+
+    if (!post) {
+      return res.status(404).json({
+        message: "Post not found",
+      });
+    }
+
+    // Author check
+    if (String(post.author) !== req.user.id) {
+      return res.status(403).json({
+        message: "Only author can make changes",
+      });
+    }
+
+    // Extract hashtags from updated content
+    const hashtags =
+      content?.match(/#\w+/g)?.map(tag => tag.toLowerCase()) || [];
+
+    post.content = content;
+    post.hashtags = hashtags;
+
+    await post.save();
+
+    await post.populate(
+      "author",
+      "username profilePic league level totalXp"
+    );
+
+    return res.status(200).json({
+      message: "Post caption updated successfully",
+      post: {
+        id: String(post._id),
+        author: {
+          id: String(post.author._id),
+          username: post.author.username,
+          profilePic: post.author.profilePic || "",
+          league: post.author.league || "Bronze 1",
+          level: post.author.level || 1,
+          totalXp: post.author.totalXp || 0,
+        },
+        content: post.content,
+        hashtags: post.hashtags || [],
+        image: post.image,
+        video: post.video,
+        voiceNote: post.voiceNote,
+        updatedAt: post.updatedAt,
+      },
+    });
+  } catch (error) {
+    console.error("Error editing post caption:", error);
+
+    return res.status(500).json({
+      message: error.message,
+    });
+  }
+}
 
 // Get feed with pagination
 async function getFeed(req, res) {
@@ -925,8 +988,8 @@ async function getUserOrbitals(req, res) {
       const privateIds = visible.filter(m => m.orbital.visibility === 'private').map(m => m.orbital._id);
       const viewerMemberships = privateIds.length
         ? await OrbitalMember.find({ user: viewerId, status: ORBITAL_STATUS.ACTIVE, orbital: { $in: privateIds } })
-            .select('orbital')
-            .lean()
+          .select('orbital')
+          .lean()
         : [];
       const allowed = new Set(viewerMemberships.map(m => String(m.orbital)));
       visible = visible.filter(m => m.orbital.visibility !== 'private' || allowed.has(String(m.orbital._id)));
@@ -1252,6 +1315,7 @@ module.exports = {
   createPost,
   getFeed,
   getPostImage,
+  editPostCaption,
   getPost,
   toggleLike,
   addComment,

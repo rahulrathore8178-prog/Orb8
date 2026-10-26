@@ -9,7 +9,9 @@ const messageSchema = new mongoose.Schema({
   timestamp: { type: Date, default: Date.now },           // timestamp
   delivered: { type: Boolean, default: false },      // delivery check
   // Older messages have no value and default to read, so history never turns into a pile of unread.
-  read: { type: Boolean, default: true }
+  read: { type: Boolean, default: true },
+  edited: { type: Boolean, default: false },
+  editedAt: { type: Date, default: null }
 });
 
 messageSchema.index({ senderId: 1, recipientId: 1, timestamp: -1 });
