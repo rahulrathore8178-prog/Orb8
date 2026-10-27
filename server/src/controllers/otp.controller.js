@@ -2,7 +2,7 @@ const jwt = require('jsonwebtoken');
 const OtpCode = require('../models/otpCode.model');
 const User = require('../models/user.model'); // adjust path/name if different
 const { generateOtp, hashOtp } = require('../utils/otp');
-const { sendOtpEmail } = require('../services/email.service');
+const { sendOtpEmail } = require('../utils/mailer');
 
 function cookieOptions() {
   const isProd = process.env.NODE_ENV === 'production';
@@ -37,7 +37,7 @@ exports.sendOtp = async (req, res) => {
       { upsert: true, new: true }
     );
 
-    await sendOtpEmail(email, otp);
+    await sendOtpEmail(email, otp, { expiresInMinutes: 5 });
 
     return res.status(200).json({ message: 'If the email exists, OTP has been sent.' });
   } catch (err) {
