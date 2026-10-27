@@ -3,6 +3,8 @@ const multer = require('multer');
 const MAX_IMAGE_UPLOAD_BYTES = 8 * 1024 * 1024;   // mobile photos can be larger before compression
 const MAX_VIDEO_UPLOAD_BYTES = 50 * 1024 * 1024;  // keep in sync with frontend MAX_VIDEO_SIZE and controller MAX_VIDEO_BYTES
 
+const MAX_PROFILE_IMAGE_UPLOAD_BYTES = 20 * 1024 * 1024; // raw phone photos; sharp shrinks them afterwards
+
 const allowedImageMimeTypes = new Set([
   'image/jpeg',
   'image/png',
@@ -32,7 +34,7 @@ const allowedAudioMimeTypes = new Set([
 const profileImageMulter = multer({
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: MAX_IMAGE_UPLOAD_BYTES,
+    fileSize: MAX_PROFILE_IMAGE_UPLOAD_BYTES,
     files: 1
   },
   fileFilter: (req, file, cb) => {
@@ -71,42 +73,41 @@ const postMediaMulter = multer({
     return cb(null, true);
   }
 });
-function handleUpload(multerInstance, fieldName) {
+
+
+function handleUpload(multerInstance, fieldName, maxBytes = MAX_VIDEO_UPLOAD_BYTES) {
   return (req, res, next) => {
-    const uploadSingle = multerInstance.single(fieldName);
-
-    uploadSingle(req, res, (error) => {
-      console.log('[UPLOAD] body keys:', Object.keys(req.body || {}));
-      console.log('[UPLOAD] file attached:', !!req.file);
-
+    multerInstance.single(fieldName)(req, res, (error) => {
       if (error) {
         if (error instanceof multer.MulterError) {
           if (error.code === 'LIMIT_FILE_SIZE') {
-            return res.status(413).json({ message: `File too large. Max upload size is ${MAX_VIDEO_UPLOAD_BYTES / (1024 * 1024)}MB.` });
+            return res.status(413).json({ message: `File too large. Max upload size is ${Math.round(maxBytes / (1024 * 1024))}MB.` });
+          }
+          if (error.code === 'LIMIT_UNEXPECTED_FILE') {
+            return res.status(400).json({ message: `Unexpected upload field. Send the file as "${fieldName}".` });
           }
           return res.status(400).json({ message: `Upload error: ${error.code}` });
         }
         return res.status(400).json({ message: error.message || 'Invalid file.' });
       }
 
-      // Enforce the tighter 8MB cap for images specifically, since multer's
-      // own limits.fileSize above is set to the video ceiling.
+      // Post media only: images get a tighter cap than videos.
       if (req.file && req.file._detectedKind === 'image' && req.file.size > MAX_IMAGE_UPLOAD_BYTES) {
         return res.status(413).json({ message: `Image too large. Max upload size is ${MAX_IMAGE_UPLOAD_BYTES / (1024 * 1024)}MB.` });
       }
-
       return next();
     });
   };
 }
 
-const profileImageUpload = handleUpload(profileImageMulter, 'profilePic');
-const postMediaUpload = handleUpload(postMediaMulter, 'media');
-const orbitalImageUpload = handleUpload(postMediaMulter, 'media');
+const profileImageUpload = handleUpload(profileImageMulter, 'profilePic', MAX_PROFILE_IMAGE_UPLOAD_BYTES);
+const postMediaUpload = handleUpload(postMediaMulter, 'media', MAX_VIDEO_UPLOAD_BYTES);
+const orbitalImageUpload = handleUpload(postMediaMulter, 'media', MAX_VIDEO_UPLOAD_BYTES);
 
 module.exports = {
   MAX_IMAGE_UPLOAD_BYTES,
   MAX_VIDEO_UPLOAD_BYTES,
+  MAX_PROFILE_IMAGE_UPLOAD_BYTES,
   profileImageUpload,
   postMediaUpload,
   orbitalImageUpload
