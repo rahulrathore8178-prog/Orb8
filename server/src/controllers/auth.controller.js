@@ -655,33 +655,28 @@ async function forgotPassword(req, res) {
     const email = typeof req.body?.email === 'string' ? req.body.email.toLowerCase().trim() : '';
     if (!EMAIL_RE.test(email)) return res.status(400).json({ message: 'Enter a valid email address.' });
 
-    const user = await userModel.findOne({ email });
-    if (!user) return res.status(200).json(generic); // never reveal whether an email exists
+    const user = await userModel.findOne({ email: email.toLowerCase().trim() });
+    // Always return success to prevent email enumeration
+    if (!user) {
+      return res.status(200).json({ message: 'If that email exists, an OTP has been sent.' });
+    }
 
     // Resend cooldown, answered with the same generic reply so nothing leaks.
     const issuedAt = user.resetTokenExpiry ? new Date(user.resetTokenExpiry).getTime() - OTP_TTL_MS : 0;
     if (issuedAt && Date.now() - issuedAt < OTP_COOLDOWN_MS) return res.status(200).json(generic);
 
-    const otp = String(crypto.randomInt(100000, 1000000));
-    await userModel.updateOne({ _id: user._id }, {
-      $set: {
-        resetToken: crypto.createHash('sha256').update(otp).digest('hex'),
-        resetTokenExpiry: new Date(Date.now() + OTP_TTL_MS),
-        resetOtpAttempts: 0,
-      },
-    });
-
-    let emailSent = false;
+    // Keep the same response whether delivery succeeds or the account exists.
     try {
       const result = await sendOtpEmail(user.email, otp);
-      emailSent = Boolean(result?.sent);
+      if (!result.sent) console.warn('[AUTH] Password reset email provider is not configured.');
     } catch (mailError) {
-      console.error('[AUTH] Error sending reset OTP:', mailError.message);
+      console.error('[AUTH] Password reset email delivery failed:', mailError.message);
     }
     if (!emailSent) console.warn('[AUTH] Reset email was not sent. Check SMTP settings.');
 
-    const exposeOtp = !emailSent && process.env.NODE_ENV !== 'production' && process.env.EXPOSE_DEV_OTP === 'true';
-    return res.status(200).json(exposeOtp ? { ...generic, otp } : generic);
+    return res.status(200).json({
+      message: 'If that email exists, an OTP has been sent.'
+    });
   } catch (error) {
     console.error('[AUTH] Forgot password error:', error);
     return res.status(500).json({ message: 'Something went wrong. Please try again.' });
