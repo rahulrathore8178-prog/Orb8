@@ -17,6 +17,7 @@
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^17.4.2",
+    "expo-server-sdk": "^8.0.0",
     "express": "^5.2.1",
     "firebase": "^13.0.0",
     "firebase-admin": "^14.3.0",

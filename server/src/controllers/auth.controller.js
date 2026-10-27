@@ -897,6 +897,34 @@ const logoutUser = async (req, res) => {
   return res.status(200).json({ message: 'Logged out successfully.' });
 };
 
+const EXPO_TOKEN_RE = /^(Exponent|Expo)PushToken\[[^\]]+\]$/;
+
+async function registerPushToken(req, res) {
+  try {
+    const token = typeof req.body?.token === 'string' ? req.body.token.trim() : '';
+    if (!EXPO_TOKEN_RE.test(token)) return res.status(400).json({ message: 'Invalid push token.' });
+
+    // One phone = one account: take this token away from anyone else first.
+    await userModel.updateMany({ deviceTokens: token, _id: { $ne: req.user.id } }, { $pull: { deviceTokens: token } });
+    await userModel.updateOne({ _id: req.user.id }, { $pull: { deviceTokens: token } });
+    await userModel.updateOne({ _id: req.user.id }, { $push: { deviceTokens: { $each: [token], $slice: -10 } } });
+    return res.status(200).json({ ok: true });
+  } catch (error) {
+    console.error('registerPushToken error:', error);
+    return res.status(500).json({ message: 'Could not save push token.' });
+  }
+}
+
+async function removePushToken(req, res) {
+  try {
+    const token = typeof req.body?.token === 'string' ? req.body.token.trim() : '';
+    if (token) await userModel.updateOne({ _id: req.user.id }, { $pull: { deviceTokens: token } });
+    return res.status(200).json({ ok: true });
+  } catch (error) {
+    return res.status(500).json({ message: 'Could not remove push token.' });
+  }
+}
+
 module.exports = {
   registerUser,
   loginUser,
@@ -918,4 +946,6 @@ module.exports = {
   logoutUser,
   usernameAvailable,
   optimizeProfileImage,
+  registerPushToken,
+  removePushToken,
 };

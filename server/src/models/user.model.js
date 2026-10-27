@@ -1,14 +1,5 @@
 const mongoose = require("mongoose");
 
-// Placeholder for Google accounts that haven't picked a username yet.
-// '#' is not allowed by USERNAME_RE, so no real user can ever have one of these.
-const tempUsername = () => `pending#${crypto.randomBytes(4).toString('hex')}`;
-const isTempUsername = (name) => typeof name === 'string' && name.includes('#');
-
-// An account is complete when it has a real username and a password.
-const hasCredentials = (u) =>
-  Boolean(u && typeof u.username === 'string' && u.username.trim() && !isTempUsername(u.username) && u.password);
-
 const notificationSchema = new mongoose.Schema(
   {
     title: { type: String, required: true, trim: true },
