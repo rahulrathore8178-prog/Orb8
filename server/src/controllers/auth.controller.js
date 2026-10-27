@@ -14,11 +14,58 @@ const { currentStreak, dayKey, getDailyPrompt } = require('../utils/habit');
 const { OAuth2Client } = require('google-auth-library');
 const googleClient = new OAuth2Client();
 
+const USERNAME_RE = /^[a-zA-Z0-9_.]{3,20}$/;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const RESERVED = new Set(['admin', 'administrator', 'orbit', 'orb8', 'support', 'help', 'settings', 'root', 'system', 'me', 'api', 'null', 'undefined']);
+const CI = { locale: 'en', strength: 2 }; // case-insensitive matching
+const DUMMY_HASH = bcrypt.hashSync('orbit-dummy-password', 10); // keeps login timing equal for unknown users
+const OTP_TTL_MS = 10 * 60 * 1000;
+const OTP_COOLDOWN_MS = 60 * 1000;
+
+// Placeholder for Google accounts that haven't picked a username yet.
+// '#' is not allowed by USERNAME_RE, so no real user can ever have one.
+const tempUsername = () => `pending#${crypto.randomBytes(4).toString('hex')}`;
+const isTempUsername = (name) => typeof name === 'string' && name.includes('#');
+
+// An account is complete when it has a real username and a password.
+const hasCredentials = (u) =>
+  Boolean(u && typeof u.username === 'string' && u.username.trim() && !isTempUsername(u.username) && u.password);
+
 const PROFILE_PICS_DIR = path.join(__dirname, '..', '..', 'uploads', 'profile-pics');
 const MAX_PROCESSED_IMAGE_BYTES = 450 * 1024;
 
 function buildStoredImagePath(fileName) {
   return `/uploads/profile-pics/${fileName}`;
+}
+
+// An account is complete when it can actually log in with a username + password.
+// const hasCredentials = (u) => Boolean(u && typeof u.username === 'string' && u.username.trim() && u.password);
+
+// Make the stored flag agree with reality. Uses updateOne so schema validation can never block a login.
+async function syncProfileFlag(user) {
+  const complete = hasCredentials(user);
+  if (user.needsProfileCompletion !== !complete) {
+    await userModel.updateOne({ _id: user._id }, { $set: { needsProfileCompletion: !complete } });
+    user.needsProfileCompletion = !complete;
+  }
+  return complete;
+}
+
+async function storeProfileImage(userId, buffer) {
+  let out = null;
+  for (const quality of [78, 70, 62, 55, 48]) {
+    out = await sharp(buffer).rotate()
+      .resize({ width: 640, height: 640, fit: 'inside', withoutEnlargement: true })
+      .webp({ quality }).toBuffer();
+    if (out.length <= MAX_PROCESSED_IMAGE_BYTES) break;
+  }
+  if (!out || out.length > 1024 * 1024) {
+    const e = new Error('Image is too large after compression.');
+    e.status = 413;
+    throw e;
+  }
+  const { publicUrl } = await uploadBufferToDrive(out, `${userId}-${Date.now()}.webp`, 'image/webp');
+  return publicUrl;
 }
 
 // Used when RESPONDING: add the current host
@@ -81,73 +128,137 @@ function signToken(userId) {
   return jwt.sign({ id: userId }, process.env.JWT_SECRET, { expiresIn: '7d' });
 }
 
-async function registerUser(req, res) {
-  const { username, email, password } = req.body;
+// const USERNAME_RE = /^[a-zA-Z0-9_.]{3,20}$/;
+// An account is complete when it can actually log in with a username + password.
+// const hasCredentials = (u) => Boolean(u && typeof u.username === 'string' && u.username.trim() && u.password);
 
+// Make the stored flag agree with reality. Uses updateOne so schema validation can never block a login.
+async function syncProfileFlag(user) {
+  const complete = hasCredentials(user);
+  if (user.needsProfileCompletion !== !complete) {
+    await userModel.updateOne({ _id: user._id }, { $set: { needsProfileCompletion: !complete } });
+    user.needsProfileCompletion = !complete;
+  }
+  return complete;
+}
+
+async function storeProfileImage(userId, buffer) {
+  let out = null;
+  for (const quality of [78, 70, 62, 55, 48]) {
+    out = await sharp(buffer).rotate()
+      .resize({ width: 640, height: 640, fit: 'inside', withoutEnlargement: true })
+      .webp({ quality }).toBuffer();
+    if (out.length <= MAX_PROCESSED_IMAGE_BYTES) break;
+  }
+  if (!out || out.length > 1024 * 1024) {
+    const e = new Error('Image is too large after compression.');
+    e.status = 413;
+    throw e;
+  }
+  const { publicUrl } = await uploadBufferToDrive(out, `${userId}-${Date.now()}.webp`, 'image/webp');
+  return publicUrl;
+}
+
+async function registerUser(req, res) {
   try {
-    const isUserAlreadyExist = await userModel.findOne({ $or: [{ username }, { email }] });
-    if (isUserAlreadyExist) {
-      return res.status(409).json({ message: 'Username or email already in use.' });
+    const username = typeof req.body?.username === 'string' ? req.body.username.trim() : '';
+    const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+    const password = req.body?.password;
+
+    if (!USERNAME_RE.test(username)) {
+      return res.status(400).json({ field: 'username', message: 'Username must be 3-20 characters: letters, numbers, _ or .' });
+    }
+    if (RESERVED.has(username.toLowerCase())) {
+      return res.status(409).json({ field: 'username', message: 'That username is not available.' });
+    }
+    if (!EMAIL_RE.test(email)) {
+      return res.status(400).json({ field: 'email', message: 'Enter a valid email address.' });
+    }
+    if (typeof password !== 'string' || password.length < 6) {
+      return res.status(400).json({ field: 'password', message: 'Password must be at least 6 characters.' });
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const matches = await userModel.find({ $or: [{ email }, { username }] }).collation(CI).limit(4);
+    const byEmail = matches.find((u) => (u.email || '').toLowerCase() === email);
+    if (byEmail) {
+      if (!hasCredentials(byEmail)) {
+        return res.status(409).json({
+          code: 'GOOGLE_ACCOUNT_PENDING',
+          field: 'email',
+          message: 'This email is already linked to a Google sign-in. Tap "Continue with Google" to finish setting it up.',
+        });
+      }
+      return res.status(409).json({ field: 'email', message: 'An account with this email already exists. Try logging in.' });
+    }
+    if (matches.some((u) => (u.username || '').toLowerCase() === username.toLowerCase())) {
+      return res.status(409).json({ field: 'username', message: 'Username already taken.' });
+    }
 
     const user = await userModel.create({
       username,
       email,
-      password: hashedPassword,
-      notifications: [
-        {
-          title: 'Welcome to Orb8',
-          detail: 'Your feed is ready.'
-        }
-      ]
+      password: await bcrypt.hash(password, 10),
+      authProvider: 'local',
+      needsProfileCompletion: false, // email signups are complete by definition
+      notifications: [{ title: 'Welcome to Orb8', detail: 'Your feed is ready.' }],
     });
 
     const token = signToken(user._id);
     res.cookie('token', token, getCookieOptions());
-
-    return res.status(201).json({
-      message: 'Registration successful.',
-      token,
-      user: buildUserPayload(user)
-    });
+    return res.status(201).json({ message: 'Registration successful.', token, user: buildUserPayload(user), profileComplete: true });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    if (error?.code === 11000) {
+      const field = Object.keys(error.keyPattern || {})[0] === 'email' ? 'email' : 'username';
+      return res.status(409).json({ field, message: field === 'email' ? 'An account with this email already exists.' : 'Username already taken.' });
+    }
+    console.error('registerUser error:', error);
+    return res.status(500).json({ message: 'Something went wrong. Please try again.' });
   }
 }
 
 async function loginUser(req, res) {
   try {
-    const { emailOrUsername, password } = req.body;
-    const user = await userModel.findOne({
-      $or: [
-        { username: emailOrUsername },
-        { email: emailOrUsername }
-      ]
-    });
+    const raw = typeof req.body?.emailOrUsername === 'string' ? req.body.emailOrUsername.trim() : '';
+    const password = req.body?.password;
+    if (!raw || typeof password !== 'string' || !password) {
+      return res.status(400).json({ message: 'Enter your email or username and your password.' });
+    }
+
+    const query = raw.includes('@') ? { email: raw.toLowerCase() } : { username: raw };
+    const user = await userModel.findOne(query).collation(CI);
 
     if (!user) {
-      return res.status(401).json({ message: 'User not found' });
+      await bcrypt.compare(password, DUMMY_HASH); // same timing as a real check
+      return res.status(401).json({ message: 'Incorrect email/username or password.' });
     }
 
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-    if (!isPasswordValid) {
-      return res.status(401).json({ message: 'Invalid username or password' });
+    if (!user.password) {
+      return res.status(401).json({
+        code: 'GOOGLE_ONLY',
+        message: 'This account uses Google sign-in. Tap "Continue with Google", or use "Forgot password" to create a password.',
+      });
     }
 
+    if (!(await bcrypt.compare(password, user.password))) {
+      return res.status(401).json({ message: 'Incorrect email/username or password.' });
+    }
+
+    if (!hasCredentials(user)) {
+      return res.status(403).json({
+        code: 'PROFILE_INCOMPLETE',
+        message: 'Your profile is not finished yet. Tap "Continue with Google" to complete it.',
+      });
+    }
+
+    await syncProfileFlag(user);
     const token = signToken(user._id);
     res.cookie('token', token, getCookieOptions());
-
-    return res.status(200).json({
-      message: 'Login successful.',
-      token,
-      user: buildUserPayload(user)
-    });
+    return res.status(200).json({ message: 'Login successful.', token, user: buildUserPayload(user), profileComplete: true });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    console.error('loginUser error:', error);
+    return res.status(500).json({ message: 'Something went wrong. Please try again.' });
   }
-};
+}
 
 // googleMobile
 async function googleMobile(req, res) {
@@ -156,11 +267,6 @@ async function googleMobile(req, res) {
 
   let payload;
   try {
-    try {
-      const aud = JSON.parse(Buffer.from(idToken.split('.')[1], 'base64url').toString()).aud;
-      console.log('token aud:', aud);
-      console.log('server expects:', JSON.stringify(process.env.GOOGLE_WEB_CLIENT_ID));
-    } catch { }
     const ticket = await googleClient.verifyIdToken({
       idToken,
       audience: [process.env.GOOGLE_WEB_CLIENT_ID, process.env.GOOGLE_IOS_CLIENT_ID].filter(Boolean),
@@ -175,30 +281,46 @@ async function googleMobile(req, res) {
     if (!payload?.email || !payload.email_verified) {
       return res.status(401).json({ message: 'Google account email is not verified.' });
     }
-
     const email = payload.email.toLowerCase();
-    let user = await userModel.findOne({ email });
 
-    if (!user) {
-      user = await userModel.create({
-        email,
-        googleId: payload.sub,
-        needsProfileCompletion: true, // explicit; do not rely on the schema default
-        notifications: [{ title: 'Welcome to Orb8', detail: 'Your feed is ready.' }],
-      });
-    } else if (!user.googleId) {
-      user.googleId = payload.sub; // link an existing email/password account
-      await user.save();
+    // One account per email: find by Google id first, then by email (an email signup).
+    let user = await userModel.findOne({ googleId: payload.sub });
+    if (!user) user = await userModel.findOne({ email }).collation(CI);
+
+    if (user) {
+      if (user.googleId && user.googleId !== payload.sub) {
+        return res.status(403).json({ message: 'This email is linked to a different Google account.' });
+      }
+      if (!user.googleId) {
+        await userModel.updateOne({ _id: user._id }, { $set: { googleId: payload.sub } });
+        user.googleId = payload.sub;
+      }
+    } else {
+      try {
+        user = await userModel.create({
+          email,
+          username: tempUsername(), // schema requires a username; completeProfile replaces this
+          googleId: payload.sub,
+          authProvider: 'google',
+          needsProfileCompletion: true,
+          notifications: [{ title: 'Welcome to Orb8', detail: 'Your feed is ready.' }],
+        });
+      } catch (e) {
+        if (e?.code !== 11000) throw e;
+        user = await userModel.findOne({ email }).collation(CI); // two sign-ins raced; use the winner
+        if (!user) throw e;
+      }
     }
+
+    const profileComplete = await syncProfileFlag(user);
 
     const token = signToken(user._id);
     res.cookie('token', token, getCookieOptions());
-
     return res.status(200).json({
       message: 'Google login successful.',
       token,
       user: buildUserPayload(user),
-      profileComplete: user.needsProfileCompletion !== true,
+      profileComplete,
     });
   } catch (error) {
     console.error('googleMobile error:', error);
@@ -265,77 +387,35 @@ async function updateProfile(req, res) {
 async function uploadProfileImage(req, res) {
   try {
     if (!req.file?.buffer) {
-      return res.status(400).json({ message: 'No image file uploaded. Use field name "image".' });
+      return res.status(400).json({ message: 'No image uploaded. Send the file in the "profilePic" field.' });
     }
 
-    await fs.mkdir(PROFILE_PICS_DIR, { recursive: true });
-
-    const qualitySteps = [78, 70, 62, 55, 48];
-    let optimizedBuffer = null;
-
-    for (const quality of qualitySteps) {
-      const candidate = await sharp(req.file.buffer)
-        .rotate()
-        .resize({
-          width: 640,
-          height: 640,
-          fit: 'inside',
-          withoutEnlargement: true
-        })
-        .webp({ quality })
-        .toBuffer();
-
-      optimizedBuffer = candidate;
-      if (candidate.length <= MAX_PROCESSED_IMAGE_BYTES) {
-        break;
-      }
+    let optimized;
+    try {
+      optimized = await optimizeProfileImage(req.file.buffer);
+    } catch (e) {
+      if (e.status === 413) return res.status(413).json({ message: 'That photo is too large. Try a smaller one.' });
+      return res.status(400).json({ message: 'That file could not be read as an image.' });
     }
+    console.log(`[avatar] ${req.file.size} -> ${optimized.length} bytes`);
 
-    if (!optimizedBuffer || optimizedBuffer.length > 1024 * 1024) {
-      return res.status(413).json({
-        message: 'Image is still too large after compression. Please upload a simpler image.'
-      });
-    }
-
-    const fileName = `${req.user.id}-${Date.now()}.webp`;
-    const absoluteFilePath = path.join(PROFILE_PICS_DIR, fileName);
-    await fs.writeFile(absoluteFilePath, optimizedBuffer);
-
-    const existingUser = await userModel.findById(req.user.id).select('profilePic');
-    const previousUploadedFile = getUploadedProfileImageFilePath(existingUser?.profilePic);
-
-    const { publicUrl } = await uploadBufferToDrive(
-      optimizedBuffer,
-      fileName,
-      'image/webp'
-    );
+    const { publicUrl } = await uploadBufferToDrive(optimized, `${req.user.id}-${Date.now()}.webp`, 'image/webp');
     const updatedUser = await userModel.findByIdAndUpdate(
       req.user.id,
-      {
-        $set: {
-          profilePic: publicUrl
-        }
-      },
-      {
-        new: true,
-        runValidators: true
-      }
+      { $set: { profilePic: publicUrl } },
+      { new: true, runValidators: true }
     );
-
-    if (previousUploadedFile && previousUploadedFile !== absoluteFilePath) {
-      await fs.unlink(previousUploadedFile).catch(() => { });
-    }
 
     return res.status(200).json({
       message: 'Profile image uploaded successfully.',
       user: buildUserPayload(updatedUser),
-      imageSizeBytes: optimizedBuffer.length,
+      imageSizeBytes: optimized.length,
     });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    console.error('uploadProfileImage error:', error);
+    return res.status(500).json({ message: 'Could not upload your photo. Please try again.' });
   }
 }
-
 async function getNotifications(req, res) {
   try {
     const user = await userModel.findById(req.user.id).select('notifications');
@@ -570,9 +650,10 @@ async function claimReward(req, res) {
 }
 
 async function forgotPassword(req, res) {
+  const generic = { message: 'If that email exists, a code has been sent.' };
   try {
-    const { email } = req.body;
-    if (!email) return res.status(400).json({ message: 'Email is required.' });
+    const email = typeof req.body?.email === 'string' ? req.body.email.toLowerCase().trim() : '';
+    if (!EMAIL_RE.test(email)) return res.status(400).json({ message: 'Enter a valid email address.' });
 
     const user = await userModel.findOne({ email: email.toLowerCase().trim() });
     // Always return success to prevent email enumeration
@@ -580,12 +661,9 @@ async function forgotPassword(req, res) {
       return res.status(200).json({ message: 'If that email exists, an OTP has been sent.' });
     }
 
-    // 6-digit cryptographically-random OTP; store only its SHA-256 digest
-    const otp = String(crypto.randomInt(100000, 1000000));
-    user.resetToken = crypto.createHash('sha256').update(otp).digest('hex');
-    user.resetTokenExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 min
-    user.resetOtpAttempts = 0;
-    await user.save();
+    // Resend cooldown, answered with the same generic reply so nothing leaks.
+    const issuedAt = user.resetTokenExpiry ? new Date(user.resetTokenExpiry).getTime() - OTP_TTL_MS : 0;
+    if (issuedAt && Date.now() - issuedAt < OTP_COOLDOWN_MS) return res.status(200).json(generic);
 
     // Keep the same response whether delivery succeeds or the account exists.
     try {
@@ -594,13 +672,63 @@ async function forgotPassword(req, res) {
     } catch (mailError) {
       console.error('[AUTH] Password reset email delivery failed:', mailError.message);
     }
+    if (!emailSent) console.warn('[AUTH] Reset email was not sent. Check SMTP settings.');
 
     return res.status(200).json({
       message: 'If that email exists, an OTP has been sent.'
     });
   } catch (error) {
     console.error('[AUTH] Forgot password error:', error);
-    return res.status(500).json({ message: error.message });
+    return res.status(500).json({ message: 'Something went wrong. Please try again.' });
+  }
+}
+
+async function resetPassword(req, res) {
+  try {
+    const email = typeof req.body?.email === 'string' ? req.body.email.toLowerCase().trim() : '';
+    const otp = String(req.body?.otp ?? '').trim();
+    const newPassword = req.body?.newPassword;
+
+    if (!EMAIL_RE.test(email) || !/^\d{6}$/.test(otp) || typeof newPassword !== 'string') {
+      return res.status(400).json({ message: 'Email, the 6-digit code and a new password are required.' });
+    }
+    if (newPassword.length < 6) {
+      return res.status(400).json({ message: 'Password must be at least 6 characters.' });
+    }
+
+    const user = await userModel.findOne({ email, resetTokenExpiry: { $gt: new Date() } });
+    if (!user || !user.resetToken) {
+      return res.status(400).json({ message: 'Invalid or expired code.' });
+    }
+
+    if ((user.resetOtpAttempts || 0) >= 5) {
+      await userModel.updateOne({ _id: user._id }, { $set: { resetToken: null, resetTokenExpiry: null, resetOtpAttempts: 0 } });
+      return res.status(429).json({ message: 'Too many attempts. Please request a new code.' });
+    }
+
+    const digest = crypto.createHash('sha256').update(otp).digest('hex');
+    const ok = digest.length === user.resetToken.length &&
+      crypto.timingSafeEqual(Buffer.from(digest), Buffer.from(user.resetToken));
+    if (!ok) {
+      await userModel.updateOne({ _id: user._id }, { $inc: { resetOtpAttempts: 1 } });
+      return res.status(400).json({ message: 'Invalid or expired code.' });
+    }
+
+    const hash = await bcrypt.hash(newPassword, 10);
+    await userModel.updateOne({ _id: user._id }, {
+      $set: {
+        password: hash,
+        resetToken: null,
+        resetTokenExpiry: null,
+        resetOtpAttempts: 0,
+        needsProfileCompletion: !hasCredentials({ username: user.username, password: hash }),
+      },
+    });
+
+    return res.status(200).json({ message: 'Password has been reset successfully.' });
+  } catch (error) {
+    console.error('[AUTH] Reset password error:', error);
+    return res.status(500).json({ message: 'Something went wrong. Please try again.' });
   }
 }
 
@@ -652,15 +780,17 @@ async function resetPassword(req, res) {
 
 
 // completeProfile
-const USERNAME_RE = /^[a-zA-Z0-9_.]{3,20}$/;
-
 const completeProfile = async (req, res) => {
   try {
-    const { password, bio } = req.body || {};
+    const password = req.body?.password;
+    const bio = req.body?.bio;
     const username = typeof req.body?.username === 'string' ? req.body.username.trim() : '';
 
     if (!USERNAME_RE.test(username)) {
       return res.status(400).json({ message: 'Username must be 3-20 characters: letters, numbers, _ or .' });
+    }
+    if (RESERVED.has(username.toLowerCase())) {
+      return res.status(409).json({ message: 'That username is not available.' });
     }
     if (typeof password !== 'string' || password.length < 6) {
       return res.status(400).json({ message: 'Password must be at least 6 characters' });
@@ -672,32 +802,90 @@ const completeProfile = async (req, res) => {
     const user = await userModel.findById(req.user.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    // This endpoint sets a password without the old one, so only allow it once.
-    if (user.needsProfileCompletion !== true) {
-      return res.status(403).json({ message: 'Profile is already completed' });
+    // This endpoint sets a password without the old one, so it works exactly once.
+    if (hasCredentials(user)) {
+      await syncProfileFlag(user);
+      return res.status(409).json({ message: 'Your profile is already complete.' });
     }
 
-    const taken = await userModel
-      .findOne({ username, _id: { $ne: user._id } })
-      .collation({ locale: 'en', strength: 2 }); // case-insensitive
+    const taken = await userModel.exists({ username, _id: { $ne: user._id } }).collation(CI);
     if (taken) return res.status(409).json({ message: 'Username already taken' });
 
-    user.username = username;
-    user.password = await bcrypt.hash(password, 10);
-    if (typeof bio === 'string') user.bio = bio.trim();
-    if (req.file) {
-      user.profilePic = `/uploads/${req.file.filename}`; // use the same value your profile-update route stores
+    let profilePic;
+    if (req.file?.buffer) {
+      try {
+        profilePic = await storeProfileImage(user._id, req.file.buffer);
+      } catch (imgErr) {
+        if (imgErr.status === 413) return res.status(413).json({ message: 'That photo is too large. Try a smaller one.' });
+        console.error('completeProfile image error:', imgErr.message); // a photo problem should not block signup
+      }
     }
-    user.needsProfileCompletion = false;
-    await user.save();
 
-    return res.status(200).json({ message: 'Profile completed', user: buildUserPayload(user) });
+    const updated = await userModel.findByIdAndUpdate(
+      user._id,
+      {
+        $set: {
+          username,
+          password: await bcrypt.hash(password, 10),
+          bio: typeof bio === 'string' ? bio.trim() : '',
+          needsProfileCompletion: false,
+          ...(profilePic ? { profilePic } : {}),
+        },
+      },
+      { new: true }
+    );
+
+    return res.status(200).json({
+      message: 'Profile completed',
+      user: buildUserPayload(updated),
+      photoSaved: Boolean(profilePic) || !req.file,
+    });
   } catch (err) {
     if (err?.code === 11000) return res.status(409).json({ message: 'Username already taken' });
     console.error('Complete profile error:', err);
     return res.status(500).json({ message: 'Something went wrong. Please try again.' });
   }
 };
+
+async function usernameAvailable(req, res) {
+  try {
+    const u = typeof req.query.u === 'string' ? req.query.u.trim() : '';
+    if (!USERNAME_RE.test(u) || RESERVED.has(u.toLowerCase())) {
+      return res.status(200).json({ available: false, reason: 'invalid' });
+    }
+    const taken = await userModel.exists({ username: u }).collation(CI);
+    return res.status(200).json({ available: !taken });
+  } catch (error) {
+    return res.status(500).json({ message: 'Could not check username.' });
+  }
+};
+
+const AVATAR_PX = 720;                    // sharp on a 3x phone screen, tiny to upload
+const AVATAR_TARGET_BYTES = 160 * 1024;
+
+async function optimizeProfileImage(input) {
+  let out = null;
+  for (const quality of [82, 76, 70, 62, 54, 46]) {
+    out = await sharp(input, { failOn: 'none', limitInputPixels: 100_000_000 })
+      .rotate() // honor the phone's orientation, then strip metadata
+      .resize({ width: AVATAR_PX, height: AVATAR_PX, fit: 'inside', withoutEnlargement: true })
+      .webp({ quality })
+      .toBuffer();
+    if (out.length <= AVATAR_TARGET_BYTES) break;
+  }
+  if (!out || out.length > 1024 * 1024) {
+    const e = new Error('Image is too large after compression.');
+    e.status = 413;
+    throw e;
+  }
+  return out;
+}
+
+async function storeProfileImage(userId, buffer) {
+  const optimized = await optimizeProfileImage(buffer);
+  const { publicUrl } = await uploadBufferToDrive(optimized, `${userId}-${Date.now()}.webp`, 'image/webp');
+  return publicUrl;
+}
 
 const logoutUser = async (req, res) => {
   res.clearCookie('token', getCookieOptions());
@@ -723,4 +911,6 @@ module.exports = {
   resetPassword,
   completeProfile,
   logoutUser,
+  usernameAvailable,
+  optimizeProfileImage,
 };

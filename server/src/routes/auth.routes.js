@@ -28,7 +28,8 @@ router.post('/user/forgot-password', authController.forgotPassword);
 router.post('/user/reset-password', authController.resetPassword);
 router.get('/user/logout', authController.logoutUser);
 router.patch('/complete-profile', protect, upload.profileImageUpload, authController.completeProfile);
-
+router.get('/user/username-available', authController.usernameAvailable);
+router.patch('/complete-profile', protect, authController.completeProfile);
 router.get('/oauth/status', (req, res) => {
   res.json({ google: isGoogleEnabled });
 });
