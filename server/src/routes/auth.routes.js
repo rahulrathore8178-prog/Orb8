@@ -33,6 +33,8 @@ router.patch('/complete-profile', protect, authController.completeProfile);
 router.get('/oauth/status', (req, res) => {
   res.json({ google: isGoogleEnabled });
 });
+router.post('/user/push-token', protect, authController.registerPushToken);
+router.delete('/user/push-token', protect, authController.removePushToken);
 
 const frontendUrl = process.env.FRONTEND_URL;
 const TAG = '[GOOGLE-AUTH]';

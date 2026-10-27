@@ -3,6 +3,7 @@ const Message = require('../models/messages.model');
 const User = require('../models/user.model');
 const { Post } = require('../models/post.model');
 const { recordSocialActivity } = require('../utils/habit');
+const { sendPush } = require('../utils/push');
 
 const formatMessage = (message) => ({
     id: String(message._id),
@@ -31,12 +32,15 @@ exports.sendMessage = async (req, res) => {
         if (!text && !sharedPostId) {
             return res.status(400).json({ message: 'Message text or a shared post is required' });
         }
+        if (sharedPostId && !mongoose.isValidObjectId(sharedPostId)) {
+            return res.status(400).json({ message: 'Invalid shared post' });
+        }
         if (text.length > 2000) {
             return res.status(400).json({ message: 'Message text cannot exceed 2000 characters' });
         }
 
         const [sender, recipient, sharedPost] = await Promise.all([
-            User.findById(senderId).select('blockedUsers'),
+            User.findById(senderId).select('blockedUsers username'),
             User.findById(recipientId).select('blockedUsers'),
             sharedPostId
                 ? Post.findOne({ _id: sharedPostId, isActive: true, isArchived: { $ne: true } }).select('_id')
@@ -67,6 +71,19 @@ exports.sendMessage = async (req, res) => {
 
         const message = formatMessage(saved);
         req.app.get('publishChatMessage')?.(recipientId, message);
+
+        // Push notification to the recipient (fire and forget, never blocks or breaks sending)
+        sendPush(recipientId, {
+            title: sender.username || 'New message',
+            body: sharedPost
+                ? 'Shared a post with you'
+                : text.length > 100
+                    ? `${text.slice(0, 100)}…`
+                    : text,
+            data: { url: `/chat/${senderId}` }, // change to your real chat route
+            category: 'social',
+        });
+
         recordSocialActivity(senderId);
         return res.status(201).json({ success: true, message });
     } catch (error) {
@@ -77,21 +94,20 @@ exports.sendMessage = async (req, res) => {
 
 exports.getConversation = async (req, res) => {
     try {
-        console.log('req.user:', req.user); // ✅ add this
         const { recipientId } = req.params;
         const senderId = req.user.id;
 
-        if (!recipientId) {
-            return res.status(400).json({ error: 'recipientId required' })
+        if (!mongoose.isValidObjectId(recipientId)) {
+            return res.status(400).json({ success: false, error: 'A valid recipientId is required' });
         }
 
         const recipientObjId = new mongoose.Types.ObjectId(recipientId);
 
         const messages = await Message.find({
             $or: [
-                { senderId: senderId, recipientId: recipientObjId },  // ✅
-                { senderId: recipientObjId, recipientId: senderId }   // ✅
-            ]
+                { senderId: senderId, recipientId: recipientObjId },
+                { senderId: recipientObjId, recipientId: senderId },
+            ],
         })
             .populate({
                 path: 'sharedPost',
@@ -115,11 +131,11 @@ exports.getConversation = async (req, res) => {
             req.app.get('publishChatEvent')?.(recipientId, { type: 'messages-read', readerId: String(senderId) });
         }
 
-        res.json({ success: true, messages: messages.reverse().map(formatMessage) });
+        return res.json({ success: true, messages: messages.reverse().map(formatMessage) });
     } catch (error) {
         console.error('error fetching msg history', error);
-        res.status(500).json({ success: false, error: 'failed to fetch msg' });
-    };
+        return res.status(500).json({ success: false, error: 'failed to fetch msg' });
+    }
 };
 
 exports.getUnread = async (req, res) => {
