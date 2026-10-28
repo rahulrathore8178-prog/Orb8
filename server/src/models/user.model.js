@@ -157,13 +157,13 @@ const userSchema = new mongoose.Schema(
       },
     },
     locationUpdatedAt: { type: Date },
-    isDiscoverable: { type: Boolean, default: false },
+    isDiscoverable: { type: Boolean, default: true },
     cosmicLocation: {
       type: { type: String, enum: ["Point"] },
       coordinates: { type: [Number] },
     },
     cosmicLocationUpdatedAt: { type: Date },
-    isCosmicDiscoverable: { type: Boolean, default: false },
+    isCosmicDiscoverable: { type: Boolean, default: true },
     deviceTokens: {
       type: [String],
       default: [],

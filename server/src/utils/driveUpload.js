@@ -57,49 +57,41 @@ async function deleteFileFromDrive(fileId) {
     }
 };
 
-// Now accepts the incoming req so it can forward Range headers to Drive and
-// respond with 206 Partial Content — required for <video> seeking/scrubbing,
-// and some mobile browsers will refuse to play a video at all without it.
-async function streamFileFromDrive(fileId, res, req) {
-    try {
-        const range = req?.headers?.range;
-        const requestOptions = { responseType: 'stream' };
-        if (range) {
-            requestOptions.headers = { Range: range };
-        }
+// Forwards Range headers to Drive and answers 206 Partial Content (needed for
+// video/audio seeking, and iOS refuses to play media without it).
+// `fallbackType` is used when Drive reports a missing/generic content type.
+async function streamFileFromDrive(fileId, res, req, fallbackType) {
+    const range = req?.headers?.range;
+    const requestOptions = { responseType: 'stream' };
+    if (range) requestOptions.headers = { Range: range };
 
-        const file = await drive.files.get(
-            { fileId, alt: 'media' },
-            requestOptions
-        );
+    const file = await drive.files.get({ fileId, alt: 'media' }, requestOptions);
 
-        const contentType = file.headers['content-type'] || 'application/octet-stream';
-        res.setHeader('Content-Type', contentType);
-        res.setHeader('Accept-Ranges', 'bytes');
+    let contentType = String(file.headers['content-type'] || '').split(';')[0].trim();
+    const generic = !contentType || contentType === 'application/octet-stream' || contentType === 'text/html';
+    if (generic && fallbackType) contentType = fallbackType;
+    res.setHeader('Content-Type', contentType || 'application/octet-stream');
+    res.setHeader('Accept-Ranges', 'bytes');
 
-        if (file.headers['content-length']) {
-            res.setHeader('Content-Length', file.headers['content-length']);
-        }
-
-        if (range && file.headers['content-range']) {
-            res.status(206);
-            res.setHeader('Content-Range', file.headers['content-range']);
-        }
-
-        file.data.pipe(res);
-
-        file.data.on('error', (err) => {
-            console.error('Stream error:', err);
-            if (!res.headersSent) {
-                res.status(500).json({ message: 'Failed to stream file' });
-            } else {
-                res.end();
-            }
-        });
-    } catch (err) {
-        console.error('Stream from Drive error:', err);
-        throw err;
+    if (file.headers['content-length']) {
+        res.setHeader('Content-Length', file.headers['content-length']);
     }
+
+    if (file.status === 206 || (range && file.headers['content-range'])) {
+        res.status(206);
+        if (file.headers['content-range']) res.setHeader('Content-Range', file.headers['content-range']);
+    }
+
+    // stop pulling from Drive if the player disconnects (seeking, closing the sheet)
+    req?.on?.('close', () => file.data.destroy());
+
+    file.data.on('error', (err) => {
+        console.error('Stream error:', err);
+        if (!res.headersSent) res.status(500).json({ message: 'Failed to stream file' });
+        else res.end();
+    });
+
+    file.data.pipe(res);
 }
 
 module.exports = { uploadBufferToDrive, deleteFileFromDrive, streamFileFromDrive };

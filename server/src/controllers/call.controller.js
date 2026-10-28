@@ -42,10 +42,6 @@ exports.getIceServers = (req, res) => {
 
 // POST /api/calls   body: { recipientId, type: 'audio' | 'video', deviceId }
 exports.startCall = async (req, res) => {
-    console.log('startCall called with body:', req.body);
-    console.log('req.user.id:', req.user.id);
-    console.log('req.user:', req.user);
-    console.log('req:', req);
     try {
         const userId = req.user.id;
         const { recipientId, type, deviceId } = req.body;

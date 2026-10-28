@@ -104,11 +104,40 @@ const profileImageUpload = handleUpload(profileImageMulter, 'profilePic', MAX_PR
 const postMediaUpload = handleUpload(postMediaMulter, 'media', MAX_VIDEO_UPLOAD_BYTES);
 const orbitalImageUpload = handleUpload(postMediaMulter, 'media', MAX_VIDEO_UPLOAD_BYTES);
 
+const MAX_COMMENT_IMAGE_BYTES = 8 * 1024 * 1024;
+
+const commentMulter = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_COMMENT_IMAGE_BYTES, files: 1, fields: 12 },
+  fileFilter: (req, file, cb) => {
+    console.log('COMMENT FILE:', {
+      fieldname: file.fieldname,
+      mimetype: file.mimetype,
+      size: file.size
+    });
+    if (file.fieldname === 'image' && allowedImageMimeTypes.has(file.mimetype)) return cb(null, true);
+    if (file.fieldname === 'voiceNote' && allowedAudioMimeTypes.has(file.mimetype)) return cb(null, true);
+    return cb(new Error(`Unsupported file for "${file.fieldname}": ${file.mimetype}`));
+  },
+});
+
+// Text and GIF comments arrive as plain JSON; multer skips non-multipart requests.
+const commentMediaUpload = (req, res, next) =>
+  commentMulter.fields([{ name: 'image', maxCount: 1 }, { name: 'voiceNote', maxCount: 1 }])(req, res, (error) => {
+    if (!error) return next();
+    if (error instanceof multer.MulterError) {
+      if (error.code === 'LIMIT_FILE_SIZE') return res.status(413).json({ message: 'That file is too large.' });
+      return res.status(400).json({ message: `Upload error: ${error.code}` });
+    }
+    return res.status(400).json({ message: error.message || 'Invalid file.' });
+  });
+
 module.exports = {
   MAX_IMAGE_UPLOAD_BYTES,
   MAX_VIDEO_UPLOAD_BYTES,
   MAX_PROFILE_IMAGE_UPLOAD_BYTES,
   profileImageUpload,
   postMediaUpload,
-  orbitalImageUpload
+  orbitalImageUpload,
+  commentMediaUpload
 };

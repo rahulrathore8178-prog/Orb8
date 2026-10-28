@@ -1,11 +1,12 @@
 'use strict';
 
 const registry = require('./socketRegistry');
-const callService = require('../services/callService');
+const callService = require('./callService');
 
 // SDP offers/answers are a few KB; ICE candidates are tiny. Anything bigger is abuse.
 const MAX_SIGNAL_CHARS = 16 * 1024;
-const RELAY_TYPES = new Set(['call-offer', 'call-answer', 'call-ice']);
+// call-meta carries small in-call state between the two devices: { muted?, video?, restart? }
+const RELAY_TYPES = new Set(['call-offer', 'call-answer', 'call-ice', 'call-meta']);
 
 function replyError(socket, callId, code, message) {
     registry.send(socket, { type: 'call-error', callId: callId || null, code, message });
@@ -15,7 +16,7 @@ function replyError(socket, callId, code, message) {
  * Relays WebRTC signaling between the two devices of an active call.
  * The server never reads the SDP/ICE content, it only checks WHO may send it and WHERE it goes.
  *
- * Client -> server:  { type: 'call-offer' | 'call-answer' | 'call-ice', callId, data }
+ * Client -> server:  { type: 'call-offer' | 'call-answer' | 'call-ice' | 'call-meta', callId, data }
  * Server -> peer:    same shape, forwarded as-is
  *
  * Returns true if the message was a call message (handled or rejected), so the

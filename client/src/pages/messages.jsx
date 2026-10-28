@@ -75,7 +75,7 @@ export default function MessagesApp() {
     wsRef.current = socket;
 
     socket.onopen = () => {
-      socket.send(JSON.stringify({ type: "register", token: localStorage.getItem('token') }));
+      // One register, with the deviceId: calls are pinned to this exact device.
       socket.send(JSON.stringify({ type: "register", token: localStorage.getItem("token"), deviceId: getDeviceId() }));
     };
     socket.onmessage = (event) => {

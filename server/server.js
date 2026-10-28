@@ -8,8 +8,12 @@ const http = require('http');
 const WebSocket = require('ws');
 const jwt = require('jsonwebtoken');
 
+// Call system. Adjust these paths if your files live somewhere else.
+const registry = require('./src/services/callServices/socketRegistry');
+const callService = require('./src/services/callServices/callService');
+const { handleCallMessage } = require('./src/services/callServices/callingSignal');
+
 const PORT = process.env.PORT || 5000;
-const clients = new Map();
 
 (async () => {
   try {
@@ -19,11 +23,14 @@ const clients = new Map();
     app.set('trust proxy', 1);
 
     await reconcileUserLeagues();
+    // Live call state lives in memory, so close any call rows left open by the last run.
+    await callService.reconcileStaleCalls();
     startMonthlyRewardJob();
     startWeeklyChallengeReminder();
 
     const server = http.createServer(app);
-    const wss = new WebSocket.Server({ server });
+    // 64 KB is far above any SDP / ICE / chat payload and stops oversized frames early.
+    const wss = new WebSocket.Server({ server, maxPayload: 64 * 1024 });
 
     // Heartbeat: drop dead sockets so they don't pile up behind Render's proxy
     const heartbeat = setInterval(() => {
@@ -35,57 +42,63 @@ const clients = new Map();
     }, 30000);
     wss.on('close', () => clearInterval(heartbeat));
 
+    // Chat: deliver to every device the recipient has online.
     app.set('publishChatMessage', (recipientId, message) => {
-      console.log("Publishing message");
-      console.log("Recipient:", recipientId);
-      console.log("Connected clients:", [...clients.keys()]);
-
-      const recipientSocket = clients.get(String(recipientId));
-      if (recipientSocket?.readyState === WebSocket.OPEN) {
-        recipientSocket.send(JSON.stringify({ type: 'chat-message', message }));
-      }
+      registry.sendToUser(recipientId, { type: 'chat-message', message });
     });
 
     // Generic push to one user: { type: 'messages-read' | 'message-edited', ... }
     app.set('publishChatEvent', (userId, payload) => {
-      const socket = clients.get(String(userId));
-      if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(payload));
+      registry.sendToUser(userId, payload);
     });
 
     wss.on('connection', (socket) => {
       socket.isAlive = true;
       socket.on('pong', () => { socket.isAlive = true; });
-      console.log('New WS connection');
-      let registeredUserId = null;
 
-      socket.on('message', async (rawData) => {
-        console.log('📨 WS Message Received:', rawData.toString());
+      socket.on('message', (rawData) => {
+        // NOTE: raw messages are no longer logged. Call signaling carries SDP and ICE
+        // data, which is noisy and shouldn't sit in your logs.
+        let msg;
         try {
-          const msg = JSON.parse(rawData);
-          console.log('📨 Parsed Message:', msg)
+          msg = JSON.parse(rawData);
+        } catch {
+          return;
+        }
 
+        try {
           if (msg.type === 'register') {
             const decoded = jwt.verify(msg.token, process.env.JWT_SECRET);
-            registeredUserId = String(decoded.id);
-            clients.set(registeredUserId, socket);
-            socket.send(JSON.stringify({ type: 'registered' }));
-            console.log(`Registered user ${registeredUserId}`);
+            const userId = String(decoded.id);
+            const deviceId = registry.registerSocket(socket, userId, msg.deviceId);
+            registry.send(socket, { type: 'registered', deviceId });
+            // If a call is ringing for this user right now, ring this device too.
+            callService.replayIncomingCall(userId, socket);
+            console.log(`Registered user ${userId} (device ${deviceId})`);
             return;
           }
 
+          // call-offer / call-answer / call-ice / call-meta
+          if (handleCallMessage(socket, msg)) return;
+
           if (msg.type === 'chat-message') {
-            socket.send(JSON.stringify({ type: 'error', message: 'Send messages through the REST API' }));
+            registry.send(socket, { type: 'error', message: 'Send messages through the REST API' });
           }
         } catch (err) {
-          console.error('Failed to process ws msg', err);
+          if (msg.type === 'register') {
+            registry.send(socket, { type: 'error', code: 'AUTH_FAILED', message: 'Could not authenticate this socket' });
+          }
+          console.error('Failed to process ws msg:', err.message);
         }
       });
 
       socket.on('close', () => {
-        if (registeredUserId && clients.get(registeredUserId) === socket) {
-          clients.delete(registeredUserId);
-          console.log(`🔴 User ${registeredUserId} disconnected and removed`);
-          console.log(`📋 Remaining clients:`, Array.from(clients.keys()));
+        const { userId, deviceId } = socket;
+        registry.unregisterSocket(socket);
+        if (userId) {
+          // Gives an in-call device a short grace period to reconnect before the call is ended.
+          callService.handleDisconnect(userId, deviceId);
+          console.log(`User ${userId} socket closed. Online users: ${registry.onlineUserIds().length}`);
         }
       });
     });
