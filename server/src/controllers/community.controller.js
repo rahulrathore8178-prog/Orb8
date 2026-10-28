@@ -1,15 +1,16 @@
-const { Post, Comment } = require('../models/post.model');
+const { Post } = require('../models/post.model');
 const User = require('../models/user.model');
 const mongoose = require('mongoose');
+const FormData = require('form-data'); // npm i form-data
 const { OrbitalMember, STATUS: ORBITAL_STATUS } = require('../models/orbitalMember.model');
 const sharp = require('sharp');
-const path = require('path');
-const fs = require('fs').promises;
-const { uploadBufferToDrive } = require('../utils/driveUpload');
-const { deleteFileFromDrive } = require('../utils/driveUpload');
-const { streamFileFromDrive } = require('../utils/driveUpload');
-const axios = require("axios");
+const axios = require('axios');
+const { uploadBufferToDrive, deleteFileFromDrive, streamFileFromDrive } = require('../utils/driveUpload');
 const { recordSocialActivity } = require('../utils/habit');
+const { fileIdsOf, discardFiles } = require('../utils/commentMedia');
+
+// Total comments + replies
+const countAll = (comments) => (comments || []).reduce((n, c) => n + 1 + (c.replies?.length || 0), 0);
 
 const PYTHON_API_URL = process.env.PYTHON_API_URL || 'http://localhost:8000';
 
@@ -39,22 +40,23 @@ Rules:
 - Judge from visible content, on-screen text, transcript, and caption. If media and caption
   disagree, trust the media. Never invent details or identify people from their faces.
 - If unsure, lower the score rather than guess.
-- The output must parse with json.loads.`
+- The output must parse with json.loads.`;
 
 async function analyzeImage(fileBuffer, fileName, mimeType, postId) {
   const form = new FormData();
-  form.append("file", fileBuffer, { filename: fileName, contentType: mimeType });
-  form.append("post_id", postId);   // Python needs this to write the Chroma entry
-  form.append('prompt', analysis_prompt)
+  form.append('file', fileBuffer, { filename: fileName, contentType: mimeType });
+  form.append('post_id', postId);
+  form.append('prompt', analysis_prompt);
 
   try {
     const res = await axios.post(`${PYTHON_API_URL}/describe_image`, form, {
       headers: form.getHeaders(),
       timeout: 30000,
     });
-    return res.data.analysis;   // matches the trimmed { analysis: mongo_fields } shape from Python
+    return res.data.analysis;
   } catch (error) {
-    console.error("image analyze error", error)
+    console.error('image analyze error', error?.response?.data || error.message);
+    return null;
   }
 }
 
@@ -63,26 +65,19 @@ async function createPost(req, res) {
   try {
     const { content } = req.body;
 
-    // if (!content || content.trim().length === 0) {
-    //   return res.status(400).json({ message: 'Post content is required' });
-    // }
-
-    if (!content || content.trim().length === 0) return;
-
-    if (content.length) {
-      if (content.length > 2000) {
-        return res.status(400).json({ message: 'Post content exceeds 2000 characters' });
-      }
+    if (!content || content.trim().length === 0) {
+      return res.status(400).json({ message: 'Post content is required' });
+    }
+    if (content.length > 2000) {
+      return res.status(400).json({ message: 'Post content exceeds 2000 characters' });
     }
 
-    // --- hashtags: parse + normalize what the client sent ---
     let hashtags = [];
     if (req.body.hashtags) {
       try {
         const parsed = JSON.parse(req.body.hashtags);
         if (Array.isArray(parsed)) hashtags = parsed;
       } catch (err) {
-        // malformed field, just ignore rather than failing the whole post
         hashtags = [];
       }
     }
@@ -92,21 +87,18 @@ async function createPost(req, res) {
         .map((t) => t.trim().toLowerCase().replace(/[^a-z0-9_]/g, ''))
         .filter(Boolean)
     )].slice(0, 30);
-    console.log('[POST DEBUG] normalized hashtags:', hashtags);
-    console.log('[POST DEBUG] orbital:', req.body.orbital);
 
     const postData = {
       author: req.user.id,
-      content: content.trim() || '',
+      content: content.trim(),
       hashtags,
       image: '',
       video: '',
       postType: req.body.postType || 'feed',
       orbital: req.body.orbital || null,
-      // driveFileId: '',
       voiceNote: '',
       voiceNoteFileId: '',
-      voiceNoteDuration: 0
+      voiceNoteDuration: 0,
     };
 
     if (req.file && req.file.buffer) {
@@ -118,7 +110,6 @@ async function createPost(req, res) {
         return res.status(400).json({ message: 'Unsupported file type. Only images, videos, and audio are allowed.' });
       }
 
-      // for image
       if (isImage) {
         let processedImageBuffer;
         try {
@@ -131,8 +122,7 @@ async function createPost(req, res) {
           return res.status(500).json({ message: 'Image transform failed' });
         }
         try {
-          const timestamp = Date.now();
-          const fileName = `post-${req.user.id}-${timestamp}.webp`;
+          const fileName = `post-${req.user.id}-${Date.now()}.webp`;
           const { fileId } = await uploadBufferToDrive(processedImageBuffer, fileName, 'image/webp');
           postData.image = `/api/community/posts/image/${fileId}`;
           postData.imageFileId = fileId;
@@ -142,17 +132,14 @@ async function createPost(req, res) {
         }
       }
 
-
-      // for voice notes
       if (isVoiceNote) {
-        const MAX_AUDIO_BYTES = 15 * 1024 * 1024; // voice notes should be much smaller than video
+        const MAX_AUDIO_BYTES = 15 * 1024 * 1024;
         if (req.file.size > MAX_AUDIO_BYTES) {
           return res.status(400).json({ message: 'Voice note exceeds max allowed size (15MB)' });
         }
         try {
-          const timestamp = Date.now();
           const ext = (req.file.mimetype.split('/')[1] || 'webm').split(';')[0];
-          const fileName = `post-voicenote-${req.user.id}-${timestamp}.${ext}`;
+          const fileName = `post-voicenote-${req.user.id}-${Date.now()}.${ext}`;
           const { fileId } = await uploadBufferToDrive(req.file.buffer, fileName, req.file.mimetype);
           postData.voiceNote = `/api/community/posts/voicenote/${fileId}`;
           postData.voiceNoteFileId = fileId;
@@ -163,17 +150,14 @@ async function createPost(req, res) {
         }
       }
 
-      // for video
       if (isVideo) {
-        const MAX_VIDEO_BYTES = 50 * 1024 * 1024; // adjust to whatever you set in multer limits
+        const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
         if (req.file.size > MAX_VIDEO_BYTES) {
           return res.status(400).json({ message: 'Video exceeds max allowed size (50MB)' });
         }
-
         try {
-          const timestamp = Date.now();
           const ext = (req.file.mimetype.split('/')[1] || 'mp4').split(';')[0];
-          const fileName = `post-video-${req.user.id}-${timestamp}.${ext}`;
+          const fileName = `post-video-${req.user.id}-${Date.now()}.${ext}`;
           const { fileId } = await uploadBufferToDrive(req.file.buffer, fileName, req.file.mimetype);
           postData.video = `/api/community/posts/video/${fileId}`;
           postData.videoFileId = fileId;
@@ -183,22 +167,18 @@ async function createPost(req, res) {
         }
       }
     }
-    console.log('[POST DEBUG] postData.hashtags:', postData.hashtags);
+
     const post = await Post.create(postData);
     await post.populate('author', 'username profilePic league level totalXp');
 
-    // Fire-and-forget: runs after the response has already gone out
-    const file = req.file
-    if (file && file.mimetype.startsWith("image/")) {
-      console.log('data:', file.buffer, file.originalname, file.mimetype, post._id.toString())
-      await analyzeImage(file.buffer, file.originalname, file.mimetype, analysis_prompt)
+    // Fire-and-forget: the response goes out without waiting for the AI analysis
+    const file = req.file;
+    if (file && file.mimetype.startsWith('image/')) {
+      analyzeImage(file.buffer, file.originalname, file.mimetype, post._id.toString())
         .then(async (analysis) => {
-          console.log('analysis ready', analysis)
-          await Post.findByIdAndUpdate(post._id, { analysis, status: "ready" });
+          if (analysis) await Post.findByIdAndUpdate(post._id, { analysis, status: 'ready' });
         })
-        .catch(async (err) => {
-          console.error("Python 422 detail:", JSON.stringify(err.response?.data, null, 2));
-        });
+        .catch((err) => console.error('analyze failed:', err?.response?.data || err.message));
     }
 
     recordSocialActivity(req.user.id);
@@ -212,7 +192,7 @@ async function createPost(req, res) {
           profilePic: post.author.profilePic || '',
           league: post.author.league || 'Bronze 1',
           level: post.author.level || 1,
-          totalXp: post.author.totalXp || 0
+          totalXp: post.author.totalXp || 0,
         },
         content: post.content,
         hashtags: post.hashtags || [],
@@ -227,47 +207,39 @@ async function createPost(req, res) {
         commentsCount: 0,
         isLikedByCurrentUser: false,
         createdAt: post.createdAt,
-        updatedAt: post.updatedAt
-      }
-    })
+        updatedAt: post.updatedAt,
+      },
+    });
   } catch (error) {
     console.error('Create post error:', error);
     return res.status(500).json({ message: error.message });
   }
 }
 
-
 async function deletePost(req, res) {
   try {
     const post = await Post.findById(req.params.postId);
-    if (!post) {
-      return res.status(404).json({ message: 'Post not found' });
-    }
-    console.log('Post user:', String(post.author));
-    console.log('Current user:', req.user.id);
+    if (!post) return res.status(404).json({ message: 'Post not found' });
 
     if (String(post.author) !== req.user.id) {
       return res.status(403).json({ message: 'Unauthorized to delete this post' });
-    };
+    }
 
-    // Delete the associated drive file if it exists
-    if (post.driveFileId) {
-      try {
-        await deleteFileFromDrive(post.driveFileId);
-      } catch (err) {
-        console.error('Error deleting drive file:', err);
-      }
-    };
+    // post files + every comment/reply file
+    const ids = [post.driveFileId, post.imageFileId, post.videoFileId, post.voiceNoteFileId].filter(Boolean);
+    (post.comments || []).forEach((c) => {
+      ids.push(...fileIdsOf(c));
+      (c.replies || []).forEach((r) => ids.push(...fileIdsOf(r)));
+    });
 
     await Post.findByIdAndDelete(req.params.postId);
-    return res.status(200).json({ message: 'Post and associated drive file deleted successfully' });
-
+    discardFiles(ids);
+    return res.status(200).json({ message: 'Post and associated files deleted successfully' });
   } catch (error) {
-    console.error('Error deleting drive file:', error);
-    return res.status(500).json({ message: 'Failed to delete drive file' });
+    console.error('Delete post error:', error);
+    return res.status(500).json({ message: 'Failed to delete post' });
   }
-
-};
+}
 
 // Edit Post Caption
 async function editPostCaption(req, res) {
@@ -276,43 +248,28 @@ async function editPostCaption(req, res) {
     const { content } = req.body;
 
     const post = await Post.findById(postId);
+    if (!post) return res.status(404).json({ message: 'Post not found' });
 
-    if (!post) {
-      return res.status(404).json({
-        message: "Post not found",
-      });
-    }
-
-    // Author check
     if (String(post.author) !== req.user.id) {
-      return res.status(403).json({
-        message: "Only author can make changes",
-      });
+      return res.status(403).json({ message: 'Only author can make changes' });
     }
 
-    // Extract hashtags from updated content
-    const hashtags =
-      content?.match(/#\w+/g)?.map(tag => tag.toLowerCase()) || [];
+    const hashtags = content?.match(/#\w+/g)?.map((tag) => tag.toLowerCase()) || [];
 
     post.content = content;
     post.hashtags = hashtags;
-
     await post.save();
-
-    await post.populate(
-      "author",
-      "username profilePic league level totalXp"
-    );
+    await post.populate('author', 'username profilePic league level totalXp');
 
     return res.status(200).json({
-      message: "Post caption updated successfully",
+      message: 'Post caption updated successfully',
       post: {
         id: String(post._id),
         author: {
           id: String(post.author._id),
           username: post.author.username,
-          profilePic: post.author.profilePic || "",
-          league: post.author.league || "Bronze 1",
+          profilePic: post.author.profilePic || '',
+          league: post.author.league || 'Bronze 1',
           level: post.author.level || 1,
           totalXp: post.author.totalXp || 0,
         },
@@ -325,11 +282,8 @@ async function editPostCaption(req, res) {
       },
     });
   } catch (error) {
-    console.error("Error editing post caption:", error);
-
-    return res.status(500).json({
-      message: error.message,
-    });
+    console.error('Error editing post caption:', error);
+    return res.status(500).json({ message: error.message });
   }
 }
 
@@ -340,10 +294,7 @@ async function getFeed(req, res) {
     const limit = Math.min(20, Math.max(1, parseInt(req.query.limit, 10) || 10));
     const skip = (page - 1) * limit;
 
-    const filter = {
-      isActive: true,
-      isArchived: { $ne: true },
-    };
+    const filter = { isActive: true, isArchived: { $ne: true } };
 
     const viewer = await User.findById(req.user.id).select('friends blockedUsers savedPosts').lean();
     if (!viewer) return res.status(404).json({ message: 'User not found' });
@@ -352,51 +303,46 @@ async function getFeed(req, res) {
       isPrivate: true,
       _id: { $nin: allowedPrivateAuthors },
     }).distinct('_id');
-    filter.author = {
-      $nin: [...hiddenPrivateUsers, ...(viewer.blockedUsers || [])],
-    };
+    filter.author = { $nin: [...hiddenPrivateUsers, ...(viewer.blockedUsers || [])] };
 
-    if (req.query.type === 'orbital') {
-      filter.orbital = { $ne: null };
-    } else {
-      filter.orbital = null;
-    }
+    if (req.query.type === 'orbital') filter.orbital = { $ne: null };
+    else filter.orbital = null;
 
     const total = await Post.countDocuments(filter);
     const totalPages = Math.ceil(total / limit);
 
     const posts = await Post.find(filter)
-      .populate("author", "username profilePic league level totalXp orbital")
-      .populate("comments.author", "username profilePic")
-      .populate("comments.replies.author", "username profilePic")
-      .populate("orbital", "name description visibility image")
+      .populate('author', 'username profilePic league level totalXp orbital')
+      .populate('comments.author', 'username profilePic')
+      .populate('comments.replies.author', 'username profilePic')
+      .populate('orbital', 'name description visibility image')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
       .lean();
 
-    const currentUserId = String(req.user?.id || "");
-    const savedPostIds = new Set((viewer.savedPosts || []).map(item => String(item.post)));
+    const currentUserId = String(req.user?.id || '');
+    const savedPostIds = new Set((viewer.savedPosts || []).map((item) => String(item.post)));
 
     const formattedPosts = posts
-      .filter((post) => post?.author) // skip orphaned posts
+      .filter((post) => post?.author)
       .map((post) => ({
         id: String(post._id),
         author: {
           id: String(post.author._id),
-          username: post.author.username || "Unknown",
-          profilePic: post.author.profilePic || "",
-          league: post.author.league || "Bronze 1",
+          username: post.author.username || 'Unknown',
+          profilePic: post.author.profilePic || '',
+          league: post.author.league || 'Bronze 1',
           level: post.author.level || 1,
           totalXp: post.author.totalXp || 0,
         },
-        content: post.content || "",
+        content: post.content || '',
         hashtags: post.hashtags || [],
-        image: post.image || "",
-        video: post.video || "",
+        image: post.image || '',
+        video: post.video || '',
         views: post.views || 0,
         viewedBy: (post.viewedBy || []).map((id) => String(id)),
-        voiceNote: post.voiceNote || "",
+        voiceNote: post.voiceNote || '',
         voiceNoteDuration: post.voiceNoteDuration || 0,
         likes: (post.likes || []).map((id) => String(id)),
         comments: (post.comments || [])
@@ -406,53 +352,45 @@ async function getFeed(req, res) {
             postId: String(post._id),
             author: {
               id: String(comment.author._id),
-              username: comment.author.username || "Unknown",
-              profilePic: comment.author.profilePic || "",
+              username: comment.author.username || 'Unknown',
+              profilePic: comment.author.profilePic || '',
             },
-            content: comment.content || "",
+            content: comment.content || '',
             createdAt: comment.createdAt,
             likesCount: comment.likes?.length || 0,
-            isLikedByCurrentUser:
-              comment.likes?.some((id) => String(id) === currentUserId) ?? false,
+            isLikedByCurrentUser: comment.likes?.some((id) => String(id) === currentUserId) ?? false,
             replies: (comment.replies || [])
               .filter((reply) => reply?.author)
               .map((reply) => ({
                 id: String(reply._id),
                 author: {
                   id: String(reply.author._id),
-                  username: reply.author.username || "Unknown",
-                  profilePic: reply.author.profilePic || "",
+                  username: reply.author.username || 'Unknown',
+                  profilePic: reply.author.profilePic || '',
                 },
-                content: reply.content || "",
+                content: reply.content || '',
                 createdAt: reply.createdAt,
               })),
           })),
         likesCount: post.likes?.length || 0,
-        commentsCount: post.comments?.length || 0,
-        isLikedByCurrentUser:
-          post.likes?.some((id) => String(id) === currentUserId) ?? false,
+        commentsCount: countAll(post.comments),
+        isLikedByCurrentUser: post.likes?.some((id) => String(id) === currentUserId) ?? false,
         isSavedByCurrentUser: savedPostIds.has(String(post._id)),
         createdAt: post.createdAt,
         updatedAt: post.updatedAt,
         orbital: post.orbital || null,
-        postType: post.postType || "feed",
+        postType: post.postType || 'feed',
       }));
 
     return res.status(200).json({
       posts: formattedPosts,
-      pagination: {
-        page,
-        limit,
-        total,
-        hasMore: page < totalPages,
-      },
+      pagination: { page, limit, total, hasMore: page < totalPages },
     });
   } catch (error) {
-    console.error("Get feed error:", error);
+    console.error('Get feed error:', error);
     return res.status(500).json({ message: error.message });
   }
 }
-
 
 async function getPostImage(req, res) {
   try {
@@ -484,13 +422,10 @@ async function getPostVoiceNote(req, res) {
 // Get a single post
 async function getPost(req, res) {
   try {
-    const postId = req.params.postId;
-
-    const post = await Post.findById(postId)
+    const post = await Post.findById(req.params.postId)
       .populate('author', 'username profilePic league level totalXp isPrivate friends blockedUsers')
       .populate('orbital', 'name image visibility')
       .populate('comments.author', 'username profilePic')
-      .populate('comments.likes', '_id')
       .populate('comments.replies.author', 'username profilePic')
       .lean();
 
@@ -498,19 +433,16 @@ async function getPost(req, res) {
       return res.status(404).json({ message: 'Post not found' });
     }
     const viewer = await User.findById(req.user.id).select('blockedUsers').lean();
-    const authorBlockedViewer = post.author.blockedUsers?.some(id => String(id) === String(req.user.id));
-    const viewerBlockedAuthor = viewer?.blockedUsers?.some(id => String(id) === String(post.author._id));
-    const isAuthorFriend = post.author.friends?.some(id => String(id) === String(req.user.id));
+    const authorBlockedViewer = post.author.blockedUsers?.some((id) => String(id) === String(req.user.id));
+    const viewerBlockedAuthor = viewer?.blockedUsers?.some((id) => String(id) === String(post.author._id));
+    const isAuthorFriend = post.author.friends?.some((id) => String(id) === String(req.user.id));
     if (authorBlockedViewer || viewerBlockedAuthor
       || (post.author.isPrivate && !isAuthorFriend && String(post.author._id) !== String(req.user.id))) {
       return res.status(404).json({ message: 'Post not found' });
     }
-    const replies = post.comments.reduce((acc, comment) => {
-      acc[String(comment._id)] = comment.replies || [];
-      return acc;
-    }, {});
 
     const currentUserId = String(req.user.id);
+    const comments = (post.comments || []).filter((c) => c?.author);
 
     const formattedPost = {
       id: String(post._id),
@@ -520,41 +452,41 @@ async function getPost(req, res) {
         profilePic: post.author.profilePic || '',
         league: post.author.league || 'Bronze 1',
         level: post.author.level || 1,
-        totalXp: post.author.totalXp || 0
+        totalXp: post.author.totalXp || 0,
       },
       hashtags: post.hashtags || [],
       content: post.content,
       image: post.image,
       video: post.video || '',
-      // set when the post belongs to an orbital
+      voiceNote: post.voiceNote || '',
+      voiceNoteDuration: post.voiceNoteDuration || 0,
       orbital: post.orbital && post.orbital.name
         ? { id: String(post.orbital._id), name: post.orbital.name, image: post.orbital.image || '', visibility: post.orbital.visibility }
         : null,
-      likes: post.likes.map(id => String(id)),
-      comments: post.comments.map(comment => ({
+      likes: (post.likes || []).map((id) => String(id)),
+      comments: comments.map((comment) => ({
         id: String(comment._id),
         author: {
           id: String(comment.author._id),
           username: comment.author.username,
-          profilePic: comment.author.profilePic || ''
+          profilePic: comment.author.profilePic || '',
         },
         content: comment.content,
         createdAt: comment.createdAt,
-        replies: comment.replies?.map(reply => ({
-          id: String(reply._id),
-          author: {
-            id: String(reply.author._id),
-            username: reply.author.username,
-          },
-          content: reply.content,
-          createdAt: reply.createdAt,
-        })) || []
+        replies: (comment.replies || [])
+          .filter((r) => r?.author)
+          .map((reply) => ({
+            id: String(reply._id),
+            author: { id: String(reply.author._id), username: reply.author.username },
+            content: reply.content,
+            createdAt: reply.createdAt,
+          })),
       })),
-      likesCount: post.likes.length,
-      commentsCount: post.comments.length,
-      isLikedByCurrentUser: post.likes.some(id => String(id) === currentUserId),
+      likesCount: (post.likes || []).length,
+      commentsCount: countAll(post.comments),
+      isLikedByCurrentUser: (post.likes || []).some((id) => String(id) === currentUserId),
       createdAt: post.createdAt,
-      updatedAt: post.updatedAt
+      updatedAt: post.updatedAt,
     };
 
     return res.status(200).json({ post: formattedPost });
@@ -567,285 +499,34 @@ async function getPost(req, res) {
 // Like/Unlike a post
 async function toggleLike(req, res) {
   try {
-    const postId = req.params.postId;
     const userId = req.user.id;
+    const post = await Post.findById(req.params.postId);
 
-    const post = await Post.findById(postId);
-
-    if (!post || !post.isActive) {
-      return res.status(404).json({ message: 'Post not found' });
-    }
+    if (!post || !post.isActive) return res.status(404).json({ message: 'Post not found' });
 
     const userIdString = String(userId);
-    const likeIndex = post.likes.findIndex(id => String(id) === userIdString);
+    const likeIndex = post.likes.findIndex((id) => String(id) === userIdString);
 
     if (likeIndex > -1) {
-      // Unlike
       post.likes.splice(likeIndex, 1);
       await post.save();
-      return res.status(200).json({
-        message: 'Post unliked',
-        likesCount: post.likes.length,
-        isLiked: false
-      });
-    } else {
-      // Like
-      post.likes.push(userId);
-      await post.save();
+      return res.status(200).json({ message: 'Post unliked', likesCount: post.likes.length, isLiked: false });
+    }
 
-      // Send notification to post author (if not self-like)
-      if (String(post.author) !== userIdString) {
-        const liker = await User.findById(userId).select('username');
-        await User.findByIdAndUpdate(post.author, {
-          $push: {
-            notifications: {
-              title: '❤️ New Like',
-              detail: `${liker.username} liked your post`
-            }
-          }
-        });
-      }
+    post.likes.push(userId);
+    await post.save();
 
-      console.log('post.likes:', post.likes);
-
-      recordSocialActivity(userId);
-      return res.status(200).json({
-        message: 'Post liked',
-        likesCount: post.likes.length,
-        isLiked: true
+    if (String(post.author) !== userIdString) {
+      const liker = await User.findById(userId).select('username');
+      await User.findByIdAndUpdate(post.author, {
+        $push: { notifications: { title: '❤️ New Like', detail: `${liker.username} liked your post` } },
       });
     }
+
+    recordSocialActivity(userId);
+    return res.status(200).json({ message: 'Post liked', likesCount: post.likes.length, isLiked: true });
   } catch (error) {
     console.error('Toggle like error:', error);
-    return res.status(500).json({ message: error.message });
-  }
-}
-
-// Add a comment to a post
-async function addComment(req, res) {
-  try {
-    const postId = req.params.postId;
-    const { content } = req.body;
-
-    const hasComment = content && content.trim().length > 0;
-    const hasVoiceNote = req.file?.fieldname === 'voiceNote';
-    const hasImage = req.file?.fieldname === 'image'
-
-    if (!hasComment && !hasImage && !hasVoiceNote) {
-      return res.status(400).json({ message: 'Comment must have content, image, or voice note' });
-    }
-
-    if (!content || content.trim().length === 0) {
-      return res.status(400).json({ message: 'Comment content is required' });
-    }
-
-    if (content.length > 500) {
-      return res.status(400).json({ message: 'Comment exceeds 500 characters' });
-    }
-
-    const post = await Post.findById(postId);
-
-    if (!post || !post.isActive) {
-      return res.status(404).json({ message: 'Post not found' });
-    }
-
-    const comment = {
-      author: req.user.id,
-      content: content.trim(),
-      createdAt: new Date()
-    };
-
-    post.comments.push(comment);
-    await post.save();
-
-    // Send notification to post author (if not self-comment)
-    if (String(post.author) !== String(req.user.id)) {
-      const commenter = await User.findById(req.user.id).select('username');
-      await User.findByIdAndUpdate(post.author, {
-        $push: {
-          notifications: {
-            title: '💬 New Comment',
-            detail: `${commenter.username} commented on your post`
-          }
-        }
-      });
-    }
-
-    // Populate the new comment's author details
-    await post.populate('comments.author', 'username profilePic');
-
-    const newComment = post.comments[post.comments.length - 1];
-
-    recordSocialActivity(req.user.id);
-    return res.status(201).json({
-      message: 'Comment added',
-      comment: {
-        id: String(newComment._id),
-        postId: String(post._id),
-        author: {
-          id: String(newComment.author._id),
-          username: newComment.author.username,
-          profilePic: newComment.author.profilePic || ''
-        },
-        content: newComment.content,
-        createdAt: newComment.createdAt,
-        likesCount: 0,                     // ✅ added
-        isLikedByCurrentUser: false,       // ✅ added
-        replies: []                        // ✅ added
-      },
-      commentsCount: post.comments.length
-    });
-  } catch (error) {
-    console.error('Add comment error:', error);
-    return res.status(500).json({ message: error.message });
-  }
-}
-
-// Add a reply to a comment
-async function commentReply(req, res) {
-  try {
-    const { postId, commentId } = req.params;
-    const { content } = req.body;
-
-    if (!content || content.trim().length === 0) {
-      return res.status(400).json({ message: 'Type something to post' })
-    }
-
-    if (content.length > 500) {
-      return res.status(404).json({ message: 'Maximum type limit 500 characters' })
-    }
-
-    const post = await Post.findById(postId);
-    const comment = post.comments.id(commentId);
-
-    if (!post || !post.isActive) {
-      return res.status(400).json({ message: 'Post not found' })
-    }
-
-    const reply = {
-      author: req.user.id,
-      content: content.trim(),
-      createdAt: new Date()
-    }
-
-    comment.replies.push(reply);
-    await post.save();
-
-    const savedPost = await Post.findById(postId).populate(
-      'comments.replies.author',
-      'username profilePicture'
-    );
-
-    const savedComment = savedPost.comments.id(commentId);
-    const savedReply = savedComment.replies[savedComment.replies.length - 1];
-
-    return res.status(201).json({
-      message: 'Reply saved successfully',
-      reply: savedReply
-    });
-  } catch (error) {
-    if (error.name === 'CastError') {
-      return res.status(400).json({ message: 'Invalid post or comment Id' });
-    };
-    return res.status(500).json({ message: 'Server Error', error: error.message });
-  }
-};
-
-// Like comment
-async function likeComment(req, res) {
-  try {
-    const { postId, commentId } = req.params;
-    const userId = req.user.id;
-    const userIdString = String(userId);
-
-    const post = await Post.findById(postId);
-
-
-    if (!post || !post.isActive) {
-      return res.status(404).json({ message: 'post not found' })
-    }
-    const comment = post.comments.id(commentId);
-
-    if (!comment) {
-      return res.status(404).json({ message: 'comment not found' });
-    };
-
-    if (!comment.likes) comment.likes = [];
-
-    const commentLike = comment.likes.findIndex(id => String(id) === userIdString);
-    // Unlike post if liked
-    if (commentLike > -1) {
-      comment.likes.splice(commentLike, 1);
-      await post.save();
-      return res.status(200).json({
-        message: 'Comment disliked',
-        likesCount: comment.likes.length,
-        isLiked: false
-      });
-    } else {
-      // Add like
-      comment.likes.push(userId);
-      await post.save();
-
-      if (String(comment.author !== userIdString)) {
-        const liker = await User.findById(userId).select('username');
-        await User.findByIdAndUpdate(comment.author, {
-          $push: {
-            notifications: {
-              title: 'Comment like',
-              detail: `${liker.username} liked your comment`
-            }
-          }
-        });
-      }
-
-      return res.status(200).json({
-        message: 'Comment liked',
-        likesCount: comment.likes.length,
-        isLiked: true
-      });
-    };
-  } catch (error) {
-    console.error('Comment like error:', error);
-    return res.status(500).json({ message: error.message });
-  }
-};
-
-// Delete a comment (author only)
-async function deleteComment(req, res) {
-  try {
-    const postId = req.params.postId;
-    const commentId = req.params.commentId;
-    const userId = req.user.id;
-
-    const post = await Post.findById(postId);
-
-    if (!post || !post.isActive) {
-      return res.status(404).json({ message: 'Post not found' });
-    }
-
-    const commentIndex = post.comments.findIndex(c => String(c._id) === commentId);
-
-    if (commentIndex === -1) {
-      return res.status(404).json({ message: 'Comment not found' });
-    }
-
-    const comment = post.comments[commentIndex];
-
-    // Check if user is the comment author or post author
-    if (String(comment.author) !== String(userId) && String(post.author) !== String(userId)) {
-      return res.status(403).json({ message: 'You can only delete your own comments' });
-    }
-
-    post.comments.splice(commentIndex, 1);
-    await post.save();
-
-    return res.status(200).json({
-      message: 'Comment deleted successfully',
-      commentsCount: post.comments.length
-    });
-  } catch (error) {
-    console.error('Delete comment error:', error);
     return res.status(500).json({ message: error.message });
   }
 }
@@ -865,18 +546,15 @@ async function getUserPosts(req, res) {
         User.findById(userId).select('isPrivate blockedUsers').lean(),
       ]);
       if (!profileOwner) return res.status(404).json({ message: 'User not found' });
-      const isBlocked = viewer?.blockedUsers?.some(id => String(id) === String(userId))
-        || profileOwner.blockedUsers?.some(id => String(id) === String(req.user.id));
+      const isBlocked = viewer?.blockedUsers?.some((id) => String(id) === String(userId))
+        || profileOwner.blockedUsers?.some((id) => String(id) === String(req.user.id));
       const canView = !profileOwner.isPrivate
-        || viewer?.friends?.some(id => String(id) === String(userId));
+        || viewer?.friends?.some((id) => String(id) === String(userId));
       if (isBlocked || !canView) return res.status(403).json({ message: 'This profile is private' });
     }
     const filter = { author: userId, isActive: true };
-    if (isOwner && req.query.archived === 'true') {
-      filter.isArchived = true;
-    } else {
-      filter.isArchived = { $ne: true };
-    }
+    if (isOwner && req.query.archived === 'true') filter.isArchived = true;
+    else filter.isArchived = { $ne: true };
 
     const total = await Post.countDocuments(filter);
     const totalPages = Math.ceil(total / limit);
@@ -891,64 +569,60 @@ async function getUserPosts(req, res) {
 
     const currentUserId = String(req.user.id);
 
-    const formattedPosts = posts.map(post => ({
-      id: String(post._id),
-      author: {
-        id: String(post.author._id),
-        username: post.author.username,
-        profilePic: post.author.profilePic || '',
-        league: post.author.league || 'Bronze 1',
-        level: post.author.level || 1,
-        totalXp: post.author.totalXp || 0
-      },
-      content: post.content,
-      image: post.image,
-      video: post.video || '',
-      voiceNote: post.voiceNote || '',
-      voiceNoteDuration: post.voiceNoteDuration || 0,
-      hashtags: post.hashtags || [],
-      likes: post.likes.map(id => String(id)),
-      views: post.views || 0,
-      viewedBy: (post.viewedBy || []).map(id => String(id)),
-      comments: post.comments.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).map(comment => ({
-        id: String(comment._id),
+    const formattedPosts = posts
+      .filter((post) => post?.author)
+      .map((post) => ({
+        id: String(post._id),
         author: {
-          id: String(comment.author._id),
-          username: comment.author.username,
-          profilePic: comment.author.profilePic || ''
+          id: String(post.author._id),
+          username: post.author.username,
+          profilePic: post.author.profilePic || '',
+          league: post.author.league || 'Bronze 1',
+          level: post.author.level || 1,
+          totalXp: post.author.totalXp || 0,
         },
-        content: comment.content,
-        createdAt: comment.createdAt
-      })),
-      likesCount: post.likes.length,
-      commentsCount: post.comments.length,
-      isLikedByCurrentUser: post.likes.some(id => String(id) === currentUserId),
-      createdAt: post.createdAt,
-      updatedAt: post.updatedAt
-    }));
+        content: post.content,
+        image: post.image,
+        video: post.video || '',
+        voiceNote: post.voiceNote || '',
+        voiceNoteDuration: post.voiceNoteDuration || 0,
+        hashtags: post.hashtags || [],
+        likes: (post.likes || []).map((id) => String(id)),
+        views: post.views || 0,
+        viewedBy: (post.viewedBy || []).map((id) => String(id)),
+        comments: [...(post.comments || [])]
+          .filter((c) => c?.author)
+          .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+          .map((comment) => ({
+            id: String(comment._id),
+            author: {
+              id: String(comment.author._id),
+              username: comment.author.username,
+              profilePic: comment.author.profilePic || '',
+            },
+            content: comment.content,
+            createdAt: comment.createdAt,
+          })),
+        likesCount: (post.likes || []).length,
+        commentsCount: countAll(post.comments),
+        isLikedByCurrentUser: (post.likes || []).some((id) => String(id) === currentUserId),
+        createdAt: post.createdAt,
+        updatedAt: post.updatedAt,
+      }));
 
     return res.status(200).json({
       posts: formattedPosts,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages,
-        hasMore: page < totalPages
-      }
+      pagination: { page, limit, total, totalPages, hasMore: page < totalPages },
     });
   } catch (error) {
     console.error('Get user posts error:', error);
     return res.status(500).json({ message: error.message });
   }
-};
+}
 
 /**
  * Orbitals a user is an active member of.
  * GET /api/community/users/:userId/orbitals
- * Own profile: every orbital, each with the user's `role`.
- * Someone else's: same privacy gate as their posts; private orbitals only if the viewer is also a member.
- * Items carry `author` (the creator) instead of `role`, matching the Orbital shape OrbitalCard expects.
  */
 async function getUserOrbitals(req, res) {
   try {
@@ -966,10 +640,10 @@ async function getUserOrbitals(req, res) {
         User.findById(userId).select('isPrivate blockedUsers').lean(),
       ]);
       if (!profileOwner) return res.status(404).json({ message: 'User not found' });
-      const isBlocked = viewer?.blockedUsers?.some(id => String(id) === String(userId))
-        || profileOwner.blockedUsers?.some(id => String(id) === viewerId);
+      const isBlocked = viewer?.blockedUsers?.some((id) => String(id) === String(userId))
+        || profileOwner.blockedUsers?.some((id) => String(id) === viewerId);
       const canView = !profileOwner.isPrivate
-        || viewer?.friends?.some(id => String(id) === String(userId));
+        || viewer?.friends?.some((id) => String(id) === String(userId));
       if (isBlocked || !canView) return res.status(403).json({ message: 'This profile is private' });
     }
 
@@ -982,17 +656,17 @@ async function getUserOrbitals(req, res) {
       .sort({ createdAt: -1 })
       .lean();
 
-    let visible = memberships.filter(m => m.orbital);
+    let visible = memberships.filter((m) => m.orbital);
 
     if (!isOwner) {
-      const privateIds = visible.filter(m => m.orbital.visibility === 'private').map(m => m.orbital._id);
+      const privateIds = visible.filter((m) => m.orbital.visibility === 'private').map((m) => m.orbital._id);
       const viewerMemberships = privateIds.length
         ? await OrbitalMember.find({ user: viewerId, status: ORBITAL_STATUS.ACTIVE, orbital: { $in: privateIds } })
           .select('orbital')
           .lean()
         : [];
-      const allowed = new Set(viewerMemberships.map(m => String(m.orbital)));
-      visible = visible.filter(m => m.orbital.visibility !== 'private' || allowed.has(String(m.orbital._id)));
+      const allowed = new Set(viewerMemberships.map((m) => String(m.orbital)));
+      visible = visible.filter((m) => m.orbital.visibility !== 'private' || allowed.has(String(m.orbital._id)));
     }
 
     const orbitals = visible.map(({ orbital, role }) => {
@@ -1007,7 +681,6 @@ async function getUserOrbitals(req, res) {
   }
 }
 
-const DISCOVER_FRESHNESS_MS = 30 * 60 * 1000;
 // 3 decimal places is roughly 110 m, so we never store an exact home location.
 const coarsenCoordinate = (value) => Math.round(value * 1000) / 1000;
 
@@ -1019,7 +692,6 @@ const discoverNearbyPeople = async (req, res) => {
     if (consent !== true) {
       return res.status(400).json({ message: 'Location sharing requires explicit consent' });
     }
-
     if (
       typeof lat !== 'number' || typeof lng !== 'number' ||
       !Number.isFinite(lat) || !Number.isFinite(lng) ||
@@ -1037,31 +709,27 @@ const discoverNearbyPeople = async (req, res) => {
     user.isDiscoverable = true;
     await user.save();
 
-    // 2. Find nearby discoverable users who shared recently
     const nearbyUsers = await User.aggregate([
       {
         $geoNear: {
+          key: 'location',
           near: { type: 'Point', coordinates: [sharedLng, sharedLat] },
           distanceField: 'distance',
-          maxDistance: 500, // meters
+          maxDistance: 500,
           spherical: true,
-          query: {
-            _id: { $ne: user._id },
-            isDiscoverable: true,
-            locationUpdatedAt: { $gte: new Date(Date.now() - DISCOVER_FRESHNESS_MS) },
-          },
+          query: { _id: { $ne: user._id }, isDiscoverable: true },
         },
       },
       {
         $project: {
           username: 1,
           profilePicture: '$profilePic',
-          distance: { $round: ['$distance', 0] }, // meters, rounded
+          distance: { $round: ['$distance', 0] },
         },
       },
     ]);
 
-    res.status(200).json({ nearbyUsers });
+    return res.status(200).json({ nearbyUsers });
   } catch (error) {
     console.error('finding nearby people error:', error);
     return res.status(500).json({ message: 'Failed to find nearby people' });
@@ -1072,10 +740,7 @@ const stopSharingLocation = async (req, res) => {
   try {
     await User.updateOne(
       { _id: req.user.id },
-      {
-        $set: { isDiscoverable: false },
-        $unset: { locationUpdatedAt: 1 },
-      }
+      { $set: { isDiscoverable: false }, $unset: { locationUpdatedAt: 1 } }
     );
     return res.status(200).json({ message: 'Location sharing stopped' });
   } catch (error) {
@@ -1096,15 +761,10 @@ const registerPostView = async (req, res) => {
 
     const result = await Post.updateOne(
       { _id: postId, viewedBy: { $ne: userId } },
-      {
-        $inc: { views: 1 },
-        $addToSet: { viewedBy: userId },
-      }
+      { $inc: { views: 1 }, $addToSet: { viewedBy: userId } }
     );
 
-    return res.status(200).json({
-      counted: result.modifiedCount === 1,
-    });
+    return res.status(200).json({ counted: result.modifiedCount === 1 });
   } catch (error) {
     console.error('Failed to register view:', error);
     return res.status(500).json({ message: 'Failed to register view' });
@@ -1181,7 +841,7 @@ const getSavedPosts = async (req, res) => {
       .select('savedPosts')
       .lean();
     if (!user) return res.status(404).json({ message: 'User not found' });
-    return res.json({ savedPosts: (user.savedPosts || []).filter(item => item.post) });
+    return res.json({ savedPosts: (user.savedPosts || []).filter((item) => item.post) });
   } catch (error) {
     console.error('Get saved posts error:', error);
     return res.status(500).json({ message: 'Failed to load saved posts' });
@@ -1196,7 +856,7 @@ const createSavedCollection = async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
-    if (user.savedCollections.some(collection => collection.name.toLowerCase() === name.toLowerCase())) {
+    if (user.savedCollections.some((c) => c.name.toLowerCase() === name.toLowerCase())) {
       return res.status(409).json({ message: 'A collection with this name already exists' });
     }
     user.savedCollections.push({ name });
@@ -1226,7 +886,7 @@ const addPostToCollection = async (req, res) => {
 
 const getProfileInsights = async (req, res) => {
   try {
-    const authorId = new (require('mongoose').Types.ObjectId)(req.user.id);
+    const authorId = new mongoose.Types.ObjectId(req.user.id);
     const [summary] = await Post.aggregate([
       { $match: { author: authorId, isActive: true } },
       {
@@ -1281,11 +941,7 @@ const getProfileInsights = async (req, res) => {
       };
     });
 
-    const topPosts = scored
-      .filter((post) => post.score > 0)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 3);
-
+    const topPosts = scored.filter((p) => p.score > 0).sort((a, b) => b.score - a.score).slice(0, 3);
     const topHashtags = [...hashtagCounts.entries()]
       .sort((a, b) => b[1] - a[1])
       .slice(0, 6)
@@ -1301,13 +957,46 @@ const getProfileInsights = async (req, res) => {
         postTypes,
         topPosts,
         topHashtags,
-        postDates: recentPosts.map((post) => post.createdAt),
+        postDates: recentPosts.map((p) => p.createdAt),
         commentDates,
       },
     });
   } catch (error) {
     console.error('Get profile insights error:', error);
     return res.status(500).json({ message: 'Failed to load insights' });
+  }
+};
+
+const toggleDiscoverable = async (req, res) => {
+  try {
+    const { enabled } = req.body;
+    if (typeof enabled !== 'boolean') {
+      return res.status(400).json({ message: 'enabled must be a boolean' });
+    }
+
+    const update = { isDiscoverable: enabled };
+    if (!enabled) update.locationUpdatedAt = null;
+
+    await User.updateOne({ _id: req.user.id }, { $set: update });
+
+    return res.status(200).json({
+      success: true,
+      isDiscoverable: enabled,
+      message: enabled ? 'Nearby discovery enabled' : 'Nearby discovery disabled',
+    });
+  } catch (error) {
+    console.error('toggle discoverability error:', error);
+    return res.status(500).json({ message: 'Failed to update discoverability' });
+  }
+};
+
+const getDiscoverSettings = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select('isDiscoverable');
+    return res.json({ isDiscoverable: !!user?.isDiscoverable });
+  } catch (error) {
+    console.error('discover settings error:', error);
+    return res.status(500).json({ message: 'Failed to load settings' });
   }
 };
 
@@ -1318,13 +1007,9 @@ module.exports = {
   editPostCaption,
   getPost,
   toggleLike,
-  addComment,
   deletePost,
-  deleteComment,
   getUserPosts,
   getUserOrbitals,
-  commentReply,
-  likeComment,
   getPostVideo,
   getPostVoiceNote,
   discoverNearbyPeople,
@@ -1336,5 +1021,7 @@ module.exports = {
   getSavedPosts,
   createSavedCollection,
   addPostToCollection,
+  toggleDiscoverable,
+  getDiscoverSettings,
   getProfileInsights,
 };

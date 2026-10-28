@@ -5,13 +5,9 @@ const {
   getPost,
   toggleLike,
   editPostCaption, 
-  addComment,
   deletePost,
-  deleteComment,
   getUserPosts,
   getUserOrbitals,
-  commentReply,
-  likeComment,
   getPostImage,
   getPostVideo,
   discoverNearbyPeople,
@@ -25,9 +21,11 @@ const {
   createSavedCollection,
   addPostToCollection,
   getProfileInsights,
+  toggleDiscoverable,
+  getDiscoverSettings
 } = require('../controllers/community.controller');
 const { protect } = require('../middlewares/auth.middleware');
-const { postMediaUpload } = require('../middlewares/upload.middleware');
+const { postMediaUpload, commentMediaUpload } = require('../middlewares/upload.middleware');
 
 const router = express.Router();
 
@@ -64,18 +62,6 @@ router.get('/users/:userId/orbitals', protect, getUserOrbitals);
 
 // Like/Unlike a post
 router.post('/posts/:postId/like', protect, toggleLike);
-
-// Add a comment
-router.post('/posts/:postId/comments', protect, addComment);
-
-// Like a comment
-router.post('/posts/:postId/:commentId/likeComment', protect, likeComment);
-
-// Add a comment reply
-router.post('/posts/:postId/:commentId/commentReplies', protect, commentReply);
-
-// Delete a comment
-router.delete('/posts/:postId/comments/:commentId', protect, deleteComment);
   
 // Register a post view
 router.post('/posts/:postId/views', protect, registerPostView);
@@ -91,5 +77,15 @@ router.get('/insights', protect, getProfileInsights);
 // Discover people nearby
 router.post('/discover/nearby', protect, discoverNearbyPeople);
 router.delete('/discover/nearby', protect, stopSharingLocation);
+router.patch(
+  "/discover/preferences",
+  protect,
+  toggleDiscoverable
+);
+router.get(
+  "/discover/preferences",
+  protect,
+  getDiscoverSettings
+);
 
 module.exports = router;

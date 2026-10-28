@@ -1,53 +1,54 @@
 const mongoose = require('mongoose');
 
-const replySchema = new mongoose.Schema({
-  author: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
-  },
-  content: {
-    type: String,
-    required: true,
-    trim: true,
-    maxlength: 500
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now
-  }
-}, { _id: true });
+/* Media fields shared by comments AND replies (factory: each schema gets its own copy). */
+const gifSchema = new mongoose.Schema({
+  url: { type: String, required: true },
+  kind: { type: String, enum: ['gif', 'sticker'], default: 'gif' },
+  width: Number,
+  height: Number,
+}, { _id: false });
 
-const commentSchema = new mongoose.Schema({
-  author: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
-  },
-  content: {
-    type: String,
-    trim: true,
-    maxlength: 500
-  },
-  image: {
-    type: String,
-    default: '',
-  },
+const commentMediaFields = () => ({
+  image: { type: String, default: '' },
+  imageFileId: { type: String, default: '' },
+  imageWidth: { type: Number, default: 0 },
+  imageHeight: { type: Number, default: 0 },
   voiceNote: {
     url: { type: String, default: '' },
-    duration: { type: Number, default: 0 }
+    fileId: { type: String, default: '' },
+    duration: { type: Number, default: 0 },
   },
-  likes: [{
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    default: []
-  }],
-  createdAt: {
-    type: Date,
-    default: Date.now
-  },
-  replies: [replySchema]
-}, { _id: true });
+  gif: { type: gifSchema, default: undefined },
+});
+
+// LEGACY: comments saved by the old code stored a single `media` object. Read-only now.
+const legacyMediaSchema = new mongoose.Schema({
+  type: { type: String, enum: ['image', 'gif', 'sticker', 'audio'] },
+  url: String,
+  width: Number,
+  height: Number,
+  duration: Number,
+}, { _id: false });
+
+const replySchema = new mongoose.Schema({
+  author: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  content: { type: String, default: '', maxlength: 500 },
+  ...commentMediaFields(),
+  media: { type: legacyMediaSchema, default: undefined },
+  replyToUser: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  likes: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  createdAt: { type: Date, default: Date.now },
+});
+
+const commentSchema = new mongoose.Schema({
+  author: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  content: { type: String, default: '', maxlength: 500 },
+  ...commentMediaFields(),
+  media: { type: legacyMediaSchema, default: undefined },
+  likes: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  replies: [replySchema],
+  createdAt: { type: Date, default: Date.now },
+});
 
 const postSchema = new mongoose.Schema({
   author: {
@@ -62,18 +63,11 @@ const postSchema = new mongoose.Schema({
     trim: true,
     maxlength: 2000
   },
-  image: {
-    type: String,
-    default: ''
-  },
-  video: {
-    type: String,
-    default: ''
-  },
-  driveFileId: {
-    type: String,
-    default: ''
-  },
+  image: { type: String, default: '' },
+  imageFileId: { type: String, default: '' },
+  video: { type: String, default: '' },
+  videoFileId: { type: String, default: '' },
+  driveFileId: { type: String, default: '' },
   hashtags: [{
     type: String,
     trim: true,
@@ -104,20 +98,25 @@ const postSchema = new mongoose.Schema({
     default: 'feed'
   },
   orbital: {
-  type: mongoose.Schema.Types.ObjectId,
-  ref: "Orbital",
-  default: null,
-  index: true,
-},
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Orbital",
+    default: null,
+    index: true,
+  },
+  // written by createPost after the AI analysis
+  analysis: { type: mongoose.Schema.Types.Mixed },
+  status: { type: String },
 },
   {
     timestamps: true
   });
 
 // Indexes for performance
-postSchema.index({ user:1, createdAt: -1 });
 postSchema.index({ author: 1, createdAt: -1 });
 postSchema.index({ likes: 1 });
+// The comment audio stream route looks a file id up before streaming it.
+postSchema.index({ 'comments.voiceNote.fileId': 1 });
+postSchema.index({ 'comments.replies.voiceNote.fileId': 1 });
 
 const Post = mongoose.model('Post', postSchema);
 const Comment = mongoose.model('Comment', commentSchema);

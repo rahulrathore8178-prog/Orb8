@@ -17,6 +17,7 @@ const firebaseRoutes = require('./routes/firebase.routes');
 const orbitalRoutes = require('./routes/orbital.routes');
 const callRoutes = require('./routes/call.routes');
 const cosmicDiscoveryRoutes = require('./routes/cosmicDiscovery.routes');
+const commentRoutes = require('./routes/comment.routes'); // Import comment routes
 
 const app = express();
 
@@ -43,6 +44,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/learning', learningRoutes);
 app.use('/api/challenges', challengeRoutes);
 app.use('/api/badges', badgeRoutes);
+app.use('/api/community', commentRoutes);
 app.use('/api/community', communityRoutes);
 app.use('/api/social', socialRoutes);
 app.use('/api/chat', chatRoutes);

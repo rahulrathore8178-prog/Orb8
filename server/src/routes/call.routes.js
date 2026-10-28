@@ -1,13 +1,12 @@
 'use strict';
 
 const express = require('express');
-// Use the same auth middleware your other routes use. It must set req.user.id.
-// const auth = require('../middleware/auth');
+const { protect } = require('../middlewares/auth.middleware'); // sets req.user.id from the JWT
 const calls = require('../controllers/call.controller');
 
 const router = express.Router();
 
-// router.use(auth);
+router.use(protect);
 
 router.get('/ice-servers', calls.getIceServers);
 router.get('/', calls.getCallHistory);
