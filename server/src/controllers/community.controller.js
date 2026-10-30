@@ -8,6 +8,7 @@ const axios = require('axios');
 const { uploadBufferToDrive, deleteFileFromDrive, streamFileFromDrive } = require('../utils/driveUpload');
 const { recordSocialActivity } = require('../utils/habit');
 const { fileIdsOf, discardFiles } = require('../utils/commentMedia');
+const { notify } = require('../utils/notify');
 
 // Total comments + replies
 const countAll = (comments) => (comments || []).reduce((n, c) => n + 1 + (c.replies?.length || 0), 0);
@@ -63,10 +64,12 @@ async function analyzeImage(fileBuffer, fileName, mimeType, postId) {
 // Create a new post
 async function createPost(req, res) {
   try {
-    const { content } = req.body;
+    const content = typeof req.body.content === 'string' ? req.body.content.trim() : '';
+    const hasFile = !!(req.file && req.file.buffer);
 
-    if (!content || content.trim().length === 0) {
-      return res.status(400).json({ message: 'Post content is required' });
+    // caption is optional, but a post can't be completely empty
+    if (!content && !hasFile) {
+      return res.status(400).json({ message: 'Add a caption or attach a photo, video or voice note' });
     }
     if (content.length > 2000) {
       return res.status(400).json({ message: 'Post content exceeds 2000 characters' });
@@ -90,7 +93,7 @@ async function createPost(req, res) {
 
     const postData = {
       author: req.user.id,
-      content: content.trim(),
+      content,
       hashtags,
       image: '',
       video: '',
@@ -518,8 +521,9 @@ async function toggleLike(req, res) {
 
     if (String(post.author) !== userIdString) {
       const liker = await User.findById(userId).select('username');
-      await User.findByIdAndUpdate(post.author, {
-        $push: { notifications: { title: '❤️ New Like', detail: `${liker.username} liked your post` } },
+      notify(post.author, {
+        title: '❤️ New Like', detail: `${liker.username} liked your post`,
+        type: 'like', data: { postId: String(post._id), actorId: userIdString },
       });
     }
 

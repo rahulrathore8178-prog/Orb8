@@ -4,6 +4,8 @@ const notificationSchema = new mongoose.Schema(
   {
     title: { type: String, required: true, trim: true },
     detail: { type: String, default: "", trim: true },
+    type: { type: String, default: undefined },                // like | comment | reply | comment_like | friend_request ...
+    data: { type: mongoose.Schema.Types.Mixed, default: undefined }, // { postId, commentId, userId, orbitalId, actorId, url }
     createdAt: { type: Date, default: Date.now },
     isRead: { type: Boolean, default: false },
   },
@@ -106,7 +108,7 @@ const userSchema = new mongoose.Schema(
       type: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
       default: [],
     },
-    isPrivate: { type: Boolean, default: true },
+    isPrivate: { type: Boolean, default: false },
     followers: {
       type: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
       default: [],
