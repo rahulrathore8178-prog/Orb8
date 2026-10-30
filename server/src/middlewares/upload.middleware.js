@@ -1,23 +1,25 @@
 const multer = require('multer');
 
-const MAX_IMAGE_UPLOAD_BYTES = 8 * 1024 * 1024;   // mobile photos can be larger before compression
-const MAX_VIDEO_UPLOAD_BYTES = 50 * 1024 * 1024;  // keep in sync with frontend MAX_VIDEO_SIZE and controller MAX_VIDEO_BYTES
-
-const MAX_PROFILE_IMAGE_UPLOAD_BYTES = 20 * 1024 * 1024; // raw phone photos; sharp shrinks them afterwards
+const MB = 1024 * 1024;
+const MAX_IMAGE_UPLOAD_BYTES = 8 * MB; // mobile photos can be larger before compression
+const MAX_VIDEO_UPLOAD_BYTES = 50 * MB; // keep in sync with frontend MAX_VIDEO_SIZE
+const MAX_AUDIO_UPLOAD_BYTES = 15 * MB;
+const MAX_PROFILE_IMAGE_UPLOAD_BYTES = 20 * MB; // raw phone photos; sharp shrinks them afterwards
+const MAX_COMMENT_IMAGE_BYTES = 8 * MB;
 
 const allowedImageMimeTypes = new Set([
   'image/jpeg',
+  'image/jpg',
   'image/png',
   'image/webp',
-  'image/jpg',
   'image/heic',
-  'image/heif'
+  'image/heif',
 ]);
 
 const allowedVideoMimeTypes = new Set([
   'video/mp4',
   'video/webm',
-  'video/quicktime' // .mov
+  'video/quicktime', // .mov
 ]);
 
 const allowedAudioMimeTypes = new Set([
@@ -27,61 +29,69 @@ const allowedAudioMimeTypes = new Set([
   'audio/mp3',
   'audio/wav',
   'audio/x-wav',
-  'audio/mp4', // some browsers report m4a recordings this way
+  'audio/mp4', // m4a recordings
 ]);
 
-// --- Profile image upload: unchanged, image-only, 8MB cap ---
+const KIND_LIMITS = {
+  image: MAX_IMAGE_UPLOAD_BYTES,
+  video: MAX_VIDEO_UPLOAD_BYTES,
+  audio: MAX_AUDIO_UPLOAD_BYTES,
+};
+
+/** "Audio/WebM; codecs=opus" -> "audio/webm" (parameters would otherwise fail the Set lookups). */
+const baseMime = (mime = '') => String(mime).split(';')[0].trim().toLowerCase();
+
+const kindOf = (mime) =>
+  allowedImageMimeTypes.has(mime) ? 'image'
+    : allowedVideoMimeTypes.has(mime) ? 'video'
+      : allowedAudioMimeTypes.has(mime) ? 'audio'
+        : null;
+
+const debug = (...args) => {
+  if (process.env.UPLOAD_DEBUG) console.log('[UPLOAD]', ...args);
+};
+
+// --- Profile image upload: image-only ---
 const profileImageMulter = multer({
   storage: multer.memoryStorage(),
-  limits: {
-    fileSize: MAX_PROFILE_IMAGE_UPLOAD_BYTES,
-    files: 1
-  },
+  limits: { fileSize: MAX_PROFILE_IMAGE_UPLOAD_BYTES, files: 1 },
   fileFilter: (req, file, cb) => {
-    if (!allowedImageMimeTypes.has(file.mimetype)) {
-      return cb(new Error(`Unsupported image type: ${file.mimetype}`));
-    }
+    const mime = baseMime(file.mimetype);
+    if (!allowedImageMimeTypes.has(mime)) return cb(new Error(`Unsupported image type: ${mime}`));
+    file.mimetype = mime;
     return cb(null, true);
-  }
+  },
 });
 
-// --- Post media upload: accepts image OR video, sized for the larger of the two ---
+// --- Post media upload (feed + orbitals): image, video or audio ---
 const postMediaMulter = multer({
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: MAX_VIDEO_UPLOAD_BYTES, // multer only allows one cap; per-type enforcement happens below
-    files: 1
+    fileSize: MAX_VIDEO_UPLOAD_BYTES, // multer allows one cap; the per-type cap is enforced in handleUpload
+    files: 1,
+    fields: 20,
+    fieldSize: 100 * 1024,
   },
   fileFilter: (req, file, cb) => {
-    console.log('[UPLOAD] incoming file:', {
-      fieldname: file.fieldname,
-      originalname: file.originalname,
-      mimetype: file.mimetype
-    });
-
-    const isImage = allowedImageMimeTypes.has(file.mimetype);
-    const isVideo = allowedVideoMimeTypes.has(file.mimetype);
-    const isAudio = allowedAudioMimeTypes.has(file.mimetype);
-
-    if (!isImage && !isVideo && !isAudio) {
-      return cb(new Error(`Unsupported file type: ${file.mimetype}`));
-    }
-    // stash which kind it was so the size check downstream (post-multer) can
-    // enforce the tighter per-type limits — multer's own `limits.fileSize` can't
-    // vary per mimetype, so we let the largest-allowed size through here and check below.
-    file._detectedKind = isVideo ? 'video' : isAudio ? 'audio' : 'image';
+    const mime = baseMime(file.mimetype);
+    debug('incoming file:', { field: file.fieldname, name: file.originalname, mime });
+    if (!kindOf(mime)) return cb(new Error(`Unsupported file type: ${mime}`));
+    file.mimetype = mime; // controllers always see a clean mimetype
     return cb(null, true);
-  }
+  },
 });
 
-
-function handleUpload(multerInstance, fieldName, maxBytes = MAX_VIDEO_UPLOAD_BYTES) {
+/**
+ * Wraps multer.single() with friendly JSON errors.
+ * Pass `perKindLimits` to enforce a different max size per file kind (post media only).
+ */
+function handleUpload(multerInstance, fieldName, maxBytes, perKindLimits = null) {
   return (req, res, next) => {
     multerInstance.single(fieldName)(req, res, (error) => {
       if (error) {
         if (error instanceof multer.MulterError) {
           if (error.code === 'LIMIT_FILE_SIZE') {
-            return res.status(413).json({ message: `File too large. Max upload size is ${Math.round(maxBytes / (1024 * 1024))}MB.` });
+            return res.status(413).json({ message: `File too large. Max upload size is ${Math.round(maxBytes / MB)}MB.` });
           }
           if (error.code === 'LIMIT_UNEXPECTED_FILE') {
             return res.status(400).json({ message: `Unexpected upload field. Send the file as "${fieldName}".` });
@@ -91,9 +101,13 @@ function handleUpload(multerInstance, fieldName, maxBytes = MAX_VIDEO_UPLOAD_BYT
         return res.status(400).json({ message: error.message || 'Invalid file.' });
       }
 
-      // Post media only: images get a tighter cap than videos.
-      if (req.file && req.file._detectedKind === 'image' && req.file.size > MAX_IMAGE_UPLOAD_BYTES) {
-        return res.status(413).json({ message: `Image too large. Max upload size is ${MAX_IMAGE_UPLOAD_BYTES / (1024 * 1024)}MB.` });
+      if (perKindLimits && req.file) {
+        const kind = kindOf(baseMime(req.file.mimetype));
+        const limit = kind && perKindLimits[kind];
+        if (limit && req.file.size > limit) {
+          const label = kind === 'image' ? 'Image' : kind === 'video' ? 'Video' : 'Audio';
+          return res.status(413).json({ message: `${label} too large. Max upload size is ${Math.round(limit / MB)}MB.` });
+        }
       }
       return next();
     });
@@ -101,23 +115,22 @@ function handleUpload(multerInstance, fieldName, maxBytes = MAX_VIDEO_UPLOAD_BYT
 }
 
 const profileImageUpload = handleUpload(profileImageMulter, 'profilePic', MAX_PROFILE_IMAGE_UPLOAD_BYTES);
-const postMediaUpload = handleUpload(postMediaMulter, 'media', MAX_VIDEO_UPLOAD_BYTES);
-const orbitalImageUpload = handleUpload(postMediaMulter, 'media', MAX_VIDEO_UPLOAD_BYTES);
+const postMediaUpload = handleUpload(postMediaMulter, 'media', MAX_VIDEO_UPLOAD_BYTES, KIND_LIMITS);
+const orbitalMediaUpload = postMediaUpload;
+const orbitalImageUpload = postMediaUpload; // legacy name: orbital posts accept video/audio too
 
-const MAX_COMMENT_IMAGE_BYTES = 8 * 1024 * 1024;
-
+// --- Comments: image or voice note ---
 const commentMulter = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: MAX_COMMENT_IMAGE_BYTES, files: 1, fields: 12 },
   fileFilter: (req, file, cb) => {
-    console.log('COMMENT FILE:', {
-      fieldname: file.fieldname,
-      mimetype: file.mimetype,
-      size: file.size
-    });
-    if (file.fieldname === 'image' && allowedImageMimeTypes.has(file.mimetype)) return cb(null, true);
-    if (file.fieldname === 'voiceNote' && allowedAudioMimeTypes.has(file.mimetype)) return cb(null, true);
-    return cb(new Error(`Unsupported file for "${file.fieldname}": ${file.mimetype}`));
+    const mime = baseMime(file.mimetype);
+    const ok =
+      (file.fieldname === 'image' && allowedImageMimeTypes.has(mime)) ||
+      (file.fieldname === 'voiceNote' && allowedAudioMimeTypes.has(mime));
+    if (!ok) return cb(new Error(`Unsupported file for "${file.fieldname}": ${mime}`));
+    file.mimetype = mime;
+    return cb(null, true);
   },
 });
 
@@ -135,9 +148,11 @@ const commentMediaUpload = (req, res, next) =>
 module.exports = {
   MAX_IMAGE_UPLOAD_BYTES,
   MAX_VIDEO_UPLOAD_BYTES,
+  MAX_AUDIO_UPLOAD_BYTES,
   MAX_PROFILE_IMAGE_UPLOAD_BYTES,
   profileImageUpload,
   postMediaUpload,
+  orbitalMediaUpload,
   orbitalImageUpload,
-  commentMediaUpload
+  commentMediaUpload,
 };

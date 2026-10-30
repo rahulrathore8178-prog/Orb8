@@ -4,10 +4,11 @@ const User = require('../models/user.model');
 const { streamFileFromDrive } = require('../utils/driveUpload');
 const { httpError, readCommentInput, fileIdsOf, discardFiles } = require('../utils/commentMedia');
 const { idOf, hasLiked, serializeComment, serializeReply, flattenComments } = require('../utils/commentSerializers');
+const { notify } = require('../utils/notify');
 
 // Optional: push notifications (utils/push.js). Skipped silently until it exists.
-let sendPush = () => { };
-try { ({ sendPush } = require('../utils/push')); } catch { /* push not set up yet */ }
+// let sendPush = () => { };
+// try { ({ sendPush } = require('../utils/push')); } catch { /* push not set up yet */ }
 
 // TODO: point this at wherever recordSocialActivity lives in YOUR project.
 let recordSocialActivity;
@@ -67,10 +68,10 @@ async function locateComment(postId, id) {
 }
 
 // In-app notification (capped at 100 per user) + push. Never blocks the request.
-function notify(userId, { title, detail }) {
-    User.findByIdAndUpdate(userId, { $push: { notifications: { $each: [{ title, detail }], $slice: -100 } } }).catch(() => { });
-    sendPush(userId, { title, body: detail, category: 'social' });
-}
+// function notify(userId, { title, detail }) {
+//     User.findByIdAndUpdate(userId, { $push: { notifications: { $each: [{ title, detail }], $slice: -100 } } }).catch(() => { });
+//     sendPush(userId, { title, body: detail, category: 'social' });
+// }
 
 // Runs the write; if it fails or matches nothing, uploaded files are removed again.
 async function pushOrDiscard(filter, update, fileIds) {
@@ -142,8 +143,12 @@ async function addComment(req, res) {
         ]);
 
         if (String(post.author) !== me) {
-            notify(post.author, { title: '💬 New Comment', detail: `${meDoc?.username} commented on your post` });
-        }
+            notify(post.author, {
+                title: '💬 New Comment', detail: `${meDoc?.username} commented on your post`,
+                type: 'comment', data: { postId: String(postId), commentId: String(comment._id), actorId: me },
+            });
+        };
+
         recordSocialActivity(me);
 
         return res.status(201).json({
@@ -203,8 +208,10 @@ async function commentReply(req, res) {
         // Tell the thread owner and the person being answered (once each, never yourself).
         const who = new Set([String(root.author), target && String(target.author)].filter(Boolean));
         who.delete(me);
-        who.forEach((uid) => notify(uid, { title: '↩️ New Reply', detail: `${meDoc?.username} replied to your comment` }));
-        recordSocialActivity(me);
+        who.forEach((uid) => notify(uid, {
+            title: '↩️ New Reply', detail: `${meDoc?.username} replied to your comment`,
+            type: 'reply', data: { postId: String(postId), commentId: String(commentId), replyId: String(reply._id), actorId: me },
+        }));
 
         const out = serializeReply({ ...reply, author: meDoc, replyToUser: targetUser }, commentId, me);
         return res.status(201).json({ message: 'Reply added', comment: out, reply: out, commentsCount: total });
@@ -241,7 +248,10 @@ async function likeComment(req, res) {
             }
             if (want && String(item.author) !== me) {
                 const liker = await User.findById(me).select('username').lean();
-                notify(item.author, { title: '❤️ Comment like', detail: `${liker?.username} liked your comment` });
+                notify(item.author, {
+                    title: '❤️ Comment like', detail: `${liker?.username} liked your comment`,
+                    type: 'comment_like', data: { postId: String(postId), commentId: String(hit.root._id), actorId: me },
+                });
             }
         }
 
