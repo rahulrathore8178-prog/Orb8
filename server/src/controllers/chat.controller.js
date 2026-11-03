@@ -145,6 +145,7 @@ exports.sendMessage = async (req, res) => {
         });
 
         recordSocialActivity(senderId);
+        if (sharedPost) trackEvent(senderId, { post: String(sharedPost._id), type: 'share' });
         return res.status(201).json({ success: true, message });
     } catch (error) {
         return fail(res, error, 'sendMessage');

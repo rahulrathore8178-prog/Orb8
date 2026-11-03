@@ -9,6 +9,12 @@ const { uploadBufferToDrive, deleteFileFromDrive, streamFileFromDrive } = requir
 const { recordSocialActivity } = require('../utils/habit');
 const { fileIdsOf, discardFiles } = require('../utils/commentMedia');
 const { notify } = require('../utils/notify');
+// const { recordSocialActivity } = require('../services/activityService');   // keep YOUR existing import path
+const { identifyPost } = require('../../post_details/post-meta-service');
+const { extractFromContent, sanitizeTag } = require('../../post_details/topic-extractor');
+const { ingestEvents } = require('../../personalized/event-service.js');
+const { getRankedFeedIds } = require('../../personalized/feed-service')
+
 
 // Total comments + replies
 const countAll = (comments) => (comments || []).reduce((n, c) => n + 1 + (c.replies?.length || 0), 0);
@@ -61,7 +67,94 @@ async function analyzeImage(fileBuffer, fileName, mimeType, postId) {
   }
 }
 
-// Create a new post
+// --- visual analysis (CLIP/VLM) PARKED: uncomment this block, the blocks marked "PARKED" below, and ANALYZER_URL ---
+// const PostMeta = require('../models/PostMeta');
+// const { getIndex } = require('../services/topicResolver');
+
+const MAX_CONTENT_LENGTH = 2000;
+const MAX_AUDIO_BYTES = 15 * 1024 * 1024;
+const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
+const POST_TYPES = ['feed', 'orbital'];
+const PERSONAS = ['social', 'professional', 'private']; // optional until you build personas
+
+// PARKED: analyzer settings
+// const ANALYZER_URL = process.env.ANALYZER_URL || 'http://localhost:8000';
+// const ANALYZER_TIMEOUT_MS = 90 * 1000;
+// const MIN_TOPIC_CONF = 0.2;
+// const MAX_TOPIC_CONF = 0.95;
+// const MAX_TOPICS = 8;
+// const MISMATCH_PENALTY_FROM = 0.5;
+
+function parseStringArray(raw) {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((x) => typeof x === 'string') : [];
+  } catch (err) {
+    return [];
+  }
+}
+
+// PARKED: CLIP merge + background analyzer job (image/video -> Python /analyze_post)
+// function mergeClipResult(existingTopics, result, rootOf) {
+//   const mismatch = result.mismatch_uncertain ? 0 : Number(result.mismatch) || 0;
+//   const topics = new Map(existingTopics.map((t) => [t.slug, { conf: t.conf, src: new Set(t.src || []) }]));
+//   if (mismatch >= MISMATCH_PENALTY_FROM) {
+//     for (const v of topics.values()) {
+//       if (v.src.has('author') || v.src.has('hashtag')) v.conf *= 1 - 0.5 * mismatch;
+//     }
+//   }
+//   for (const ct of Array.isArray(result.clip_topics) ? result.clip_topics : []) {
+//     if (!ct || typeof ct.slug !== 'string' || typeof ct.conf !== 'number') continue;
+//     const cur = topics.get(ct.slug);
+//     if (cur) { cur.conf = 1 - (1 - cur.conf) * (1 - ct.conf); cur.src.add('clip'); }
+//     else topics.set(ct.slug, { conf: ct.conf, src: new Set(['clip']) });
+//   }
+//   const merged = [...topics]
+//     .map(([slug, v]) => ({ slug, conf: Math.round(Math.min(MAX_TOPIC_CONF, v.conf) * 100) / 100, src: [...v.src] }))
+//     .filter((t) => t.conf >= MIN_TOPIC_CONF)
+//     .sort((a, b) => b.conf - a.conf)
+//     .slice(0, MAX_TOPICS);
+//   const rootMax = new Map();
+//   for (const t of merged) {
+//     const root = rootOf(t.slug);
+//     if (root) rootMax.set(root, Math.max(rootMax.get(root) || 0, t.conf));
+//   }
+//   const roots = [...rootMax].map(([root, conf]) => ({ root, conf })).sort((a, b) => b.conf - a.conf);
+//   return { topics: merged, roots, mismatch, uncertain: !!result.mismatch_uncertain };
+// }
+//
+// // NOTE: when re-enabling, merge into baseTopics (not topics), otherwise the audience job overwrites it.
+// async function analyzeAndMerge({ postId, buffer, mimetype, filename }) {
+//   try {
+//     const meta = await PostMeta.findOne({ post: postId });
+//     if (!meta) return;
+//     const index = await getIndex();
+//     const rootOf = (slug) => index.bySlug.get(slug)?.root;
+//     const declaredRoots = [...new Set(meta.baseTopics.filter((t) => t.conf >= 0.5).map((t) => rootOf(t.slug)).filter(Boolean))];
+//
+//     const form = new FormData();
+//     form.append('file', new Blob([buffer], { type: mimetype }), filename || 'upload');
+//     form.append('post_id', String(postId));
+//     form.append('declared_roots', JSON.stringify(declaredRoots));
+//     form.append('persona', meta.persona || '');
+//
+//     const resp = await fetch(`${ANALYZER_URL}/analyze_post`, { method: 'POST', body: form, signal: AbortSignal.timeout(ANALYZER_TIMEOUT_MS) });
+//     if (!resp.ok) throw new Error(`analyzer responded ${resp.status}: ${(await resp.text()).slice(0, 200)}`);
+//     const result = await resp.json();
+//
+//     const merged = mergeClipResult(meta.baseTopics.map((t) => t.toObject()), result, rootOf);
+//     await PostMeta.updateOne({ _id: meta._id }, { $set: {
+//       baseTopics: merged.topics, topics: merged.topics, roots: merged.roots,
+//       'analysis.status': 'deep', 'analysis.mismatch': merged.mismatch,
+//       'analysis.nearDuplicateOf': result.near_duplicate_of || null, 'analysis.analyzedAt': new Date(),
+//     } });
+//   } catch (err) {
+//     console.error('[analyzeAndMerge]', postId, err.message);
+//     await PostMeta.updateOne({ post: postId }, { $set: { 'analysis.status': 'failed' } }).catch(() => {});
+//   }
+// }
+
 async function createPost(req, res) {
   try {
     const content = typeof req.body.content === 'string' ? req.body.content.trim() : '';
@@ -71,25 +164,19 @@ async function createPost(req, res) {
     if (!content && !hasFile) {
       return res.status(400).json({ message: 'Add a caption or attach a photo, video or voice note' });
     }
-    if (content.length > 2000) {
+    if (content.length > MAX_CONTENT_LENGTH) {
       return res.status(400).json({ message: 'Post content exceeds 2000 characters' });
     }
 
-    let hashtags = [];
-    if (req.body.hashtags) {
-      try {
-        const parsed = JSON.parse(req.body.hashtags);
-        if (Array.isArray(parsed)) hashtags = parsed;
-      } catch (err) {
-        hashtags = [];
-      }
-    }
-    hashtags = [...new Set(
-      hashtags
-        .filter((t) => typeof t === 'string' && t.trim())
-        .map((t) => t.trim().toLowerCase().replace(/[^a-z0-9_]/g, ''))
-        .filter(Boolean)
-    )].slice(0, 30);
+    // raw tags go to the topic resolver (it understands "c++", "react.js"); the cleaned list is what we store
+    const extracted = extractFromContent(content);              // finds #tags in the caption
+    const extraTags = parseStringArray(req.body.hashtags);      // optional extras, normally empty
+    const hashtags = [...new Set([...extracted.stored, ...extraTags.map(sanitizeTag).filter(Boolean)])].slice(0, 30);
+    console.log('[createPost] from caption:', extracted.raw, 'stored:', hashtags);
+
+    // topic chips picked in the composer (max 3) + optional persona
+    const chips = parseStringArray(req.body.topics).slice(0, 3);
+    const persona = PERSONAS.includes(req.body.persona) ? req.body.persona : null;
 
     const postData = {
       author: req.user.id,
@@ -97,14 +184,17 @@ async function createPost(req, res) {
       hashtags,
       image: '',
       video: '',
-      postType: req.body.postType || 'feed',
-      orbital: req.body.orbital || null,
+      postType: POST_TYPES.includes(req.body.postType) ? req.body.postType : 'feed',
+      orbital: req.body.orbital && mongoose.isValidObjectId(req.body.orbital) ? req.body.orbital : null,
       voiceNote: '',
       voiceNoteFileId: '',
       voiceNoteDuration: 0,
     };
 
-    if (req.file && req.file.buffer) {
+    // PARKED: what we would hand to the Python analyzer
+    // let analysisInput = null;
+
+    if (hasFile) {
       const isImage = req.file.mimetype.startsWith('image/');
       const isVideo = req.file.mimetype.startsWith('video/');
       const isVoiceNote = req.file.mimetype.startsWith('audio/');
@@ -129,6 +219,7 @@ async function createPost(req, res) {
           const { fileId } = await uploadBufferToDrive(processedImageBuffer, fileName, 'image/webp');
           postData.image = `/api/community/posts/image/${fileId}`;
           postData.imageFileId = fileId;
+          // PARKED: analysisInput = { buffer: processedImageBuffer, mimetype: 'image/webp', filename: fileName };
         } catch (err) {
           console.error('[POST IMAGE] Drive upload error:', err?.response?.data || err.message || err);
           return res.status(500).json({ message: 'Image upload failed (drive)' });
@@ -136,7 +227,6 @@ async function createPost(req, res) {
       }
 
       if (isVoiceNote) {
-        const MAX_AUDIO_BYTES = 15 * 1024 * 1024;
         if (req.file.size > MAX_AUDIO_BYTES) {
           return res.status(400).json({ message: 'Voice note exceeds max allowed size (15MB)' });
         }
@@ -154,7 +244,6 @@ async function createPost(req, res) {
       }
 
       if (isVideo) {
-        const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
         if (req.file.size > MAX_VIDEO_BYTES) {
           return res.status(400).json({ message: 'Video exceeds max allowed size (50MB)' });
         }
@@ -164,6 +253,7 @@ async function createPost(req, res) {
           const { fileId } = await uploadBufferToDrive(req.file.buffer, fileName, req.file.mimetype);
           postData.video = `/api/community/posts/video/${fileId}`;
           postData.videoFileId = fileId;
+          // PARKED: analysisInput = { buffer: req.file.buffer, mimetype: req.file.mimetype, filename: fileName };
         } catch (err) {
           console.error('[POST VIDEO] Drive upload error:', err?.response?.data || err.message || err);
           return res.status(500).json({ message: 'Video upload failed (drive)' });
@@ -174,15 +264,27 @@ async function createPost(req, res) {
     const post = await Post.create(postData);
     await post.populate('author', 'username profilePic league level totalXp');
 
-    // Fire-and-forget: the response goes out without waiting for the AI analysis
-    const file = req.file;
-    if (file && file.mimetype.startsWith('image/')) {
-      analyzeImage(file.buffer, file.originalname, file.mimetype, post._id.toString())
-        .then(async (analysis) => {
-          if (analysis) await Post.findByIdAndUpdate(post._id, { analysis, status: 'ready' });
-        })
-        .catch((err) => console.error('analyze failed:', err?.response?.data || err.message));
+    // Identify the post from TEXT + weak priors (author's interests, orbital). Instant and free.
+    // Posts with little text start in label.state = 'exploring': the audience labels them later
+    // through the event pipeline (POST /events/batch). Must never block posting.
+    const mediaType = postData.video ? 'video' : postData.image ? 'image' : postData.voiceNote ? 'audio' : 'text';
+    try {
+      await identifyPost({
+        post,
+        authorId: req.user.id,
+        persona,
+        mediaType,
+        hashtags: extraTags,
+        content,
+        chips,
+        orbitalId: postData.orbital,
+      });
+    } catch (err) {
+      console.error('[identifyPost]', err.message);
     }
+
+    // PARKED: background CLIP analysis
+    // if (analysisInput) analyzeAndMerge({ postId: post._id, ...analysisInput });
 
     recordSocialActivity(req.user.id);
     return res.status(201).json({
@@ -215,10 +317,9 @@ async function createPost(req, res) {
     });
   } catch (error) {
     console.error('Create post error:', error);
-    return res.status(500).json({ message: error.message });
+    return res.status(500).json({ message: 'Failed to create post' });
   }
 }
-
 async function deletePost(req, res) {
   try {
     const post = await Post.findById(req.params.postId);
@@ -291,12 +392,16 @@ async function editPostCaption(req, res) {
 }
 
 // Get feed with pagination
+const LIST_CAP = 100; // same size as the personalized list
+
 async function getFeed(req, res) {
   try {
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const limit = Math.min(20, Math.max(1, parseInt(req.query.limit, 10) || 10));
-    const skip = (page - 1) * limit;
+    const isOrbital = req.query.type === 'orbital';
 
+    // ---- visibility filter: unchanged. It is applied to EVERY candidate, so personalization can never
+    // show a post this feed would have hidden.
     const filter = { isActive: true, isArchived: { $ne: true } };
 
     const viewer = await User.findById(req.user.id).select('friends blockedUsers savedPosts').lean();
@@ -308,24 +413,39 @@ async function getFeed(req, res) {
     }).distinct('_id');
     filter.author = { $nin: [...hiddenPrivateUsers, ...(viewer.blockedUsers || [])] };
 
-    if (req.query.type === 'orbital') filter.orbital = { $ne: null };
+    if (isOrbital) filter.orbital = { $ne: null };
     else filter.orbital = null;
 
-    const total = await Post.countDocuments(filter);
-    const totalPages = Math.ceil(total / limit);
+    // ---- which posts, in which order
+    let rankedIds;
+    let reasons = null;
+    if (isOrbital) {
+      // orbital tab stays chronological for now
+      const rows = await Post.find(filter).select('_id').sort({ createdAt: -1 }).limit(LIST_CAP).lean();
+      rankedIds = rows.map((r) => String(r._id));
+    } else {
+      // page 1 re-ranks; page 2+ reads the same list (cached ~5 min) so pages never overlap or skip
+      ({ ids: rankedIds, reasons } = await getRankedFeedIds({ viewer, filter, refresh: page === 1 }));
+    }
 
-    const posts = await Post.find(filter)
-      .populate('author', 'username profilePic league level totalXp orbital')
-      .populate('comments.author', 'username profilePic')
-      .populate('comments.replies.author', 'username profilePic')
-      .populate('orbital', 'name description visibility image')
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .lean();
+    const total = rankedIds.length;
+    const start = (page - 1) * limit;
+    const pageIds = rankedIds.slice(start, start + limit);
+
+    const found = pageIds.length
+      ? await Post.find({ _id: { $in: pageIds } })
+        .populate('author', 'username profilePic league level totalXp orbital')
+        .populate('comments.author', 'username profilePic')
+        .populate('comments.replies.author', 'username profilePic')
+        .populate('orbital', 'name description visibility image')
+        .lean()
+      : [];
+    const byId = new Map(found.map((p) => [String(p._id), p]));
+    const posts = pageIds.map((pid) => byId.get(pid)).filter(Boolean); // keeps the ranked order
 
     const currentUserId = String(req.user?.id || '');
     const savedPostIds = new Set((viewer.savedPosts || []).map((item) => String(item.post)));
+    const showWhy = req.query.debug === '1' && process.env.NODE_ENV !== 'production'; // see why each post is here
 
     const formattedPosts = posts
       .filter((post) => post?.author)
@@ -383,11 +503,21 @@ async function getFeed(req, res) {
         updatedAt: post.updatedAt,
         orbital: post.orbital || null,
         postType: post.postType || 'feed',
+        ...(showWhy && reasons ? { why: reasons.get(String(post._id)) } : {}),
       }));
+
+    // Close the learning loop: everything served counts as an impression (de-duplicated per 24h).
+    // Interim until the app reports what was actually on screen; ranking is never blocked by it.
+    if (formattedPosts.length) {
+      ingestEvents({
+        userId: req.user.id,
+        events: formattedPosts.map((p) => ({ post: p.id, type: 'impression', source: 'feed' })),
+      }).catch((err) => console.error('[feed impressions]', err));
+    }
 
     return res.status(200).json({
       posts: formattedPosts,
-      pagination: { page, limit, total, hasMore: page < totalPages },
+      pagination: { page, limit, total, hasMore: start + limit < total },
     });
   } catch (error) {
     console.error('Get feed error:', error);
@@ -513,6 +643,7 @@ async function toggleLike(req, res) {
     if (likeIndex > -1) {
       post.likes.splice(likeIndex, 1);
       await post.save();
+      trackEvent(userId, { post: String(post._id), type: 'unlike' });
       return res.status(200).json({ message: 'Post unliked', likesCount: post.likes.length, isLiked: false });
     }
 
@@ -528,6 +659,7 @@ async function toggleLike(req, res) {
     }
 
     recordSocialActivity(userId);
+    trackEvent(userId, { post: String(post._id), type: 'like' });
     return res.status(200).json({ message: 'Post liked', likesCount: post.likes.length, isLiked: true });
   } catch (error) {
     console.error('Toggle like error:', error);
@@ -802,10 +934,13 @@ const savePost = async (req, res) => {
     }).select('_id');
     if (!post) return res.status(404).json({ message: 'Post not found' });
 
-    await User.updateOne(
+    const result = await User.updateOne(
       { _id: req.user.id, 'savedPosts.post': { $ne: post._id } },
       { $push: { savedPosts: { post: post._id } } },
     );
+    if ((result.modifiedCount ?? result.nModified ?? 0) > 0) {
+      trackEvent(req.user.id, { post: String(post._id), type: 'save' });
+    }
     return res.json({ postId: String(post._id), isSaved: true });
   } catch (error) {
     console.error('Save post error:', error);
@@ -824,6 +959,7 @@ const unsavePost = async (req, res) => {
         },
       },
     );
+    trackEvent(req.user.id, { post: String(req.params.postId), type: 'unsave' });
     return res.json({ postId: req.params.postId, isSaved: false });
   } catch (error) {
     console.error('Unsave post error:', error);
