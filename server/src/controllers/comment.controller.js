@@ -5,6 +5,7 @@ const { streamFileFromDrive } = require('../utils/driveUpload');
 const { httpError, readCommentInput, fileIdsOf, discardFiles } = require('../utils/commentMedia');
 const { idOf, hasLiked, serializeComment, serializeReply, flattenComments } = require('../utils/commentSerializers');
 const { notify } = require('../utils/notify');
+const { ingestEvents } = require('../../personalized/event-service');
 
 // Optional: push notifications (utils/push.js). Skipped silently until it exists.
 // let sendPush = () => { };
@@ -150,6 +151,10 @@ async function addComment(req, res) {
         };
 
         recordSocialActivity(me);
+        ingestEvents({
+            userId: req.user.id,
+            events: [{ post: postId, type: 'comment', text: input.content }], // postId = the Post _id; `text` lets topic mining read it
+        }).catch((err) => console.error('[ingestEvents]', err.message));
 
         return res.status(201).json({
             message: 'Comment added',
