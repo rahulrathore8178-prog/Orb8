@@ -5,7 +5,11 @@ const User = require('../models/user.model');
 
 // PYTHON SCRIPT EXECUTION
 
-const PY_URL = process.env.PY_URL || "http://localhost:8000";
+const PY_URL = (
+    process.env.PY_URL ||
+    process.env.PYTHON_API_URL ||
+    "http://localhost:8000"
+).replace(/\/+$/, "");
 
 // ---------- 1. Helper: call the Python server over HTTP ----------
 const callPython = async (path, { json, form, timeoutMs = 120000 } = {}) => {
