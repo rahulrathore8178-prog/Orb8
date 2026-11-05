@@ -13,7 +13,7 @@ import {
     Search,
     MessageSquare,
 } from "lucide-react";
-import { apiUrl, getAuthHeaders, pythonApiUrl } from "../utilites/DashboardHelper";
+import { apiUrl, getAuthHeaders } from "../utilites/DashboardHelper";
 import gsap from "gsap";
 import axios from "axios";
 import { getStoredUser } from "../utilites/communityHelper";
@@ -46,7 +46,7 @@ function getRandomGreeting() {
 }
 
 const MAX_TEXTAREA_HEIGHT = 200;
-export const API_URL = `${import.meta.env.VITE_PYTHON_API_URL || "http://localhost:8000"}`;
+export const API_URL = `${import.meta.env.VITE_API_URL || "http://localhost:8000"}`;
 
 const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
@@ -558,7 +558,6 @@ function Composer({
 
 export default function AskIgris({ onSend } = {}) {
     // conversation state
-    const IGRIS_API_URL = `${pythonApiUrl}/askPrompt`;
     const [messages, setMessages] = useState([]); // { id, role, text, attachment?, isError? }
     const [text, setText] = useState("");
     const [attachment, setAttachment] = useState(null); // { name, size, kind: 'image' | 'pdf', preview? }
@@ -617,7 +616,8 @@ export default function AskIgris({ onSend } = {}) {
 
         console.log("IgrisHistory id:", chat._id);
         try {
-            const response = await axios.get(`${pythonApiUrl}/history/${currentUserId}/${chat._id}`, {
+            const response = await axios.get(`${apiUrl}/api/askigris/history/${currentUserId}/${chat._id}`, {
+                withCredentials: true,
                 headers: getAuthHeaders(),
             });
             const history = response.data?.chatHistory || [];
@@ -812,13 +812,13 @@ export default function AskIgris({ onSend } = {}) {
 
                 const token = localStorage.getItem("token");
 
-                const res = await axios.post(`${pythonApiUrl}/describe_image`, requestBody, {
+                const res = await axios.post(`${apiUrl}/api/askigris/describe_image`, requestBody, {
                     headers: { Authorization: `Bearer ${token}` },
                 });
                 data = res.data;
             } else {
                 // ---- text branch: JSON via fetch ----
-                const res = await fetch(`${pythonApiUrl}/askPrompt`, {
+                const res = await fetch(`${apiUrl}/api/askigris/askPrompt`, {
                     method: "POST",
                     credentials: "include",
                     headers: {
