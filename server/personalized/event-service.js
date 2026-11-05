@@ -17,6 +17,17 @@ const COHORT_MAX = 5; // a viewer belongs to the cohorts of their top 5 interest
 const COHORT_MIN_EFF = 0.3; // ...if each is at least this strong
 const LEARN_MIN_CONF = 0.2; // posts teach profiles only through topics we are at least this sure of
 
+// Learning caps per user per post (lifetime), so repeating one action cannot inflate an interest.
+// Events over the cap are still LOGGED (raw behavior), they just teach nothing and are not counted twice.
+const CAPS = { like: 1, save: 1, share: 2, storyReshare: 2, followCreator: 1, hide: 1, notInterested: 1, comment: 2 };
+
+// like / save are TOGGLES. The post's counters follow the NET state (like minus unlike), so a like that is
+// undone and redone counts once, not twice. Learning and audience points still happen only once per post,
+// so toggling can never farm an interest.
+const TOGGLES = { like: 'unlike', save: 'unsave' }; // action -> its undo
+const UNDO_OF = { unlike: 'like', unsave: 'save' }; // undo -> its action
+const UNDO_STATS = { unlike: 'likes', unsave: 'saves' };
+
 const SOURCES = ['feed', 'search', 'profile', 'orbital', 'explore', 'notification'];
 const STATS_FIELD = {
     impression: 'impressions',
@@ -82,6 +93,32 @@ async function dropRepeatImpressions(userId, events) {
     });
 }
 
+// How many capped actions (and undo counterparts) this user already did on these posts (from the log,
+// before this batch). Like/save need their undo counts too, to know the net state.
+async function priorCounts(userId, events) {
+    const tracked = events.filter((e) => CAPS[e.type] || UNDO_OF[e.type]);
+    if (!tracked.length) return new Map();
+    const types = new Set();
+    for (const e of tracked) {
+        types.add(e.type);
+        if (TOGGLES[e.type]) types.add(TOGGLES[e.type]);
+        if (UNDO_OF[e.type]) types.add(UNDO_OF[e.type]);
+    }
+    const rows = await Event.find({
+        user: userId,
+        post: { $in: [...new Set(tracked.map((e) => e.post))] },
+        type: { $in: [...types] },
+    })
+        .select('post type')
+        .lean();
+    const counts = new Map();
+    for (const r of rows) {
+        const k = `${r.post}:${r.type}`;
+        counts.set(k, (counts.get(k) || 0) + 1);
+    }
+    return counts;
+}
+
 /**
  * The heart of the behavior pipeline. For a batch of events from one viewer:
  *  1) log every event (append-only)
@@ -90,7 +127,7 @@ async function dropRepeatImpressions(userId, events) {
  *  4) when a post has enough new impressions, let the audience relabel it
  *
  * Cohorts are taken from the viewer's profile BEFORE this batch, so an event never votes for a
- * cohort it just created. Own posts teach nothing.
+ * cohort it just created. Own posts teach nothing. Repeats over the per-post caps are logged only.
  */
 async function ingestEvents({ userId, persona = null, events }) {
     if (!userId || !Array.isArray(events)) return { accepted: 0 };
@@ -98,16 +135,16 @@ async function ingestEvents({ userId, persona = null, events }) {
 
     const clean = sanitize(events);
     if (!clean.length) return { accepted: 0 };
-    const accepted = await dropRepeatImpressions(userId, clean);
+    // both read the log BEFORE this batch is written, so run them side by side
+    const [accepted, used] = await Promise.all([dropRepeatImpressions(userId, clean), priorCounts(userId, clean)]);
     if (!accepted.length) return { accepted: 0 };
 
-    await Event.insertMany(
-        accepted.map((e) => ({ user: userId, persona: personaKey, post: e.post, type: e.type, dwellMs: e.dwellMs, source: e.source })),
-        { ordered: false }
-    );
-
     const postIds = [...new Set(accepted.map((e) => e.post))];
-    const [metas, profile, following, index] = await Promise.all([
+    const [, metas, profile, following, index] = await Promise.all([
+        Event.insertMany(
+            accepted.map((e) => ({ user: userId, persona: personaKey, post: e.post, type: e.type, dwellMs: e.dwellMs, source: e.source })),
+            { ordered: false }
+        ),
         PostMeta.find({ post: { $in: postIds } }).select('post author topics').lean(),
         getProfile(userId, personaKey),
         loadFollowingSet(userId),
@@ -129,18 +166,37 @@ async function ingestEvents({ userId, persona = null, events }) {
         postInc.set(postId, inc);
     };
     let learned = 0;
+    const impressed = new Set(); // posts that got new impressions: the only ones worth a relabel check
 
     for (const e of accepted) {
         const meta = metaByPost.get(e.post);
         if (!meta) continue; // old post without PostMeta: still logged above
         if (String(meta.author) === String(userId)) continue; // own posts teach nothing
 
+        // what this user already did on this post, from the log plus earlier events in this batch
+        const n = (type) => used.get(`${e.post}:${type}`) || 0;
+        const before = n(e.type);
+        let netBefore = 0; // like/save: currently active (1) or not (0)
+        if (TOGGLES[e.type]) netBefore = n(e.type) - n(TOGGLES[e.type]);
+        else if (UNDO_OF[e.type]) netBefore = n(UNDO_OF[e.type]) - n(e.type);
+        used.set(`${e.post}:${e.type}`, before + 1);
+
+        if (UNDO_OF[e.type]) {
+            // unlike / unsave: take it off the counter if it was on; nothing is unlearned
+            if (netBefore > 0) bump(e.post, `stats.${UNDO_STATS[e.type]}`, -1);
+            continue;
+        }
+        const overCap = !!CAPS[e.type] && before >= CAPS[e.type];
+        if (TOGGLES[e.type] && netBefore <= 0) bump(e.post, `stats.${STATS_FIELD[e.type]}`, 1); // a real (re)like / (re)save
+        if (overCap) continue; // logged, but not learned or counted again
+
         const weight = INTERACTION_WEIGHTS[e.type];
         const social = following.has(String(meta.author)) ? SOCIAL_DISCOUNT : 1;
 
-        if (STATS_FIELD[e.type]) bump(e.post, `stats.${STATS_FIELD[e.type]}`, 1);
+        if (STATS_FIELD[e.type] && !TOGGLES[e.type]) bump(e.post, `stats.${STATS_FIELD[e.type]}`, 1);
 
         if (e.type === 'impression') {
+            impressed.add(e.post);
             bump(e.post, 'audience.totalImp', 1);
             for (const slug of cohorts) bump(e.post, `audience.cohorts.${slug}.imp`, 1);
         } else if (weight !== 0) {
@@ -177,12 +233,17 @@ async function ingestEvents({ userId, persona = null, events }) {
     }
     if (Object.keys(interestUpdates).length) await saveUpdates(userId, personaKey, interestUpdates, learned);
 
-    // relabel check is cheap and runs in the background
-    for (const post of postInc.keys()) {
+    // relabel runs in the background, and only when impressions changed (likes/saves/shares skip the query)
+    for (const post of impressed) {
         maybeRelabel(post).catch((err) => console.error('[relabel]', post, err.message));
     }
 
     return { accepted: accepted.length };
 }
 
-module.exports = { ingestEvents, sanitize, loadFollowingSet };
+// One-liner for controllers: fire-and-forget, never throws, never delays or breaks the request.
+function trackEvent(userId, event, persona = null) {
+    ingestEvents({ userId, persona, events: [event] }).catch((err) => console.error('[trackEvent]', event && event.type, err.message));
+}
+
+module.exports = { ingestEvents, trackEvent, sanitize, loadFollowingSet, CAPS };

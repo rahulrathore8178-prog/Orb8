@@ -5,6 +5,7 @@ const { Post } = require('../models/post.model');
 const { recordSocialActivity } = require('../utils/habit');
 const { sendPush } = require('../utils/push');
 const { streamFileFromDrive } = require('../utils/driveUpload');
+const { trackEvent } = require('../../personalized/event-service');
 const {
     MEDIA_KINDS, FALLBACK_MIME, httpError, processChatMedia, readGifMedia,
     signMediaUrl, verifyMediaSig, previewLabel, discardFiles,
