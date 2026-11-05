@@ -5,26 +5,45 @@ const User = require('../models/user.model');
 
 // PYTHON SCRIPT EXECUTION
 
-const PY_URL = (
-    process.env.PY_URL ||
-    process.env.PYTHON_API_URL ||
-    "http://localhost:8000"
-).replace(/\/+$/, "");
+const configuredPythonUrl = process.env.PY_URL || process.env.PYTHON_API_URL;
+const PY_URL = (configuredPythonUrl || "http://localhost:8000").replace(/\/+$/, "");
+const PYTHON_URL_IS_CONFIGURED = Boolean(configuredPythonUrl);
 
 // ---------- 1. Helper: call the Python server over HTTP ----------
 const callPython = async (path, { json, form, timeoutMs = 120000 } = {}) => {
-    const res = await fetch(`${PY_URL}${path}`, {
-        method: "POST",
-        // for FormData, do NOT set Content-Type; fetch adds the multipart boundary
-        headers: json ? { "Content-Type": "application/json" } : undefined,
-        body: json ? JSON.stringify(json) : form,
-        signal: AbortSignal.timeout(timeoutMs),
-    });
+    const targetUrl = `${PY_URL}${path}`;
+    if (process.env.NODE_ENV === "production" && !PYTHON_URL_IS_CONFIGURED) {
+        throw Object.assign(
+            new Error("Python service URL is not configured. Set PY_URL on the Node Render service."),
+            { statusCode: 500 }
+        );
+    }
+
+    let res;
+    try {
+        res = await fetch(targetUrl, {
+            method: "POST",
+            // for FormData, do NOT set Content-Type; fetch adds the multipart boundary
+            headers: json ? { "Content-Type": "application/json" } : undefined,
+            body: json ? JSON.stringify(json) : form,
+            signal: AbortSignal.timeout(timeoutMs),
+        });
+    } catch (error) {
+        console.error("[IGRIS] Python request failed", {
+            targetUrl,
+            error: error.message,
+            cause: error.cause?.message || error.cause?.code || null,
+        });
+        throw Object.assign(
+            new Error(`Could not reach Python service at ${targetUrl}: ${error.message}`),
+            { statusCode: 502, cause: error }
+        );
+    }
 
     if (!res.ok) {
         const detail = await res.text();
-        const error = new Error(`Python server error ${res.status}: ${detail}`);
-        error.statusCode = res.status;
+        const error = new Error(`Python server error ${res.status} from ${targetUrl}: ${detail}`);
+        error.statusCode = res.status >= 500 ? 502 : res.status;
         throw error;
     }
     return res.json();
