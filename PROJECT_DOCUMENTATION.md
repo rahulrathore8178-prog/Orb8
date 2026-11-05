@@ -266,6 +266,7 @@ Google OAuth / Google APIs:
 
 AI integration:
 
+- `PY_URL` (required in production; direct Python Render URL, for example `https://orb8-2gs7.onrender.com`)
 - `AI_ENDPOINT_URL`
 - `AI_API_KEY`
 - `AI_MODEL_NAME`
