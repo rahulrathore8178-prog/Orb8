@@ -14,6 +14,7 @@ const { identifyPost } = require('../../post_details/post-meta-service');
 const { extractFromContent, sanitizeTag } = require('../../post_details/topic-extractor');
 const { ingestEvents } = require('../../personalized/event-service.js');
 const { getRankedFeedIds } = require('../../personalized/feed-service')
+const { trackEvent } = require('../../personalized/event-service');
 
 
 // Total comments + replies

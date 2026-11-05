@@ -1,6 +1,6 @@
 'use strict';
 
-const PostMeta = require('../../server/src/models/post.meta');
+const PostMeta = require('../src/models/post.meta');
 const { extractFromContent } = require('./topic-extractor');
 const { resolveForPost, recordCandidates } = require('./topicresolver');
 const { getTopInterests } = require('../personalized/profile-service');
