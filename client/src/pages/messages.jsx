@@ -69,44 +69,54 @@ export default function MessagesApp() {
   useEffect(() => {
     if (!currentUser?.id) return;
 
-    const socketUrl = (import.meta.env.VITE_SOCKET_URL || import.meta.env.VITE_API_URL || "ws://localhost:5000")
-      .replace(/^http/, "ws");
-    const socket = new WebSocket(socketUrl);
-    wsRef.current = socket;
+    let stopped = false;
+    let reconnectTimer;
+    let socket;
 
-    socket.onopen = () => {
-      // One register, with the deviceId: calls are pinned to this exact device.
-      socket.send(JSON.stringify({ type: "register", token: localStorage.getItem("token"), deviceId: getDeviceId() }));
+    const connect = () => {
+      if (stopped) return;
+      const failoverUrl = localStorage.getItem("orbit.activeApiUrl");
+      const socketUrl = (failoverUrl || import.meta.env.VITE_SOCKET_URL || import.meta.env.VITE_API_URL || "ws://localhost:5000")
+        .replace(/^http/, "ws");
+      socket = new WebSocket(socketUrl);
+      wsRef.current = socket;
+
+      socket.onopen = () => {
+        socket.send(JSON.stringify({ type: "register", token: localStorage.getItem("token"), deviceId: getDeviceId() }));
+      };
+      socket.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === "redirect" && data.active?.url) {
+            localStorage.setItem("orbit.activeApiUrl", data.active.url.replace(/\/+$/, ""));
+            socket.close(4002, "server switched");
+            return;
+          }
+          if (handleCallSignal(data)) return;
+          if (data.type !== "chat-message") return;
+
+          const { senderId, text, timestamp, id, sharedPost } = data.message || {};
+          if (!senderId || (!text && !sharedPost)) return;
+          dispatch(addMessage({
+            contactId: senderId,
+            message: { ...data.message, id, senderId, text, sharedPost, time: timestamp, from: "them" },
+          }));
+        } catch (error) {
+          console.error("Chat WebSocket message error", error);
+        }
+      };
+      socket.onerror = (error) => console.error("Chat WebSocket error", error);
+      socket.onclose = (event) => {
+        if (wsRef.current === socket) wsRef.current = null;
+        if (!stopped && event.code === 4002) reconnectTimer = setTimeout(connect, 100);
+      };
     };
-    socket.onmessage = (event) => {
-      console.log("🔥 WS EVENT RECEIVED");
-      console.log("🔥 RAW EVENT:", event.data);
 
-      try {
-        const data = JSON.parse(event.data);
-        if (handleCallSignal(data)) return;
-        console.log("🔥 PARSED DATA:", data);
-        console.log('json data', JSON.stringify(null, 2));
-
-        if (data.type !== "chat-message") return;
-
-        const { senderId, text, timestamp, id, sharedPost } = data.message || {};
-        if (!senderId || (!text && !sharedPost)) return;
-        dispatch(addMessage({
-          contactId: senderId,
-          message: { ...data.message, id, senderId, text, sharedPost, time: timestamp, from: "them" },
-        }));
-      } catch (error) {
-        console.error("Chat WebSocket message error", error);
-      }
-    };
-    socket.onerror = (error) => console.error("Chat WebSocket error", error);
-    socket.onclose = () => {
-      if (wsRef.current === socket) wsRef.current = null;
-    };
-
+    connect();
     return () => {
-      socket.close();
+      stopped = true;
+      clearTimeout(reconnectTimer);
+      socket?.close();
       if (wsRef.current === socket) wsRef.current = null;
     };
   }, [currentUser?.id, dispatch]);
