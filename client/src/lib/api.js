@@ -10,6 +10,20 @@ const api = axios.create({
   withCredentials: true,
 });
 
+const FAILOVER_URL_KEY = "orbit.activeApiUrl";
+const normalizeUrl = (url) => (typeof url === "string" ? url.replace(/\/+$/, "") : "");
+const rememberActiveUrl = (url) => {
+  const normalized = normalizeUrl(url);
+  if (normalized) {
+    localStorage.setItem(FAILOVER_URL_KEY, normalized);
+    api.defaults.baseURL = normalized;
+  }
+  return normalized;
+};
+
+const savedFailoverUrl = normalizeUrl(localStorage.getItem(FAILOVER_URL_KEY));
+if (savedFailoverUrl) api.defaults.baseURL = savedFailoverUrl;
+
 // Attach the auth token (if present) to every request.
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("token");
@@ -33,8 +47,20 @@ const PUBLIC_PATHS = [
 // On an unauthenticated response for a protected page, clear the session and
 // send the user back to login. Keeps auth handling in one place.
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    const activeUrl = normalizeUrl(response.headers?.["x-orbit-active-url"]);
+    rememberActiveUrl(activeUrl);
+    return response;
+  },
   (error) => {
+    const active = error.response?.data?.active;
+    const activeUrl = normalizeUrl(active?.url || error.response?.headers?.["x-orbit-active-url"]);
+    const request = error.config;
+    if (error.response?.status === 503 && error.response?.data?.code === "SERVER_FULL"
+      && activeUrl && !request?._failoverAttempt) {
+      rememberActiveUrl(activeUrl);
+      return api({ ...request, baseURL: activeUrl, _failoverAttempt: true });
+    }
     if (error.response?.status === 401 && typeof window !== "undefined") {
       if (!PUBLIC_PATHS.includes(window.location.pathname)) {
         localStorage.removeItem("token");
