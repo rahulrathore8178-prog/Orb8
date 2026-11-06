@@ -256,6 +256,9 @@ Core app/auth:
 - `FRONTEND_URL`
 - `BACKEND_URL`
 - `PUBLIC_API_URL`
+- `SERVER_ID` (required for production failover; use `s1`, `s2`, `s3`, or `s4` for the matching Render service)
+- `SOFT_LIMIT_GB` (optional; defaults to `4.2`)
+- `HARD_LIMIT_GB` (optional; defaults to `4.5`)
 
 Google OAuth / Google APIs:
 
