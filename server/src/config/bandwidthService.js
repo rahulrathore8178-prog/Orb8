@@ -109,7 +109,10 @@ async function tick() {
 
 async function start() {
     if (!POOL.some((s) => s.id === SERVER_ID)) {
-        throw new Error(`SERVER_ID "${SERVER_ID}" is missing or not in serverPool.js`);
+        throw new Error(
+            `SERVER_ID is missing or invalid. Set SERVER_ID to one of ${POOL.map((s) => s.id).join(', ')} ` +
+            'for this Render service (or configure its public hostname to match serverPool.js).'
+        );
     }
     await load();
     await tick();
