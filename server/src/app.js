@@ -18,9 +18,6 @@ const orbitalRoutes = require('./routes/orbital.routes');
 const callRoutes = require('./routes/call.routes');
 const cosmicDiscoveryRoutes = require('./routes/cosmicDiscovery.routes');
 const commentRoutes = require('./routes/comment.routes'); // Import comment routes
-const compression = require('compression');
-const bandwidth = require('./config/bandwidthService');
-const systemRoutes = require('./routes/system.routes');
 
 const app = express();
 
@@ -32,11 +29,6 @@ app.use(
     credentials: true,
   })
 );
-app.use(bandwidth.meter);   // must be BEFORE compression
-app.use(compression());
-app.use(bandwidth.gate);
-
-app.use(cookieParser());
 
 app.use((req, _res, next) => {
   console.log(
@@ -63,6 +55,5 @@ app.use('/api/firebase', firebaseRoutes);
 app.use('/api/orbital', orbitalRoutes);
 app.use('/api/calls', callRoutes);
 app.use('/api/cosmic-discovery', cosmicDiscoveryRoutes);
-app.use('/api/system', systemRoutes);
 
 module.exports = app;
