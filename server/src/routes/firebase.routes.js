@@ -8,13 +8,23 @@ router.post("/user/device-token", protect, async (req, res) => {
   try {
     const { token } = req.body;
 
-    if (typeof token !== "string" || !token.trim()) {
-      return res.status(400).json({ message: "Token is required" });
+    const normalizedToken = typeof token === "string" ? token.trim() : "";
+    if (!normalizedToken || normalizedToken.length > 4096) {
+      return res.status(400).json({ message: "Invalid push token" });
     }
 
-    await User.findByIdAndUpdate(req.user.id, {
-      $addToSet: { deviceTokens: token.trim() },
-    });
+    await User.updateMany(
+      { deviceTokens: normalizedToken, _id: { $ne: req.user.id } },
+      { $pull: { deviceTokens: normalizedToken } }
+    );
+    await User.updateOne(
+      { _id: req.user.id },
+      { $pull: { deviceTokens: normalizedToken } }
+    );
+    await User.updateOne(
+      { _id: req.user.id },
+      { $push: { deviceTokens: { $each: [normalizedToken], $slice: -10 } } }
+    );
 
     return res.json({ success: true });
   } catch (error) {

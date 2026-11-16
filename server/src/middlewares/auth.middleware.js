@@ -3,8 +3,11 @@ const jwt = require('jsonwebtoken');
 function protect(req, res, next) {
   try {
     const authHeader = req.headers.authorization || '';
-    const bearerToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
-    const token = req.cookies?.token || bearerToken;
+    const bearerToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
+
+    // The header decides the account. The cookie is only for clients that send no header (e.g. a browser).
+    // If a header is present but invalid, we fail instead of falling back to a cookie from another account.
+    const token = bearerToken || req.cookies?.token;
 
     if (!token) {
       console.warn(`[AUTH] No token found in request ${req.method} ${req.originalUrl}`);
