@@ -892,18 +892,17 @@ const logoutUser = async (req, res) => {
   return res.status(200).json({ message: 'Logged out successfully.' });
 };
 
-const EXPO_TOKEN_RE = /^(Exponent|Expo)PushToken\[[^\]]+\]$/;
-
 async function registerPushToken(req, res) {
   try {
     const token = typeof req.body?.token === 'string' ? req.body.token.trim() : '';
-    console.log('[push] register request from', String(req.user.id), '| token:', token, '| platform:', req.body?.platform);
-    if (!EXPO_TOKEN_RE.test(token)) return res.status(400).json({ message: 'Invalid push token.' });
+    if (!token || token.length > 4096 || token.startsWith('ExponentPushToken')) {
+      return res.status(400).json({ message: 'Invalid push token.' });
+    }
 
+    // a token belongs to exactly one user: whoever is signed in on this phone
     await userModel.updateMany({ deviceTokens: token, _id: { $ne: req.user.id } }, { $pull: { deviceTokens: token } });
     await userModel.updateOne({ _id: req.user.id }, { $pull: { deviceTokens: token } });
     await userModel.updateOne({ _id: req.user.id }, { $push: { deviceTokens: { $each: [token], $slice: -10 } } });
-    console.log('[push] token saved for', String(req.user.id));
     return res.status(200).json({ ok: true });
   } catch (error) {
     console.error('registerPushToken error:', error);

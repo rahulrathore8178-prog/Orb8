@@ -393,6 +393,9 @@ async function editPostCaption(req, res) {
 }
 
 // Get feed with pagination
+// type=orbital -> orbital posts (chronological)
+// type=flares  -> media posts (video / image, no voice note), ranked by the same algorithm as the home feed
+// default      -> home feed
 const LIST_CAP = 100; // same size as the personalized list
 
 async function getFeed(req, res) {
@@ -400,6 +403,8 @@ async function getFeed(req, res) {
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const limit = Math.min(20, Math.max(1, parseInt(req.query.limit, 10) || 10));
     const isOrbital = req.query.type === 'orbital';
+    const isFlares = req.query.type === 'flares';
+    const source = isFlares ? 'flares' : 'feed';
 
     // ---- visibility filter: unchanged. It is applied to EVERY candidate, so personalization can never
     // show a post this feed would have hidden.
@@ -415,7 +420,17 @@ async function getFeed(req, res) {
     filter.author = { $nin: [...hiddenPrivateUsers, ...(viewer.blockedUsers || [])] };
 
     if (isOrbital) filter.orbital = { $ne: null };
-    else filter.orbital = null;
+    else filter.orbital = null; // home feed and flares: non-orbital posts only
+
+    // flares: a video, or an image, and never a voice note.
+    // Applied BEFORE ranking, so the candidate pool is made of media posts
+    // instead of 100 mixed posts with most of them dropped afterwards.
+    if (isFlares) {
+      filter.$and = [
+        { $or: [{ video: { $nin: ['', null] } }, { image: { $nin: ['', null] } }] },
+        { voiceNote: { $in: ['', null] } },
+      ];
+    }
 
     // ---- which posts, in which order
     let rankedIds;
@@ -425,8 +440,15 @@ async function getFeed(req, res) {
       const rows = await Post.find(filter).select('_id').sort({ createdAt: -1 }).limit(LIST_CAP).lean();
       rankedIds = rows.map((r) => String(r._id));
     } else {
-      // page 1 re-ranks; page 2+ reads the same list (cached ~5 min) so pages never overlap or skip
-      ({ ids: rankedIds, reasons } = await getRankedFeedIds({ viewer, filter, refresh: page === 1 }));
+      // page 1 re-ranks; page 2+ reads the same list (cached ~5 min) so pages never overlap or skip.
+      // `scope` keeps the home feed and flares from overwriting each other's cached list.
+      // TODO: make getRankedFeedIds include `scope` in its cache key (e.g. `${userId}:${scope}`).
+      ({ ids: rankedIds, reasons } = await getRankedFeedIds({
+        viewer,
+        filter,
+        refresh: page === 1,
+        scope: source,
+      }));
     }
 
     const total = rankedIds.length;
@@ -464,6 +486,8 @@ async function getFeed(req, res) {
         hashtags: post.hashtags || [],
         image: post.image || '',
         video: post.video || '',
+        mediaWidth: post.mediaWidth || 0,   // flares use these for aspect ratio
+        mediaHeight: post.mediaHeight || 0,
         views: post.views || 0,
         viewedBy: (post.viewedBy || []).map((id) => String(id)),
         voiceNote: post.voiceNote || '',
@@ -512,7 +536,7 @@ async function getFeed(req, res) {
     if (formattedPosts.length) {
       ingestEvents({
         userId: req.user.id,
-        events: formattedPosts.map((p) => ({ post: p.id, type: 'impression', source: 'feed' })),
+        events: formattedPosts.map((p) => ({ post: p.id, type: 'impression', source })),
       }).catch((err) => console.error('[feed impressions]', err));
     }
 

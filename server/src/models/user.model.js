@@ -195,6 +195,7 @@ const userSchema = new mongoose.Schema(
 // Ensure 2dsphere index for geo queries
 userSchema.index({ location: '2dsphere' });
 userSchema.index({ cosmicLocation: '2dsphere' });
+userSchema.index({ deviceTokens: 1 });
 
 const userModal = mongoose.model("User", userSchema);
 module.exports = userModal;
