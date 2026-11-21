@@ -2,18 +2,11 @@
 const mongoose = require("mongoose");
 const Orbital = require("../models/orbital.model.js");
 const { asyncHandler } = require("../utils/asyncHandler.js");
-const {
-    OrbitalMember,
-    STATUS,
-    ROLE,
-} = require("../models/orbitalMember.model.js");
-``
-
+const { OrbitalMember, STATUS, ROLE } = require("../models/orbitalMember.model.js");
 
 // Attaches req.orbital
 const loadOrbital = asyncHandler(async (req, res, next) => {
     const { orbitalId } = req.params;
-    console.log('loadOrbital called with orbitalId:', orbitalId);
     if (!mongoose.isValidObjectId(orbitalId)) {
         return res.status(400).json({ success: false, message: "Invalid orbital id" });
     }
@@ -32,7 +25,7 @@ const requireMember = asyncHandler(async (req, res, next) => {
         orbital: req.orbital._id,
         user: req.user._id,
         status: STATUS.ACTIVE,
-    });
+    }).lean();
     if (!membership) {
         return res.status(403).json({ success: false, message: "Join this orbital to access it" });
     }
@@ -40,28 +33,17 @@ const requireMember = asyncHandler(async (req, res, next) => {
     next();
 });
 
-
-const requireAdmin = [
+const requireRole = (roles, message) => [
     requireMember,
-    (req, res, next) => {
-        const canManageOrbital = [
-            ROLE.CREATOR,
-            ROLE.ADMIN,
-        ].includes(req.membership.role);
-
-        if (!canManageOrbital) {
-            return res.status(403).json({
-                success: false,
-                message: "Admin access required",
-            });
-        }
-
-        next();
-    },
+    (req, res, next) =>
+        roles.includes(req.membership.role)
+            ? next()
+            : res.status(403).json({ success: false, message }),
 ];
 
-module.exports = {
-    loadOrbital,
-    requireMember,
-    requireAdmin,
-};
+// creator + admins (everything except deleting the orbital)
+const requireAdmin = requireRole([ROLE.CREATOR, ROLE.ADMIN], "Admin access required");
+// creator only (delete orbital, promote/demote admins)
+const requireCreator = requireRole([ROLE.CREATOR], "Only the creator can do this");
+
+module.exports = { loadOrbital, requireMember, requireAdmin, requireCreator };
