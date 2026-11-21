@@ -19,6 +19,8 @@ const messageSchema = new mongoose.Schema({
   type: { type: String, default: 'chat_message' },  // 'chat_message' | 'shared_post'
   sharedPost: { type: mongoose.Schema.Types.ObjectId, ref: 'Post', default: null },
   media: { type: mediaSchema, default: undefined }, // photo, video, voice note, GIF or sticker
+  replyTo: { type: mongoose.Schema.Types.ObjectId, ref: 'Message', default: null },
+  forwarded: { type: Boolean, default: false },
   timestamp: { type: Date, default: Date.now },
   delivered: { type: Boolean, default: false },
   // Older messages have no value and default to read, so history never turns into a pile of unread.

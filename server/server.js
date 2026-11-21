@@ -63,6 +63,10 @@ const REGISTER_TIMEOUT_MS = 15000;
       registry.sendToUser(userId, payload);
     });
 
+    app.set('publishToUsers', (userIds, payload) => registry.sendToUsers(userIds, payload));
+    
+    app.set('isUserOnline', (userId) => registry.isOnline(userId));
+
     wss.on('connection', (socket) => {
       socket.isAlive = true;
       socket.registered = false;

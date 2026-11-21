@@ -14,10 +14,13 @@ const {
 const MAX_TEXT = 2000;
 const PAGE_DEFAULT = 50;
 const PAGE_MAX = 100;
+const MAX_FORWARD = 10;
+const REPLY_POPULATE = { path: 'replyTo', select: 'senderId content type media sharedPost' };
+const PREVIEW_MEDIA = new Set(['image', 'gif', 'sticker']);[]
 
 const SHARED_POST_POPULATE = {
     path: 'sharedPost',
-    select: 'content image video author orbital',
+    select: 'content image video voiceNote voiceNoteDuration mediaWidth mediaHeight author orbital createdAt',
     populate: [
         { path: 'author', select: 'username profilePic' },
         { path: 'orbital', select: 'name image' },
@@ -49,6 +52,19 @@ function formatMedia(m) {
     };
 }
 
+function formatReply(r) {
+    if (!r || !r.senderId) return null; // not populated, or the original was unsent
+    const media = formatMedia(r.media);
+    return {
+        id: String(r._id),
+        senderId: String(r.senderId),
+        text: r.content || '',
+        mediaType: media?.type || null,
+        mediaUrl: media && PREVIEW_MEDIA.has(media.type) ? media.url : null,
+        isPost: !!r.sharedPost,
+    };
+}
+
 const formatMessage = (message) => ({
     id: String(message._id),
     senderId: String(message.senderId),
@@ -62,6 +78,8 @@ const formatMessage = (message) => ({
     // old messages have no flag and count as seen
     read: message.read !== false,
     edited: !!message.edited,
+    replyTo: formatReply(message.replyTo),
+    forwarded: !!message.forwarded,
 });
 
 const pushBody = (text, media, sharedPost) =>
@@ -83,6 +101,7 @@ exports.sendMessage = async (req, res) => {
         const body = req.body || {};
         const text = typeof body.text === 'string' ? body.text.trim() : '';
         const sharedPostId = body.sharedPostId || null;
+        const replyToId = body.replyToId && isOid(body.replyToId) ? body.replyToId : null; // NEW
         const gifUrl = typeof body.gifUrl === 'string' ? body.gifUrl.trim() : '';
         const file = req.file || null;
 
@@ -98,11 +117,19 @@ exports.sendMessage = async (req, res) => {
         if (sharedPostId && !isOid(sharedPostId)) return res.status(400).json({ message: 'Invalid shared post' });
         if (text.length > MAX_TEXT) return res.status(400).json({ message: `Message text cannot exceed ${MAX_TEXT} characters` });
 
-        const [sender, recipient, sharedPost] = await Promise.all([
+        const [sender, recipient, sharedPost, replyTarget] = await Promise.all([
             User.findById(senderId).select('blockedUsers username').lean(),
             User.findById(recipientId).select('blockedUsers').lean(),
             sharedPostId
                 ? Post.findOne({ _id: sharedPostId, isActive: true, isArchived: { $ne: true } }).select('_id').lean()
+                : null,
+            // NEW: a reply must point at a message from this same conversation
+            replyToId
+                ? Message.findOne({
+                    _id: replyToId,
+                    deletedFor: { $ne: senderId },
+                    $or: [{ senderId, recipientId }, { senderId: recipientId, recipientId: senderId }],
+                }).select('_id').lean()
                 : null,
         ]);
         if (!sender || !recipient) return res.status(404).json({ message: 'User not found' });
@@ -112,7 +139,6 @@ exports.sendMessage = async (req, res) => {
         }
         if (sharedPostId && !sharedPost) return res.status(404).json({ message: 'Shared post not found' });
 
-        // Files are compressed/uploaded only after every check above has passed.
         let attachment = { media: null, fileIds: [] };
         if (file) attachment = await processChatMedia(senderId, file, body);
         else if (gifUrl) attachment = readGifMedia(body);
@@ -125,23 +151,23 @@ exports.sendMessage = async (req, res) => {
                 content: text,
                 type: sharedPost ? 'shared_post' : 'chat_message',
                 sharedPost: sharedPost?._id || null,
+                replyTo: replyTarget?._id || null, // NEW
                 ...(attachment.media ? { media: attachment.media } : {}),
                 read: false,
             });
-            if (sharedPost) await saved.populate(SHARED_POST_POPULATE);
+            await saved.populate([...(sharedPost ? [SHARED_POST_POPULATE] : []), REPLY_POPULATE]); // CHANGED
         } catch (error) {
-            discardFiles(attachment.fileIds); // don't leave orphaned files in Drive
+            discardFiles(attachment.fileIds);
             throw error;
         }
 
         const message = formatMessage(saved);
         req.app.get('publishChatMessage')?.(recipientId, message);
 
-        // fire and forget, never blocks or breaks sending
         sendPush(recipientId, {
             title: sender.username || 'New message',
             body: pushBody(text, attachment.media, sharedPost),
-            data: { url: `/chat/${senderId}` }, // change to your real chat route
+            data: { url: `/chat/${senderId}` },
             category: 'social',
         });
 
@@ -181,6 +207,7 @@ exports.getConversation = async (req, res) => {
         const [rows, marked] = await Promise.all([
             Message.find(filter)
                 .populate(SHARED_POST_POPULATE)
+                .populate(REPLY_POPULATE)
                 .sort({ _id: -1 })
                 .limit(limit + 1)
                 .lean(),
@@ -305,7 +332,12 @@ exports.deleteMessage = async (req, res) => {
 
         // unsend: sender only, removed for both, Drive file freed
         const message = await Message.findOneAndDelete({ _id: messageId, senderId: uid }).lean();
+
         if (!message) return res.status(404).json({ success: false, message: 'Message not found' });
+
+        const fileId = message.media?.fileId;
+        if (fileId && !(await Message.exists({ 'media.fileId': fileId }))) discardFiles([fileId]);
+
         discardFiles([message.media?.fileId]);
         req.app.get('publishChatEvent')?.(message.recipientId, { type: 'message-deleted', messageId: String(message._id) });
         return res.json({ success: true, messageId, scope });
@@ -398,5 +430,118 @@ exports.streamMedia = async (req, res) => {
     } catch (error) {
         if (!res.headersSent) return res.status(502).json({ message: 'Could not stream media' });
         res.end();
+    }
+};
+
+/** POST /api/chat/forward   body: { messageId, recipientIds: [] } */
+exports.forwardMessage = async (req, res) => {
+    try {
+        const me = req.user.id;
+        const { messageId } = req.body || {};
+        const ids = [...new Set((req.body?.recipientIds || []).map(String))].filter((id) => isOid(id) && id !== me);
+
+        if (!isOid(messageId)) return res.status(400).json({ success: false, message: 'Invalid message' });
+        if (!ids.length) return res.status(400).json({ success: false, message: 'Pick at least one person' });
+        if (ids.length > MAX_FORWARD) {
+            return res.status(400).json({ success: false, message: `You can forward to ${MAX_FORWARD} people at a time` });
+        }
+
+        const original = await Message.findOne({
+            _id: messageId,
+            deletedFor: { $ne: me },
+            $or: [{ senderId: me }, { recipientId: me }],
+        }).lean();
+        if (!original) return res.status(404).json({ success: false, message: 'Message not found' });
+
+        const [sender, recipients, post] = await Promise.all([
+            User.findById(me).select('blockedUsers username').lean(),
+            User.find({ _id: { $in: ids } }).select('blockedUsers').lean(),
+            original.sharedPost
+                ? Post.findOne({ _id: original.sharedPost, isActive: true, isArchived: { $ne: true } }).select('_id').lean()
+                : null,
+        ]);
+        if (original.sharedPost && !post) {
+            return res.status(404).json({ success: false, message: 'This post is no longer available' });
+        }
+
+        const blockedByMe = new Set((sender?.blockedUsers || []).map(String));
+        const allowed = recipients.filter(
+            (r) => !blockedByMe.has(String(r._id)) && !(r.blockedUsers || []).some((b) => String(b) === me)
+        );
+
+        let mediaCopy = null;
+        if (original.media?.type) {
+            const { _id, ...rest } = original.media;
+            mediaCopy = rest; // same Drive file, no re-upload
+        }
+
+        const results = await Promise.allSettled(
+            allowed.map(async (r) => {
+                const saved = await Message.create({
+                    senderId: me,
+                    recipientId: r._id,
+                    content: original.content || '',
+                    type: original.type,
+                    sharedPost: original.sharedPost || null,
+                    ...(mediaCopy ? { media: mediaCopy } : {}),
+                    forwarded: true,
+                    read: false,
+                });
+                if (saved.sharedPost) await saved.populate(SHARED_POST_POPULATE);
+                const message = formatMessage(saved);
+                req.app.get('publishChatMessage')?.(String(r._id), message);
+                sendPush(String(r._id), {
+                    title: sender?.username || 'New message',
+                    body: pushBody(original.content || '', mediaCopy, original.sharedPost),
+                    data: { url: `/chat/${me}` },
+                    category: 'social',
+                });
+                return message;
+            })
+        );
+
+        const messages = results.filter((x) => x.status === 'fulfilled').map((x) => x.value);
+        recordSocialActivity(me);
+        return res.json({ success: true, sent: messages.length, failed: ids.length - messages.length, messages });
+    } catch (error) {
+        return fail(res, error, 'forwardMessage');
+    }
+};
+
+/** GET /api/chat/:recipientId/shared?type=posts|media&before=<messageId>&limit= */
+exports.getSharedItems = async (req, res) => {
+    try {
+        const { recipientId } = req.params;
+        if (!isOid(recipientId)) return res.status(400).json({ success: false, message: 'A valid user is required' });
+
+        const me = new mongoose.Types.ObjectId(req.user.id);
+        const other = new mongoose.Types.ObjectId(recipientId);
+        const type = req.query.type === 'media' ? 'media' : 'posts';
+        const limit = Math.min(60, Math.max(1, parseInt(req.query.limit, 10) || (type === 'media' ? 36 : 12)));
+        const before = isOid(req.query.before) ? new mongoose.Types.ObjectId(req.query.before) : null;
+
+        const filter = {
+            $or: [{ senderId: me, recipientId: other }, { senderId: other, recipientId: me }],
+            deletedFor: { $ne: me },
+            ...(type === 'posts' ? { sharedPost: { $ne: null } } : { 'media.type': { $in: ['image', 'video', 'gif'] } }),
+        };
+        if (before) filter._id = { $lt: before };
+
+        let q = Message.find(filter);
+        if (type === 'posts') q = q.populate(SHARED_POST_POPULATE);
+        const rows = await q.sort({ _id: -1 }).limit(limit + 1).lean();
+
+        const hasMore = rows.length > limit;
+        const page = hasMore ? rows.slice(0, limit) : rows;
+        const items = page.filter((m) => type === 'media' || m.sharedPost).map(formatMessage); // drops deleted posts
+        return res.json({
+            success: true,
+            hasMore,
+            nextBefore: page.length ? String(page[page.length - 1]._id) : null,
+            items,
+        });
+    } catch (error) {
+        console.error('getSharedItems error:', error);
+        return res.status(500).json({ success: false, message: 'Failed to load shared items' });
     }
 };

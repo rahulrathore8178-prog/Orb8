@@ -90,6 +90,21 @@ function sendToDevice(userId, deviceId, payload) {
     return send(findSocket(userId, deviceId), payload);
 }
 
+/** Group broadcast: serialize ONCE, write to every open socket of every listed user. */
+function sendToUsers(userIds, payload) {
+    const data = JSON.stringify(payload);
+    let delivered = 0;
+    for (const id of userIds) {
+        for (const s of getSockets(id)) {
+            if (s.readyState !== WebSocket.OPEN) continue;
+            if (s.bufferedAmount > MAX_BUFFERED) continue; // slow client, it catches up via ?after=seq
+            s.send(data);
+            delivered++;
+        }
+    }
+    return delivered;
+}
+
 function onlineUserIds() {
     return [...userSockets.keys()];
 }
@@ -101,6 +116,7 @@ module.exports = {
     findSocket,
     send,
     sendToUser,
+    sendToUsers,
     sendToDevice,
     onlineUserIds,
 };
