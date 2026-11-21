@@ -4,6 +4,7 @@ const { protect } = require('../middlewares/auth.middleware');
 const { chatMediaUpload } = require('../middlewares/chat.upload.middleware');
 const chatController = require('../controllers/chat.controller');
 const orbitalChat = require('../controllers/orbitalChat.controller')
+const rateLimit = require('../middlewares/rateLimit.middleware').orbitalMessageLimiter;
 
 // Public on purpose: audio/video players and image loaders can't send auth headers.
 // Every URL carries a signature made by the server, so only links the API handed out work.

@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 const Orbital = require('../models/orbital.model');          // adjust path
 const User = require('../models/user.model');
 const OrbitalChat = require('../models/orbital.chat.model');
-const OrbitalRead = require('../models/orbital.read.model');
+const OrbitalRead = require('../models/orbit.read.model');
 const { sendPush } = require('../utils/push');
 const { recordSocialActivity } = require('../utils/habit');
 
